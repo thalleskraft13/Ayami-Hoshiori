@@ -2,6 +2,7 @@ const DiscordRequest = require("../../function/DiscordRequest");
 const MessageEmbed = require("../../function/Messages/EmbedBuild");
 const UserEconomy = require("../../function/Gacha/Economy");
 const UserGlobal = require("../../Mongodb/userglobal");
+const PremiumManager = require("../../function/Utils/PremiumManager")
 
 /* =========================
    MS HELPER
@@ -92,7 +93,7 @@ module.exports = {
     ========================== */
     if (subcommand.name === "daily") {
 
-      const reward = 160;
+      const baseReward = 160;
       const now = Date.now();
 
       let user = await UserGlobal.findOne({ userId: authorId });
@@ -141,7 +142,7 @@ module.exports = {
               {
                 method: "POST",
                 body: {
-                  type: 7, // EDIT ORIGINAL MESSAGE
+                  type: 7,
                   data: {
                     embeds: [embedCooldown],
                     components: []
@@ -152,20 +153,31 @@ module.exports = {
           }
 
           /* =========================
-             GIVE REWARD
+             GIVE REWARD (COM PREMIUM)
           ========================== */
+
+          // 🔥 verifica premium
+          const premium = await PremiumManager.getUserPremium(authorId);
+
+          const min = premium.status ? 20 : 10;
+          const max = premium.status ? 50 : 20;
+
+          const giros = Math.floor(Math.random() * (max - min + 1)) + min;
+          const totalReward = giros * baseReward;
 
           const newExpire = nowClick + MS("24h");
 
           const updated = await UserGlobal.findOneAndUpdate(
             { userId: authorId },
             {
-              $inc: { "primogemas.atm": reward },
+              $inc: { "primogemas.atm": totalReward },
               $set: { "primogemas.daily_tempo": newExpire },
               $push: {
                 "primogemas.transacoes": {
                   type: "daily",
-                  value: reward,
+                  value: totalReward,
+                  giros: giros,
+                  premium: premium.status,
                   date: nowClick
                 }
               }
@@ -177,7 +189,11 @@ module.exports = {
             .setTitle("🎁 Daily Resgatado!")
             .setColor("Green")
             .setDescription(
-              `💎 Você recebeu **${reward} primogemas!**\n\n` +
+              `🎰 Giros: **${giros}**\n` +
+              `💎 Recompensa: **${totalReward} primogemas**\n` +
+              (premium.status
+                ? `✨ Valor maior devido a assinatura **Lua Carmesin**\n\n`
+                : `\n`) +
               `📦 Saldo atual: **${updated.primogemas.atm}**`
             )
             .setTimestamp()
@@ -188,10 +204,10 @@ module.exports = {
             {
               method: "POST",
               body: {
-                type: 7, // EDIT ORIGINAL MESSAGE
+                type: 7,
                 data: {
                   embeds: [embedSuccess],
-                  components: [] // remove botão
+                  components: []
                 }
               }
             }
@@ -203,7 +219,10 @@ module.exports = {
         .setTitle("🎁 Daily de Primogemas")
         .setColor("Blue")
         .setDescription(
-          `Clique no botão abaixo para resgatar **${reward} primogemas**.`
+          `Clique no botão abaixo para resgatar suas primogemas.\n\n` +
+          `🎰 Sistema de giros:\n` +
+          `• Usuário normal: **10–20 giros**\n` +
+          `• Premium: **20–50 giros**`
         )
         .setTimestamp()
         .build();

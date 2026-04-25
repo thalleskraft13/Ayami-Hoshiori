@@ -1,37 +1,13 @@
 // src/System/InteractionManager.js
 
 const crypto = require('crypto');
-const { WebSocketShardEvents } = require('@discordjs/ws');
-const DiscordRequest = require('../function/DiscordRequest'); // ajuste se necessário
+const DiscordRequest = require('../function/DiscordRequest');
 
 class InteractionManager {
 
     constructor(client) {
         this.client = client;
         this.cache = new Map();
-    }
-
-    /* ===============================
-       START LISTENER
-    =============================== */
-    run() {
-
-        this.client.manager.on(WebSocketShardEvents.Dispatch, async (payload) => {
-
-            if (payload.t !== 'INTERACTION_CREATE') return;
-
-            const interaction = payload.d;
-
-            // BUTTONS & SELECTS
-            if (interaction.type === 3) {
-                await this.handleComponent(interaction);
-            }
-
-            // MODAL SUBMIT
-            if (interaction.type === 5) {
-                await this.handleModal(interaction);
-            }
-        });
     }
 
     /* ===============================
@@ -55,7 +31,7 @@ class InteractionManager {
     /* ===============================
        BUTTON
     =============================== */
-    createButton({ user, tempo = 60000, funcao, data }) {
+    createButton({ user, tempo = 60000, funcao, data = {} }) {
 
         const id = this._generateId();
 
@@ -72,7 +48,7 @@ class InteractionManager {
     /* ===============================
        SELECT MENU
     =============================== */
-    createSelect({ user, tempo = 60000, funcao, data }) {
+    createSelect({ user, tempo = 60000, funcao, data = {} }) {
 
         const id = this._generateId();
 
@@ -89,7 +65,7 @@ class InteractionManager {
     }
 
     /* ===============================
-       CREATE MODAL
+       MODAL
     =============================== */
     createModal({ user, tempo = 60000, title, components, funcao }) {
 
@@ -104,12 +80,8 @@ class InteractionManager {
         };
     }
 
-    /* ===============================
-       SHOW MODAL
-    =============================== */
     async showModal(interaction, modalData) {
-
-        return await DiscordRequest(
+        return DiscordRequest(
             `/interactions/${interaction.id}/${interaction.token}/callback`,
             {
                 method: "POST",
@@ -122,33 +94,109 @@ class InteractionManager {
     }
 
     /* ===============================
+       DEFER (ESSENCIAL)
+    =============================== */
+    async defer(interaction) {
+        return DiscordRequest(
+            `/interactions/${interaction.id}/${interaction.token}/callback`,
+            {
+                method: "POST",
+                body: { type: 6 } // DEFER UPDATE
+            }
+        );
+    }
+
+    /* ===============================
        HANDLE COMPONENT
     =============================== */
     async handleComponent(interaction) {
 
         const id = interaction.data?.custom_id;
-        if (!id?.startsWith("temp_")) return;
-
-        const data = this.cache.get(id);
-        if (!data) return;
-
-        if (Date.now() > data.expires) {
-            this.cache.delete(id);
-            return;
-        }
-
-        if (data.user && interaction.member.user.id !== data.user)
-            return;
+        if (!id) return;
 
         try {
+
+            /* ===============================
+               🔥 BOTÕES PERMANENTES (FIXO)
+            =============================== */
+            let parsed = null;
+
+try {
+  parsed = JSON.parse(id);
+} catch {
+  parsed = null;
+}
+
+if (parsed?.t === "create_ticket") {
+  
+    try {
+        interaction.data.panelId = parsed.p;
+  return this.client.ticketSystem.create(interaction);
+
+    } catch (err) {
+        console.error("❌ Ticket Create Error:", err);
+
+        // evita interação morta
+        await DiscordRequest(
+            `/interactions/${interaction.id}/${interaction.token}/callback`,
+            {
+                method: "POST",
+                body: {
+                    type: 4,
+                    data: {
+                        content: "❌ Erro ao criar ticket.",
+                        flags: 64
+                    }
+                }
+            }
+        );
+    }
+    return;
+}
+if (id === "close_ticket") {
+    return this.client.ticketSystem.close(interaction);
+}
+
+            /* ===============================
+               🔥 TEMPORÁRIOS (SETUP)
+            =============================== */
+            const data = this.cache.get(id);
+            if (!data) return;
+
+            if (Date.now() > data.expires) {
+                this.cache.delete(id);
+                return;
+            }
+
+            if (data.user && interaction.member.user.id !== data.user)
+                return;
+
             await data.funcao(interaction, this.client);
+
         } catch (err) {
             console.error("❌ Component Error:", err);
+
+            // fallback resposta (evita travar interação)
+            try {
+                await DiscordRequest(
+                    `/interactions/${interaction.id}/${interaction.token}/callback`,
+                    {
+                        method: "POST",
+                        body: {
+                            type: 4,
+                            data: {
+                                content: "❌ Ocorreu um erro.",
+                                flags: 64
+                            }
+                        }
+                    }
+                );
+            } catch {}
         }
     }
 
     /* ===============================
-       HANDLE MODAL SUBMIT
+       HANDLE MODAL
     =============================== */
     async handleModal(interaction) {
 

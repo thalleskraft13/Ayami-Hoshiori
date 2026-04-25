@@ -2,6 +2,7 @@ const { Schema, model } = require("mongoose");
 
 const userSchema = new Schema({
   userId: { type: String,required: true},
+  premium: { type: Number, default: 0 },
   
   primogemas: { //economy
     atm: { type: Number, default: 0 },

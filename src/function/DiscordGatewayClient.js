@@ -6,6 +6,7 @@ const { Routes } = require('discord-api-types/v10');
 const connectMongo = require('./ConnectMongo');
 const InteractionManager = require("./InteractionManager")
 const NextMessageCollector = require("./MessageCollectorManager")
+const TicketSystem = require("./Manager/TicketSetup")
 
 class DiscordGatewayClient {
 
@@ -31,6 +32,7 @@ class DiscordGatewayClient {
         this._consoleSeparator("BOOT");
         this.interactions = new InteractionManager(this);
         this.NextMessageCollector = new NextMessageCollector(this);
+        this.ticketSystem = new TicketSystem(this);
         this._loadCommands();
         this._registerEvents();
     }
@@ -183,14 +185,33 @@ class DiscordGatewayClient {
         });
 
         this.manager.on(WebSocketShardEvents.Dispatch, async (payload) => {
-          
-          this.NextMessageCollector.handle(payload)
 
-            if (payload.t !== 'INTERACTION_CREATE') return;
+    this.NextMessageCollector.handle(payload);
 
-            const interaction = payload.d;
+    if (payload.t !== 'INTERACTION_CREATE') return;
 
-            if (interaction.type !== 2) return;
+    const interaction = payload.d;
+
+    /* ===============================
+       COMPONENTES (BOTÃO / SELECT)
+    =============================== */
+    if (interaction.type === 3) {
+
+        // 🔥 ESSENCIAL
+        return this.interactions.handleComponent(interaction);
+    }
+
+    /* ===============================
+       MODAL
+    =============================== */
+    if (interaction.type === 5) {
+        return this.interactions.handleModal(interaction);
+    }
+
+    /* ===============================
+       SLASH
+    =============================== */
+    if (interaction.type !== 2) return;
 
             const command = this.commands.get(interaction.data.name);
             if (!command) return;
@@ -208,7 +229,7 @@ class DiscordGatewayClient {
             }
         });
         
-        this.interactions.run();
+     //  this.interactions.run();
     }
 
     /* ===============================
