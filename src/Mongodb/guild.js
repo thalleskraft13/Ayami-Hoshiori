@@ -20,7 +20,26 @@ const ticketSchema = new Schema({
     type: Number,
     enum: [0, 1, 2], // 0 = channel | 1 = thread public | 2 = thread private
     default: 0
+  },
+  
+  modalConfig: {
+  enabled: { type: Boolean, default: false },
+  title: { type: String, default: "Formulário do Ticket" },
+  sendMode: { type: Number, default: 0 }, // 0 = ticket | 1 = canal
+  logChannelId: { type: String, default: null },
+  fields: {
+    type: [{
+      label: String,
+      customId: String,
+      style: Number,
+      required: Boolean,
+      placeholder: String,
+      minLength: Number,
+      maxLength: Number
+    }],
+    default: []
   }
+}
 
 }, { _id: false });
 

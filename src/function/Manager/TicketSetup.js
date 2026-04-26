@@ -188,6 +188,7 @@ class TicketSystem {
         { label: premium ? "Tipo de Criação" : "🔒 Tipo (Premium)", value: "tipo" },
         { label: "Categoria", value: "categoria" },
         { label: premium ? "Nome do Ticket" : "🔒 Nome (Premium)", value: "nome" },
+        { label: premium ? "Modal Personalizado" : "🔒 Modal (Premium)", value: "modal" },
         { label: "Embed JSON", value: "json" },
         { label: "Enviar Painel", value: "send" },
         { label: "Excluir Painel", value: "delete" }
@@ -205,6 +206,8 @@ class TicketSystem {
         if (v === "send") return this.sendPanel(i, guild, panelId);
         if (v === "delete") return this.deletePanel(i, guild, panelId, user);
         if (v === "tipo") return this.setTipo(i, guild, panelId, user);
+        if (v === "nome") return this.setNome(i, guild, panelId, user);
+        if (v === "modal") return this.modalMenu(i, guild, panelId, user);
       }
     );
 
@@ -218,11 +221,13 @@ class TicketSystem {
   }
 
   /* ================= TICKET CREATE ================= */
+  
   async create(interaction) {
   try {
 
     const guild = await this.getGuild(interaction.guild_id);
-    const panel = this.getPanel(guild, interaction.data.panelId);
+    const data = JSON.parse(interaction.data.custom_id);
+    const panel = this.getPanel(guild, data.p);
 
     if (!panel) {
       return this.reply(interaction, {
@@ -231,85 +236,58 @@ class TicketSystem {
       });
     }
 
-    const userId = interaction.member.user.id;
-    panel.contadorTicket++;
+    // ================= MODAL =================
+    if (panel.modalConfig?.enabled && panel.modalConfig.fields?.length > 0) {
 
-    let channel;
+      const modal = this.client.interactions.createModal({
+        user: interaction.member.user.id,
+        title: panel.modalConfig.title || "Formulário",
+        components: panel.modalConfig.fields.map(f => ({
+          type: 1,
+          components: [{
+            type: 4,
+            custom_id: f.customId,
+            label: f.label,
+            style: f.style,
+            required: f.required,
+            placeholder: f.placeholder,
+            min_length: f.minLength,
+            max_length: f.maxLength
+          }]
+        })),
+        funcao: async (modalInteraction, client, fields) => {
+          return this.createAfterModal(
+            modalInteraction,
+            guild,
+            panel,
+            fields
+          );
+        }
+      });
 
-    // ================= CANAL NORMAL =================
-    if (panel.tipoDeCriacao === 0) {
-
-      const body = {
-        name: `ticket-${panel.contadorTicket}`,
-        type: 0
-      };
-
-      if (panel.categoriaId) {
-        body.parent_id = panel.categoriaId;
-      }
-
-      channel = await DiscordRequest(
-        `/guilds/${interaction.guild_id}/channels`,
-        { method: "POST", body }
-      );
-    }
-
-    // ================= THREAD =================
-    else {
-
-      if (!panel.canalId) {
-        return this.reply(interaction, {
-          content: "❌ Defina um canal base para threads",
-          flags: 64
-        });
-      }
-
-      const thread = await DiscordRequest(
-        `/channels/${panel.canalId}/threads`,
+      return DiscordRequest(
+        `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
           method: "POST",
           body: {
-            name: `ticket-${panel.contadorTicket}`,
-            type: panel.tipoDeCriacao === 1 ? 11 : 12, // public/private
-            auto_archive_duration: 1440
+            type: 9,
+            data: modal
           }
         }
       );
-
-      channel = thread;
     }
 
-    // ================= MENSAGEM =================
-
-    const staff = panel.cargosStaff.length
-      ? panel.cargosStaff.map(r => `<@&${r}>`).join(" ")
-      : "";
-
-    await DiscordRequest(`/channels/${channel.id}/messages`, {
-      method: "POST",
-      body: {
-        content: `<@${userId}> ${staff}`,
-        embeds: [{
-          title: "🎫 Ticket Criado",
-          description: `Seu ticket foi aberto em <#${channel.id}>`
-        }],
-        components: [{
-          type: 1,
-          components: [{
-            type: 2,
-            label: "Fechar Ticket",
-            style: 4,
-            custom_id: "close_ticket"
-          }]
-        }]
-      }
+    // RESPONDE IMEDIATO (ANTI-10062)
+    await this.reply(interaction, {
+      content: "⏳ Criando ticket...",
+      flags: 64
     });
 
-    await this.save(guild);
+    const channel = await this.createTicketNormally(interaction, guild, panel);
 
-    return this.reply(interaction, {
-      content: `✅ Ticket criado em <#${channel.id}>`,
-      flags: 64
+    // ✅ FOLLOW UP (webhook)
+    return this.followUpEphemeral(interaction, {
+      content: `✅ Ticket criado em <#${channel.id}>`
     });
 
   } catch (err) {
@@ -322,9 +300,242 @@ class TicketSystem {
   }
 }
 
+async createAfterModal(interaction, guild, panel, fields) {
+  try {
+
+    const user = interaction.member?.user || interaction.user;
+
+    const channel = await this.createTicketNormally(interaction, guild, panel);
+
+    if (!channel || !channel.id) {
+      return DiscordRequest(
+        `/interactions/${interaction.id}/${interaction.token}/callback`,
+        {
+          method: "POST",
+          body: {
+            type: 4,
+            data: {
+              content: "❌ Erro ao criar ticket",
+              flags: 64
+            }
+          }
+        }
+      );
+    }
+
+    const embed = {
+      title: "📋 Respostas do Formulário",
+      description: Object.entries(fields)
+        .map(([key, value]) => {
+          const fieldData = panel.modalConfig.fields.find(f => f.customId === key);
+          return `**${fieldData?.label || key}**\n${value}`;
+        })
+        .join("\n\n")
+    };
+
+    if (panel.modalConfig?.sendMode === 0) {
+      await DiscordRequest(`/channels/${channel.id}/messages`, {
+        method: "POST",
+        body: {
+          content: `<@${user.id}>`,
+          embeds: [embed],
+          components: [{
+            type: 1,
+            components: [{
+              type: 2,
+              label: "Fechar Ticket",
+              style: 4,
+              custom_id: "close_ticket"
+            }]
+          }]
+        }
+      });
+    }
+
+    if (
+      panel.modalConfig?.sendMode === 1 &&
+      panel.modalConfig?.logChannelId
+    ) {
+      await DiscordRequest(`/channels/${panel.modalConfig.logChannelId}/messages`, {
+        method: "POST",
+        body: {
+          content: `📥 Novo formulário de <@${user.id}>`,
+          embeds: [embed]
+        }
+      });
+    }
+
+    return DiscordRequest(
+      `/interactions/${interaction.id}/${interaction.token}/callback`,
+      {
+        method: "POST",
+        body: {
+          type: 4,
+          data: {
+            content: `✅ Ticket criado em <#${channel.id}>`,
+            flags: 64
+          }
+        }
+      }
+    );
+
+  } catch (err) {
+    console.error("Erro no modal:", err);
+
+    return DiscordRequest(
+      `/interactions/${interaction.id}/${interaction.token}/callback`,
+      {
+        method: "POST",
+        body: {
+          type: 4,
+          data: {
+            content: "❌ Erro ao processar formulário",
+            flags: 64
+          }
+        }
+      }
+    );
+  }
+}
+
+async createTicketNormally(interaction, guild, panel) {
+
+  const user = interaction.member?.user || interaction.user;
+
+  if (!user || !user.id) {
+    throw new Error("User indefinido na interaction");
+  }
+
+  panel.contadorTicket++;
+
+  let ticketName = panel.ticketChatName || "ticket-{count}";
+
+  ticketName = ticketName
+    .replace(/{user}/g, (user.username || "user").toLowerCase())
+    .replace(/{id}/g, user.id)
+    .replace(/{count}/g, panel.contadorTicket)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .slice(0, 90);
+
+  let channel;
+
+  // ================= CANAL NORMAL =================
+  if (panel.tipoDeCriacao === 0) {
+
+    const body = {
+      name: ticketName,
+      type: 0,
+      permission_overwrites: [
+        { id: interaction.guild_id, type: 0, deny: "1024" },
+        { id: user.id, type: 1, allow: "1024" }
+      ]
+    };
+
+    for (const roleId of panel.cargosStaff || []) {
+      body.permission_overwrites.push({
+        id: roleId,
+        type: 0,
+        allow: "1024"
+      });
+    }
+
+    if (panel.categoriaId)
+      body.parent_id = panel.categoriaId;
+
+    channel = await DiscordRequest(
+      `/guilds/${interaction.guild_id}/channels`,
+      { method: "POST", body }
+    );
+  }
+
+  // ================= THREAD PÚBLICA =================
+  else if (panel.tipoDeCriacao === 1) {
+
+    channel = await DiscordRequest(
+      `/channels/${interaction.channel_id}/threads`,
+      {
+        method: "POST",
+        body: {
+          name: ticketName,
+          type: 11, // public thread
+          auto_archive_duration: 1440
+        }
+      }
+    );
+  }
+
+  // ================= THREAD PRIVADA =================
+  else if (panel.tipoDeCriacao === 2) {
+
+    channel = await DiscordRequest(
+      `/channels/${interaction.channel_id}/threads`,
+      {
+        method: "POST",
+        body: {
+          name: ticketName,
+          type: 12, // private thread
+          auto_archive_duration: 1440,
+          invitable: false
+        }
+      }
+    );
+
+    // adiciona o user manualmente
+    await DiscordRequest(
+      `/channels/${channel.id}/thread-members/${user.id}`,
+      { method: "PUT" }
+    );
+  }
+
+  // segurança extra
+  if (!channel || !channel.id) {
+    throw new Error("Falha ao criar canal/thread");
+  }
+
+  await this.save(guild);
+
+  const staff = panel.cargosStaff.length
+    ? panel.cargosStaff.map(r => `<@&${r}>`).join(" ")
+    : "";
+
+  const embed = {
+    title: "🎫 Ticket Criado",
+    description:
+      `Olá <@${user.id}>, seu ticket foi criado!\n\n` +
+      `A equipe irá te atender em breve.\n\n` +
+      `🔒 Use o botão abaixo para fechar o ticket.`,
+    color: 0x2b2d31
+  };
+
+  await DiscordRequest(`/channels/${channel.id}/messages`, {
+  method: "POST",
+  body: {
+    content: `<@${user.id}> ${staff}`,
+    embeds: [embed],
+    components: [
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            label: "Fechar Ticket",
+            style: 4,
+            custom_id: "close_ticket"
+          }
+        ]
+      }
+    ]
+  }
+});
+
+  return channel;
+}
 
 
   /* ================= CLOSE ================= */
+
+
 
   async close(interaction) {
   try {
@@ -514,6 +725,49 @@ class TicketSystem {
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
+  
+  async setNome(interaction, guild, panelId, user) {
+
+  const premium = await this.isPremium(guild.guildId);
+
+  if (!premium) {
+    return this.followUpEphemeral(interaction, {
+      content: "🔒 Apenas usuários premium podem personalizar o nome do ticket."
+    });
+  }
+
+  await this.followUpEphemeral(interaction, {
+    content:
+      "Envie o nome personalizado do ticket.\n\n" +
+      "Você pode usar variáveis:\n" +
+      "`{user}` → nome do usuário\n" +
+      "`{id}` → ID do usuário\n" +
+      "`{count}` → número do ticket\n\n" +
+      "Exemplo:\n" +
+      "`ticket-{user}-{count}`"
+  });
+
+  let msg;
+
+  try {
+    msg = await this.client.NextMessageCollector.wait({
+      channelId: interaction.channel_id,
+      userId: user
+    });
+  } catch {
+    return;
+  }
+
+  const panel = this.getPanel(guild, panelId);
+
+  panel.ticketChatName = msg.content.slice(0, 90); // limite de segurança
+
+  await this.save(guild);
+
+  return this.panelMenu(interaction, guild, panelId, user);
+}
+  
+  
 
   async setCategoria(interaction, guild, panelId, user) {
 
@@ -542,6 +796,320 @@ class TicketSystem {
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
+  
+  async modalMenu(interaction, guild, panelId, user) {
+
+  const panel = this.getPanel(guild, panelId);
+  const premium = await this.isPremium(guild.guildId);
+
+  if (!premium) {
+    return this.followUpEphemeral(interaction, {
+      content: "🔒 Função exclusiva premium."
+    });
+  }
+
+  if (!panel.modalConfig) {
+    panel.modalConfig = {
+      enabled: false,
+      title: "Formulário do Ticket",
+      sendMode: 0,
+      logChannelId: null,
+      fields: []
+    };
+  }
+
+  const status = panel.modalConfig.enabled ? "🟢 Ativado" : "🔴 Desativado";
+
+  return this.editOriginal(interaction, {
+    embeds: [{
+      title: "⚙️ Configuração do Modal",
+      description:
+        `Status: ${status}\n` +
+        `Título: ${panel.modalConfig.title}\n` +
+        `Campos: ${panel.modalConfig.fields.length}\n` +
+        `Modo: ${
+          panel.modalConfig.sendMode === 0
+            ? "📨 Ticket"
+            : "📂 Log"
+        }\n` +
+        `Log: ${
+          panel.modalConfig.logChannelId
+            ? `<#${panel.modalConfig.logChannelId}>`
+            : "Não definido"
+        }`
+    }],
+    components: [
+      this.row(
+        this.btn(user, "Ativar/Desativar", 3, i => this.toggleModal(i, guild, panelId, user)),
+        this.btn(user, "Editar Título", 2, i => this.setModalTitle(i, guild, panelId, user))
+      ),
+      this.row(
+        this.btn(user, "➕ Add Pergunta", 1, i => this.addModalField(i, guild, panelId, user)),
+        this.btn(user, "👢 Deletar Última", 4, i => this.removeLastField(i, guild, panelId, user))
+      ),
+      this.row(
+        this.btn(user, "Modo de Envio", 2, i => this.setModalSendMode(i, guild, panelId, user)),
+        this.btn(user, "Canal de Log", 1, i => this.setModalLogChannel(i, guild, panelId, user)),
+        this.btn(user, "⬅️ Voltar", 2, i => this.panelMenu(i, guild, panelId, user))
+      )
+    ]
+  });
+}
+
+async addModalField(interaction, guild, panelId, user) {
+
+  const modal = this.client.interactions.createModal({
+    user,
+    title: "Adicionar Pergunta",
+    components: [
+
+      // Pergunta
+      {
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: "label",
+          label: "Pergunta",
+          style: 1,
+          required: true,
+          max_length: 100
+        }]
+      },
+
+      // Placeholder
+      {
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: "placeholder",
+          label: "Placeholder",
+          style: 1,
+          required: false,
+          max_length: 100
+        }]
+      },
+
+      // Tipo
+      {
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: "style",
+          label: "Tipo (1=Curta | 2=Longa)",
+          style: 1,
+          required: true,
+          max_length: 1
+        }]
+      }
+
+    ],
+    funcao: async (modalInteraction, client, fields) => {
+
+      const panel = this.getPanel(guild, panelId);
+
+      if (!panel.modalConfig)
+        panel.modalConfig = { enabled: false, fields: [] };
+
+      if (panel.modalConfig.fields.length >= 5) {
+        return DiscordRequest(
+          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+          {
+            method: "POST",
+            body: {
+              type: 4,
+              data: {
+                content: "❌ Máximo de 5 perguntas.",
+                flags: 64
+              }
+            }
+          }
+        );
+      }
+
+      const style = Number(fields.style) === 2 ? 2 : 1;
+
+      panel.modalConfig.fields.push({
+        label: fields.label,
+        customId: "field_" + Date.now(),
+        style,
+        required: true,
+        placeholder: fields.placeholder || "",
+        minLength: 0,
+        maxLength: 4000
+      });
+
+      await this.save(guild);
+
+      await DiscordRequest(
+        `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+        {
+          method: "POST",
+          body: { type: 6 } // DEFER UPDATE
+        }
+      );
+
+      return this.modalMenu(modalInteraction, guild, panelId, user);
+    }
+  });
+
+  return this.client.interactions.showModal(interaction, modal);
+}
+
+async toggleModal(interaction, guild, panelId, user) {
+
+  await this.deferUpdate(interaction);
+
+  const panel = this.getPanel(guild, panelId);
+
+  if (!panel.modalConfig) {
+    panel.modalConfig = {
+      enabled: false,
+      title: "Formulário do Ticket",
+      sendMode: 0,
+      logChannelId: null,
+      fields: []
+    };
+  }
+
+  panel.modalConfig.enabled = !panel.modalConfig.enabled;
+
+  await this.save(guild);
+
+  return this.modalMenu(interaction, guild, panelId, user);
+}
+
+async setModalTitle(interaction, guild, panelId, user) {
+
+  const panel = this.getPanel(guild, panelId);
+
+  const modal = this.client.interactions.createModal({
+    user,
+    title: "Editar Título do Modal",
+    components: [
+      {
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: "title",
+          label: "Novo Título",
+          style: 1,
+          required: true,
+          max_length: 45,
+          value: panel.modalConfig?.title || ""
+        }]
+      }
+    ],
+    funcao: async (modalInteraction, client, fields) => {
+
+      const panelAtual = this.getPanel(guild, panelId);
+
+      if (!panelAtual.modalConfig)
+        panelAtual.modalConfig = {
+          enabled: false,
+          title: "",
+          fields: []
+        };
+
+      panelAtual.modalConfig.title = fields.title;
+
+      await this.save(guild);
+
+      await DiscordRequest(
+        `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+        {
+          method: "POST",
+          body: { type: 6 } // DEFER UPDATE
+        }
+      );
+
+      return this.modalMenu(modalInteraction, guild, panelId, user);
+    }
+  });
+
+  return this.client.interactions.showModal(interaction, modal);
+}
+
+
+async setModalSendMode(interaction, guild, panelId, user) {
+
+  await this.deferUpdate(interaction);
+
+  const panel = this.getPanel(guild, panelId);
+
+  panel.modalConfig.sendMode =
+    panel.modalConfig.sendMode === 0 ? 1 : 0;
+
+  await this.save(guild);
+
+  return this.modalMenu(interaction, guild, panelId, user);
+}
+
+async setModalLogChannel(interaction, guild, panelId, user) {
+
+  
+  await this.deferUpdate(interaction);
+
+  
+  await this.followUpEphemeral(interaction, {
+    content: "Envie o canal de log (menção ou ID)"
+  });
+
+  let msg;
+
+  try {
+    msg = await this.client.NextMessageCollector.wait({
+      channelId: interaction.channel_id,
+      userId: user
+    });
+  } catch {
+    return;
+  }
+
+  const id = this.extractId(msg.content);
+
+  if (!id) {
+    return this.followUpEphemeral(interaction, {
+      content: "❌ Canal inválido"
+    });
+  }
+
+  const panel = this.getPanel(guild, panelId);
+
+  if (!panel.modalConfig) {
+    panel.modalConfig = {
+      enabled: false,
+      title: "Formulário do Ticket",
+      sendMode: 0,
+      logChannelId: null,
+      fields: []
+    };
+  }
+
+  panel.modalConfig.logChannelId = id;
+
+  await this.save(guild);
+
+  return this.followUpEphemeral(interaction, {
+    content: "✅ Canal de log configurado!"
+  });
+}
+
+async removeLastField(interaction, guild, panelId, user) {
+
+  await this.deferUpdate(interaction);
+
+  const panel = this.getPanel(guild, panelId);
+
+  if (!panel.modalConfig?.fields?.length) {
+    return this.modalMenu(interaction, guild, panelId, user);
+  }
+
+  panel.modalConfig.fields.pop();
+
+  await this.save(guild);
+
+  return this.modalMenu(interaction, guild, panelId, user);
+}
 
   async deletePanel(interaction, guild, panelId, user) {
 

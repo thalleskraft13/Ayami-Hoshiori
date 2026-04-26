@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const DiscordRequest = require('../function/DiscordRequest');
+const ms = require("ms")
 
 class InteractionManager {
 
@@ -31,7 +32,7 @@ class InteractionManager {
     /* ===============================
        BUTTON
     =============================== */
-    createButton({ user, tempo = 60000, funcao, data = {} }) {
+    createButton({ user, tempo = ms("10min"), funcao, data = {} }) {
 
         const id = this._generateId();
 
@@ -48,7 +49,7 @@ class InteractionManager {
     /* ===============================
        SELECT MENU
     =============================== */
-    createSelect({ user, tempo = 60000, funcao, data = {} }) {
+    createSelect({ user, tempo = ms("10min"), funcao, data = {} }) {
 
         const id = this._generateId();
 
@@ -67,7 +68,7 @@ class InteractionManager {
     /* ===============================
        MODAL
     =============================== */
-    createModal({ user, tempo = 60000, title, components, funcao }) {
+    createModal({ user, tempo = ms("10min"), title, components, funcao }) {
 
         const id = this._generateId();
 
