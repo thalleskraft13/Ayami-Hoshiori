@@ -1,4 +1,4 @@
-const DiscordRequest = require("../../function/DiscordRequest");
+const DiscordRequest = require("../../function/DiscordRequest.js");
 
 module.exports = {
     data: {

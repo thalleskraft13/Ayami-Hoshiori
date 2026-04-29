@@ -4,11 +4,11 @@ const { WebSocketManager, WebSocketShardEvents } = require('@discordjs/ws');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 
-const connectMongo = require('./ConnectMongo');
-const InteractionManager = require("./InteractionManager");
-const NextMessageCollector = require("./MessageCollectorManager");
-const TicketSystem = require("./Manager/TicketSetup");
-const TaskManager = require("./TaskManager");
+const connectMongo = require('./ConnectMongo.js');
+const InteractionManager = require("./InteractionManager.js");
+const NextMessageCollector = require("./MessageCollectorManager.js");
+const TicketSystem = require("./Manager/TicketSetup.js");
+const TaskManager = require("./TaskManager.js");
 
 class DiscordGatewayClient {
 
@@ -20,25 +20,21 @@ class DiscordGatewayClient {
         this.clientId = process.env.CLIENT_ID;
 
         this.commands = new Map();
-        this.shards = new Map();
 
         this.rest = new REST({ version: '10' }).setToken(this.token);
 
         this.manager = new WebSocketManager({
             token: this.token,
             intents: options.intents ?? 0,
-            rest: this.rest,
-            shardCount: 1,
+            
             presence: {
-              status: "online",
-                activities: [
-                   {
-                     name: "Assine 'Lua Carmesin' para beneficios por apenas R$6,99!",
-                     type: 0
-                   }
-                ],
-               afk: false
-             }
+        status: "online",
+        activities: [
+            { name: "🌙 Lua Carmesin", type: 0 }
+        ],
+        afk: false
+    },
+  rest: this.rest,  
         });
 
         this.interactions = new InteractionManager(this);
@@ -46,8 +42,13 @@ class DiscordGatewayClient {
         this.ticketSystem = new TicketSystem(this);
         this.TaskManager = new TaskManager(this);
 
+        this._reconnectAttempts = 0;
+        this._maxReconnectAttempts = 10;
+        this._isReconnecting = false;
+
         this._loadCommands();
         this._registerEvents();
+        this._setupAntiCrash();
     }
 
     _validateEnv() {
@@ -61,11 +62,22 @@ class DiscordGatewayClient {
         if (!process.env.MONGO_URI)
             throw new Error('MONGO_URI is not defined.');
     }
-
+    
+    async setPresence({ status = "online", name = "Arlecchino Bot", type = 0 }) {
+    this.manager.updatePresence({
+        status,
+        activities: [
+            {
+                name,
+                type
+            }
+        ],
+        afk: false
+    });
+}
     _loadCommands() {
 
         const basePath = path.join(process.cwd(), 'src', 'Commands');
-
         if (!fs.existsSync(basePath)) return;
 
         const folders = fs.readdirSync(basePath);
@@ -73,22 +85,169 @@ class DiscordGatewayClient {
         for (const folder of folders) {
 
             const folderPath = path.join(basePath, folder);
-
             const files = fs.readdirSync(folderPath)
                 .filter(file => file.endsWith('.js'));
 
             for (const file of files) {
 
-                const command = require(path.join(folderPath, file));
+                try {
 
-                if (!command.data || !command.execute) continue;
+                    const command = require(path.join(folderPath, file));
 
-                if (!command.info)
-                    command.info = {};
+                    if (!command.data || !command.execute) continue;
 
-                this.commands.set(command.data.name, command);
+                    if (!command.info)
+                        command.info = {};
+
+                    this.commands.set(command.data.name, command);
+
+                } catch (err) {
+                    console.error(`Erro ao carregar comando ${file}:`, err);
+                }
             }
         }
+    }
+
+    _registerEvents() {
+
+        this.manager.on(WebSocketShardEvents.Dispatch, async (payload) => {
+
+            try {
+
+                this.NextMessageCollector.handle(payload);
+
+                if (payload.t === "READY") {
+
+                    console.log("Gateway conectado!");
+                    
+
+                    try {
+                        await connectMongo();
+                        console.log("Mongo conectado!");
+                    } catch (err) {
+                        console.error("Erro ao conectar Mongo:", err);
+                    }
+
+                    try {
+                        await this.TaskManager.start();
+                        console.log("TaskManager iniciado!");
+                    } catch (err) {
+                        console.error("Erro ao iniciar TaskManager:", err);
+                    }
+                }
+
+                if (payload.t !== 'INTERACTION_CREATE') return;
+
+                const interaction = payload.d;
+
+                if (interaction.type === 3)
+                    return this.interactions.handleComponent(interaction);
+
+                if (interaction.type === 5)
+                    return this.interactions.handleModal(interaction);
+
+                if (interaction.type !== 2) return;
+
+                const command = this.commands.get(interaction.data.name);
+                if (!command) return;
+
+                try {
+                    await command.execute(interaction, this);
+                } catch (error) {
+                    console.error("Erro ao executar comando:", error);
+                }
+
+            } catch (error) {
+                console.error("Erro no Dispatch:", error);
+            }
+        });
+
+        
+        this.manager.on(WebSocketShardEvents.Error, (error) => {
+            console.error("WebSocket Error:", error);
+            this._handleReconnect();
+        });
+
+        
+        this.manager.on(WebSocketShardEvents.Close, (event) => {
+            console.warn("WebSocket Fechado:", event?.code);
+            this._handleReconnect();
+        });
+    }
+
+    async connect() {
+
+        try {
+
+            console.log("Conectando ao Gateway...");
+            await this.manager.connect();
+
+            this._reconnectAttempts = 0;
+            console.log("Conectado com sucesso!");
+
+        } catch (err) {
+
+            console.error("Erro ao conectar Gateway:", err);
+            this._handleReconnect();
+        }
+    }
+
+    async _handleReconnect() {
+
+        if (this._isReconnecting) return;
+
+        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
+            console.error("Máximo de tentativas de reconexão atingido.");
+            return;
+        }
+
+        this._isReconnecting = true;
+        this._reconnectAttempts++;
+
+        const delay = Math.min(5000 * this._reconnectAttempts, 30000);
+
+        console.log(
+            `Reconectando em ${delay / 1000}s... (Tentativa ${this._reconnectAttempts})`
+        );
+
+        setTimeout(async () => {
+
+            try {
+
+                await this.manager.connect();
+
+                console.log("Reconectado com sucesso!");
+                this._reconnectAttempts = 0;
+
+            } catch (err) {
+
+                console.error("Falha ao reconectar:", err);
+                this._isReconnecting = false;
+                return this._handleReconnect();
+            }
+
+            this._isReconnecting = false;
+
+        }, delay);
+    }
+
+    _setupAntiCrash() {
+
+        process.on("unhandledRejection", (reason) => {
+            console.error("Unhandled Rejection:", reason);
+        });
+
+        process.on("uncaughtException", (err) => {
+            console.error("Uncaught Exception:", err);
+        });
+
+        process.on("uncaughtExceptionMonitor", (err) => {
+            console.error("Uncaught Exception Monitor:", err);
+        });
+
+        process.on("warning", (warn) => {
+            console.warn("Warning:", warn);
+        });
     }
 
     async registerSlashCommands() {
@@ -144,57 +303,6 @@ class DiscordGatewayClient {
                 );
             }
         }
-    }
-
-    async _registerEvents() {
-
-        this.manager.on(WebSocketShardEvents.Ready, (data, shard) => {
-            this.shards.set(shard.id, shard);
-        });
-
-        this.manager.on(WebSocketShardEvents.Dispatch, async (payload) => {
-
-            this.NextMessageCollector.handle(payload);
-
-            if (payload.t === "READY") {
-                await this.TaskManager.start();
-                console.log("Client está ligado!")
-                await connectMongo();
-            }
-
-            if (payload.t !== 'INTERACTION_CREATE') return;
-
-            const interaction = payload.d;
-
-            if (interaction.type === 3) {
-                return this.interactions.handleComponent(interaction);
-            }
-
-            if (interaction.type === 5) {
-                return this.interactions.handleModal(interaction);
-            }
-
-            if (interaction.type !== 2) return;
-
-            const command = this.commands.get(interaction.data.name);
-            if (!command) return;
-
-            try {
-                await command.execute(interaction, this);
-            } catch (error) {
-                console.error(error);
-            }
-        });
-    }
-
-    async connect() {
-
-        await this.manager.connect();
-    }
-
-    getPing(shardId = 0) {
-        const shard = this.shards.get(shardId);
-        return shard?.ping ?? null;
     }
 }
 

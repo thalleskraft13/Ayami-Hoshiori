@@ -1,6 +1,6 @@
-const PremiumManager = require("./Utils/PremiumManager");
-const GuildDb = require("../Mongodb/guild");
-const UserGlobalDb = require("../Mongodb/userglobal");
+const PremiumManager = require("./Utils/PremiumManager.js");
+const GuildDb = require("../Mongodb/guild.js");
+const UserGlobalDb = require("../Mongodb/userglobal.js");
 
 const STAFF = ["1438170698580361287"];
 

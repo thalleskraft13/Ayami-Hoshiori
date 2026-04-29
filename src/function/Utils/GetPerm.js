@@ -1,4 +1,4 @@
-const DiscordRequest = require("../DiscordRequest");
+const DiscordRequest = require("../DiscordRequest.js");
 
 const ALL_PERMISSIONS = {
   CREATE_INSTANT_INVITE: 1n << 0n,

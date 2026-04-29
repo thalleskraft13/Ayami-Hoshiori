@@ -1,6 +1,7 @@
-const GuildDb = require("../../Mongodb/guild");
-const DiscordRequest = require("../DiscordRequest");
-const PremiumManager = require("../Utils/PremiumManager");
+const GuildDb = require("../../Mongodb/guild.js");
+const DiscordRequest = require("../DiscordRequest.js");
+const PremiumManager = require("../Utils/PremiumManager.js");
+const getPerm = require("../Utils/GetPerm.js");
 
 class TicketSystem {
 
@@ -224,6 +225,17 @@ class TicketSystem {
   
   async create(interaction) {
   try {
+    
+   const permCheck = await this.checkBotPermissions(interaction, panel);
+
+if (!permCheck.ok) {
+  return this.reply(interaction, {
+    content:
+      "❌ Não tenho as seguintes permissões:\n\n" +
+      permCheck.missing.map(p => `• ${p}`).join("\n"),
+    flags: 64
+  });
+} 
 
     const guild = await this.getGuild(interaction.guild_id);
     const data = JSON.parse(interaction.data.custom_id);
@@ -603,6 +615,19 @@ async createTicketNormally(interaction, guild, panel) {
         content: "Defina um canal primeiro"
       });
     }
+    
+   const permCheck = await this.checkSendPanelPermissions(
+    guild.guildId,
+    panel.canalId
+  );
+
+  if (!permCheck.ok) {
+    return this.followUpEphemeral(interaction, {
+      content:
+        "❌ Não tenho permissões suficientes no canal:\n\n" +
+        permCheck.missing.map(p => `• ${p}`).join("\n")
+    });
+  } 
 
     await DiscordRequest(`/channels/${panel.canalId}/messages`, {
       method: "POST",
@@ -855,41 +880,53 @@ async createTicketNormally(interaction, guild, panel) {
     ]
   });
 }
-
 async addModalField(interaction, guild, panelId, user) {
+
+  const panel = this.getPanel(guild, panelId);
+
+  if (!panel.modalConfig) {
+    panel.modalConfig = {
+      enabled: false,
+      title: "Formulário do Ticket",
+      sendMode: 0,
+      logChannelId: null,
+      fields: []
+    };
+  }
+
+  
+  if (panel.modalConfig.fields.length >= 5) {
+    return this.followUpEphemeral(interaction, {
+      content: "❌ Você pode adicionar no máximo 5 perguntas."
+    });
+  }
 
   const modal = this.client.interactions.createModal({
     user,
     title: "Adicionar Pergunta",
     components: [
-
-      // Pergunta
       {
         type: 1,
         components: [{
           type: 4,
           custom_id: "label",
-          label: "Pergunta",
+          label: "Pergunta (máx. 45 caracteres)",
           style: 1,
           required: true,
-          max_length: 100
+          max_length: 45 
         }]
       },
-
-      // Placeholder
       {
         type: 1,
         components: [{
           type: 4,
           custom_id: "placeholder",
-          label: "Placeholder",
+          label: "Placeholder (opcional)",
           style: 1,
           required: false,
           max_length: 100
         }]
       },
-
-      // Tipo
       {
         type: 1,
         components: [{
@@ -901,16 +938,13 @@ async addModalField(interaction, guild, panelId, user) {
           max_length: 1
         }]
       }
-
     ],
     funcao: async (modalInteraction, client, fields) => {
 
-      const panel = this.getPanel(guild, panelId);
+      const panelAtual = this.getPanel(guild, panelId);
 
-      if (!panel.modalConfig)
-        panel.modalConfig = { enabled: false, fields: [] };
-
-      if (panel.modalConfig.fields.length >= 5) {
+      
+      if (panelAtual.modalConfig.fields.length >= 5) {
         return DiscordRequest(
           `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
           {
@@ -918,7 +952,26 @@ async addModalField(interaction, guild, panelId, user) {
             body: {
               type: 4,
               data: {
-                content: "❌ Máximo de 5 perguntas.",
+                content: "❌ Limite máximo de 5 perguntas atingido.",
+                flags: 64
+              }
+            }
+          }
+        );
+      }
+
+      
+      const label = fields.label?.trim();
+
+      if (!label || label.length > 45) {
+        return DiscordRequest(
+          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+          {
+            method: "POST",
+            body: {
+              type: 4,
+              data: {
+                content: "❌ A pergunta deve ter no máximo 45 caracteres.",
                 flags: 64
               }
             }
@@ -928,12 +981,12 @@ async addModalField(interaction, guild, panelId, user) {
 
       const style = Number(fields.style) === 2 ? 2 : 1;
 
-      panel.modalConfig.fields.push({
-        label: fields.label,
+      panelAtual.modalConfig.fields.push({
+        label,
         customId: "field_" + Date.now(),
         style,
         required: true,
-        placeholder: fields.placeholder || "",
+        placeholder: fields.placeholder?.slice(0, 100) || "",
         minLength: 0,
         maxLength: 4000
       });
@@ -944,7 +997,7 @@ async addModalField(interaction, guild, panelId, user) {
         `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
         {
           method: "POST",
-          body: { type: 6 } // DEFER UPDATE
+          body: { type: 6 } 
         }
       );
 
@@ -954,6 +1007,7 @@ async addModalField(interaction, guild, panelId, user) {
 
   return this.client.interactions.showModal(interaction, modal);
 }
+
 
 async toggleModal(interaction, guild, panelId, user) {
 
@@ -1118,6 +1172,125 @@ async removeLastField(interaction, guild, panelId, user) {
 
     return this.startSetup(interaction);
   }
+   
+
+async checkBotPermissions(interaction, panel) {
+  try {
+
+    const guildId = interaction.guild_id;
+
+    const guildPerms = await getPerm({
+      guildId,
+      bot: true
+    });
+
+    const baseChannelId =
+      panel.tipoDeCriacao === 0
+        ? panel.categoriaId || interaction.channel_id
+        : interaction.channel_id;
+
+    const channelPerms = await getPerm({
+      guildId,
+      channel: true,
+      id: baseChannelId,
+      bot: true
+    });
+
+    const required = new Set();
+    
+    if (panel.tipoDeCriacao === 0) {
+      required.add("VIEW_CHANNEL");
+      required.add("SEND_MESSAGES");
+      required.add("MANAGE_CHANNELS");
+    }
+
+    if (panel.tipoDeCriacao === 1) {
+      required.add("VIEW_CHANNEL");
+      required.add("SEND_MESSAGES");
+      required.add("CREATE_PUBLIC_THREADS");
+      required.add("SEND_MESSAGES_IN_THREADS");
+    }
+
+    if (panel.tipoDeCriacao === 2) {
+      required.add("VIEW_CHANNEL");
+      required.add("SEND_MESSAGES");
+      required.add("CREATE_PRIVATE_THREADS");
+      required.add("SEND_MESSAGES_IN_THREADS");
+      required.add("MANAGE_THREADS");
+    }
+
+    const missing = [];
+
+    for (const perm of required) {
+      const hasGuild = guildPerms.includes(perm);
+      const hasChannel = channelPerms.includes(perm);
+
+      if (!hasGuild || !hasChannel) {
+        missing.push(perm);
+      }
+    }
+
+    return {
+      ok: missing.length === 0,
+      missing: this.formatPermissions(missing)
+    };
+
+  } catch (err) {
+    console.error("Erro ao verificar permissões:", err);
+
+    return {
+      ok: false,
+      missing: ["Erro ao verificar permissões"]
+    };
+  }
+}
+
+formatPermissions(perms = []) {
+
+  const translate = {
+    VIEW_CHANNEL: "Ver Canal",
+    SEND_MESSAGES: "Enviar Mensagens",
+    MANAGE_CHANNELS: "Gerenciar Canais",
+    MANAGE_THREADS: "Gerenciar Tópicos",
+    CREATE_PUBLIC_THREADS: "Criar Tópicos Públicos",
+    CREATE_PRIVATE_THREADS: "Criar Tópicos Privados",
+    SEND_MESSAGES_IN_THREADS: "Enviar Mensagens em Tópicos"
+  };
+
+  return perms.map(p => translate[p] || p);
+}
+
+async checkSendPanelPermissions(guildId, channelId) {
+  try {
+
+    const perms = await getPerm({
+      guildId,
+      channel: true,
+      id: channelId,
+      bot: true
+    });
+
+    const required = [
+      "VIEW_CHANNEL",
+      "SEND_MESSAGES",
+      "EMBED_LINKS"
+    ];
+
+    const missing = required.filter(p => !perms.includes(p));
+
+    return {
+      ok: missing.length === 0,
+      missing: this.formatPermissions(missing)
+    };
+
+  } catch (err) {
+    console.error("Erro ao verificar permissões do painel:", err);
+    return {
+      ok: false,
+      missing: ["Erro ao verificar permissões"]
+    };
+  }
+}
 
 }
 

@@ -1,5 +1,5 @@
-const DiscordRequest = require("../../function/DiscordRequest");
-const GetPerm = require("../../function/utils/GetPerm")
+const DiscordRequest = require("../../function/DiscordRequest.js");
+const GetPerm = require("../../function/Utils/GetPerm.js")
 
 module.exports = {
   data: {

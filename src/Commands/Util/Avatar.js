@@ -1,6 +1,6 @@
-const MessageEmbed = require("../../function/Messages/EmbedBuild");
-const DiscordRequest = require("../../function/DiscordRequest");
-const ComponentBuilder = require("../../function/Messages/ComponentBuilder");
+const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
+const DiscordRequest = require("../../function/DiscordRequest.js");
+const ComponentBuilder = require("../../function/Messages/ComponentBuilder.js");
 
 module.exports = {
   info: {

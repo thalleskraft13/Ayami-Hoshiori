@@ -1,8 +1,6 @@
-// src/System/InteractionManager.js
-
 const crypto = require('crypto');
-const DiscordRequest = require('../function/DiscordRequest');
-const ms = require("ms")
+const DiscordRequest = require('./DiscordRequest.js');
+const ms = require("ms");
 
 class InteractionManager {
 
@@ -102,7 +100,7 @@ class InteractionManager {
             `/interactions/${interaction.id}/${interaction.token}/callback`,
             {
                 method: "POST",
-                body: { type: 6 } // DEFER UPDATE
+                body: { type: 6 }
             }
         );
     }
@@ -115,69 +113,80 @@ class InteractionManager {
         const id = interaction.data?.custom_id;
         if (!id) return;
 
+        const replyUnavailable = async () => {
+            try {
+                await DiscordRequest(
+                    `/interactions/${interaction.id}/${interaction.token}/callback`,
+                    {
+                        method: "POST",
+                        body: {
+                            type: 4,
+                            data: {
+                                content: "A interação já está indisponível... use o comando dnv...",
+                                flags: 64
+                            }
+                        }
+                    }
+                );
+            } catch {}
+        };
+
         try {
 
             /* ===============================
                🔥 BOTÕES PERMANENTES (FIXO)
             =============================== */
+
             let parsed = null;
 
-try {
-  parsed = JSON.parse(id);
-} catch {
-  parsed = null;
-}
-
-if (parsed?.t === "create_ticket") {
-  
-    try {
-        interaction.data.panelId = parsed.p;
-  return this.client.ticketSystem.create(interaction);
-
-    } catch (err) {
-        console.error("❌ Ticket Create Error:", err);
-
-        // evita interação morta
-        await DiscordRequest(
-            `/interactions/${interaction.id}/${interaction.token}/callback`,
-            {
-                method: "POST",
-                body: {
-                    type: 4,
-                    data: {
-                        content: "❌ Erro ao criar ticket.",
-                        flags: 64
-                    }
-                }
+            try {
+                parsed = JSON.parse(id);
+            } catch {
+                parsed = null;
             }
-        );
-    }
-    return;
-}
-if (id === "close_ticket") {
-    return this.client.ticketSystem.close(interaction);
-}
+
+            if (parsed?.t === "create_ticket") {
+
+                try {
+                    interaction.data.panelId = parsed.p;
+                    return this.client.ticketSystem.create(interaction);
+
+                } catch (err) {
+                    console.error("❌ Ticket Create Error:", err);
+                    await replyUnavailable();
+                }
+                return;
+            }
+
+            if (id === "close_ticket") {
+                return this.client.ticketSystem.close(interaction);
+            }
 
             /* ===============================
-               🔥 TEMPORÁRIOS (SETUP)
+               🔥 TEMPORÁRIOS (CACHE)
             =============================== */
+
             const data = this.cache.get(id);
-            if (!data) return;
+
+            if (!data) {
+                return replyUnavailable();
+            }
 
             if (Date.now() > data.expires) {
                 this.cache.delete(id);
-                return;
+                return replyUnavailable();
             }
 
-            if (data.user && interaction.member.user.id !== data.user)
+            if (data.user && interaction.member.user.id !== data.user) {
                 return;
+            }
 
             await data.funcao(interaction, this.client);
 
         } catch (err) {
+
             console.error("❌ Component Error:", err);
 
-            // fallback resposta (evita travar interação)
             try {
                 await DiscordRequest(
                     `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -205,10 +214,44 @@ if (id === "close_ticket") {
         if (!id?.startsWith("temp_")) return;
 
         const data = this.cache.get(id);
-        if (!data || !data.modal) return;
+
+        if (!data || !data.modal) {
+            try {
+                await DiscordRequest(
+                    `/interactions/${interaction.id}/${interaction.token}/callback`,
+                    {
+                        method: "POST",
+                        body: {
+                            type: 4,
+                            data: {
+                                content: "A interação já está indisponível... use o comando dnv...",
+                                flags: 64
+                            }
+                        }
+                    }
+                );
+            } catch {}
+            return;
+        }
 
         if (Date.now() > data.expires) {
             this.cache.delete(id);
+
+            try {
+                await DiscordRequest(
+                    `/interactions/${interaction.id}/${interaction.token}/callback`,
+                    {
+                        method: "POST",
+                        body: {
+                            type: 4,
+                            data: {
+                                content: "A interação já está indisponível... use o comando dnv...",
+                                flags: 64
+                            }
+                        }
+                    }
+                );
+            } catch {}
             return;
         }
 

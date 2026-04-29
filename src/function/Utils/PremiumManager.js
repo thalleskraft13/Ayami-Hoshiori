@@ -1,5 +1,5 @@
-const UserGlobalDb = require("../../Mongodb/userglobal");
-const GuildDb = require("../../Mongodb/guild");
+const UserGlobalDb = require("../../Mongodb/userglobal.js");
+const GuildDb = require("../../Mongodb/guild.js");
 
 class PremiumManager {
 

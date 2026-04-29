@@ -1,8 +1,8 @@
-const DiscordRequest = require("../../function/DiscordRequest");
-const MessageEmbed = require("../../function/Messages/EmbedBuild");
-const UserEconomy = require("../../function/Gacha/Economy");
-const UserGlobal = require("../../Mongodb/userglobal");
-const PremiumManager = require("../../function/Utils/PremiumManager")
+const DiscordRequest = require("../../function/DiscordRequest.js");
+const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
+const UserEconomy = require("../../function/Gacha/Economy.js");
+const UserGlobal = require("../../Mongodb/userglobal.js");
+const PremiumManager = require("../../function/Utils/PremiumManager.js")
 
 /* =========================
    MS HELPER
@@ -189,7 +189,7 @@ module.exports = {
             .setTitle("🎁 Daily Resgatado!")
             .setColor("Green")
             .setDescription(
-              `🎰 Giros: **${giros}**\n` +
+              `Giros Obtidos: **${giros}**\n` +
               `💎 Recompensa: **${totalReward} primogemas**\n` +
               (premium.status
                 ? `✨ Valor maior devido a assinatura **Lua Carmesin**\n\n`

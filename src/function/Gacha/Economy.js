@@ -1,6 +1,6 @@
-const UserGlobalSchema = require("../../Mongodb/userglobal");
-const DiscordRequest = require("../DiscordRequest");
-const MessageEmbed = require("../Messages/EmbedBuild");
+const UserGlobalSchema = require("../../Mongodb/userglobal.js");
+const DiscordRequest = require("../DiscordRequest.js");
+const MessageEmbed = require("../Messages/EmbedBuild.js");
 
 class Economy {
 

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const DiscordGatewayClient = require('./src/function/DiscordGatewayClient');
+const DiscordGatewayClient = require('./src/function/DiscordGatewayClient.js');
 
 (async () => {
     const client = new DiscordGatewayClient({
