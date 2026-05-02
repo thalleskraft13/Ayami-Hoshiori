@@ -9,9 +9,6 @@ class InteractionManager {
         this.cache = new Map();
     }
 
-    /* ===============================
-       ID GENERATOR
-    =============================== */
     _generateId() {
         return "temp_" + crypto.randomBytes(6).toString("hex");
     }
@@ -27,9 +24,43 @@ class InteractionManager {
         }, tempo);
     }
 
-    /* ===============================
-       BUTTON
-    =============================== */
+    _errorId() {
+        return crypto.randomBytes(4).toString("hex");
+    }
+
+    async _reply(interaction, content) {
+        return DiscordRequest(
+            `/interactions/${interaction.id}/${interaction.token}/callback`,
+            {
+                method: "POST",
+                body: {
+                    type: 4,
+                    data: {
+                        content,
+                        flags: 64
+                    }
+                }
+            }
+        );
+    }
+
+    async _replyError(interaction, err, context = "Erro interno") {
+
+        const id = this._errorId();
+
+        console.error(`[${id}] ${context}`, err);
+
+        const msg =
+            `Erro ao processar a interação\n\n` +
+            `Contexto: **\`${context}\`**\n` +
+            `ID do erro: **\`${id}\`**\n` +
+            `Detalhe: \`\`\`\n${err?.message || "Desconhecido"}\n\`\`\``;
+
+        try {
+            await this._reply(interaction, msg);
+        } catch {}
+    }
+
     createButton({ user, tempo = ms("10min"), funcao, data = {} }) {
 
         const id = this._generateId();
@@ -39,14 +70,11 @@ class InteractionManager {
         return {
             type: 2,
             style: data.style ?? 1,
-            label: data.label ?? "Botão",
+            label: data.label ?? "Botao",
             custom_id: id
         };
     }
 
-    /* ===============================
-       SELECT MENU
-    =============================== */
     createSelect({ user, tempo = ms("10min"), funcao, data = {} }) {
 
         const id = this._generateId();
@@ -56,16 +84,13 @@ class InteractionManager {
         return {
             type: 3,
             custom_id: id,
-            placeholder: data.placeholder ?? "Escolha...",
+            placeholder: data.placeholder ?? "Escolha uma opcao",
             min_values: data.min_values ?? 1,
             max_values: data.max_values ?? 1,
             options: data.options ?? []
         };
     }
 
-    /* ===============================
-       MODAL
-    =============================== */
     createModal({ user, tempo = ms("10min"), title, components, funcao }) {
 
         const id = this._generateId();
@@ -92,9 +117,6 @@ class InteractionManager {
         );
     }
 
-    /* ===============================
-       DEFER (ESSENCIAL)
-    =============================== */
     async defer(interaction) {
         return DiscordRequest(
             `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -105,72 +127,46 @@ class InteractionManager {
         );
     }
 
-    /* ===============================
-       HANDLE COMPONENT
-    =============================== */
     async handleComponent(interaction) {
 
         const id = interaction.data?.custom_id;
         if (!id) return;
 
         const replyUnavailable = async () => {
-            try {
-                await DiscordRequest(
-                    `/interactions/${interaction.id}/${interaction.token}/callback`,
-                    {
-                        method: "POST",
-                        body: {
-                            type: 4,
-                            data: {
-                                content: "A interação já está indisponível... use o comando dnv...",
-                                flags: 64
-                            }
-                        }
-                    }
-                );
-            } catch {}
+            return this._reply(
+                interaction,
+                "Essa interação expirou ou não está mais disponível. Execute o comando novamente."
+            );
         };
 
         try {
-
-            /* ===============================
-               🔥 BOTÕES PERMANENTES (FIXO)
-            =============================== */
 
             let parsed = null;
 
             try {
                 parsed = JSON.parse(id);
-            } catch {
-                parsed = null;
-            }
+            } catch {}
 
             if (parsed?.t === "create_ticket") {
-
                 try {
                     interaction.data.panelId = parsed.p;
                     return this.client.ticketSystem.create(interaction);
-
                 } catch (err) {
-                    console.error("❌ Ticket Create Error:", err);
-                    await replyUnavailable();
+                    return this._replyError(interaction, err, "Ticket Create");
                 }
-                return;
             }
 
             if (id === "close_ticket") {
-                return this.client.ticketSystem.close(interaction);
+                try {
+                    return this.client.ticketSystem.close(interaction);
+                } catch (err) {
+                    return this._replyError(interaction, err, "Ticket Close");
+                }
             }
-
-            /* ===============================
-               🔥 TEMPORÁRIOS (CACHE)
-            =============================== */
 
             const data = this.cache.get(id);
 
-            if (!data) {
-                return replyUnavailable();
-            }
+            if (!data) return replyUnavailable();
 
             if (Date.now() > data.expires) {
                 this.cache.delete(id);
@@ -178,36 +174,19 @@ class InteractionManager {
             }
 
             if (data.user && interaction.member.user.id !== data.user) {
-                return;
+                return this._reply(
+                    interaction,
+                    "Você não pode usar este componente."
+                );
             }
 
             await data.funcao(interaction, this.client);
 
         } catch (err) {
-
-            console.error("❌ Component Error:", err);
-
-            try {
-                await DiscordRequest(
-                    `/interactions/${interaction.id}/${interaction.token}/callback`,
-                    {
-                        method: "POST",
-                        body: {
-                            type: 4,
-                            data: {
-                                content: "❌ Ocorreu um erro.",
-                                flags: 64
-                            }
-                        }
-                    }
-                );
-            } catch {}
+            return this._replyError(interaction, err, "Component Handler");
         }
     }
 
-    /* ===============================
-       HANDLE MODAL
-    =============================== */
     async handleModal(interaction) {
 
         const id = interaction.data?.custom_id;
@@ -216,47 +195,26 @@ class InteractionManager {
         const data = this.cache.get(id);
 
         if (!data || !data.modal) {
-            try {
-                await DiscordRequest(
-                    `/interactions/${interaction.id}/${interaction.token}/callback`,
-                    {
-                        method: "POST",
-                        body: {
-                            type: 4,
-                            data: {
-                                content: "A interação já está indisponível... use o comando dnv...",
-                                flags: 64
-                            }
-                        }
-                    }
-                );
-            } catch {}
-            return;
+            return this._reply(
+                interaction,
+                "Este formulário expirou. Execute novamente."
+            );
         }
 
         if (Date.now() > data.expires) {
             this.cache.delete(id);
-
-            try {
-                await DiscordRequest(
-                    `/interactions/${interaction.id}/${interaction.token}/callback`,
-                    {
-                        method: "POST",
-                        body: {
-                            type: 4,
-                            data: {
-                                content: "A interação já está indisponível... use o comando dnv...",
-                                flags: 64
-                            }
-                        }
-                    }
-                );
-            } catch {}
-            return;
+            return this._reply(
+                interaction,
+                "Este formulário expirou. Execute novamente."
+            );
         }
 
-        if (data.user && interaction.member.user.id !== data.user)
-            return;
+        if (data.user && interaction.member.user.id !== data.user) {
+            return this._reply(
+                interaction,
+                "Você não pode responder este formulário."
+            );
+        }
 
         try {
 
@@ -271,7 +229,7 @@ class InteractionManager {
             await data.funcao(interaction, this.client, fields);
 
         } catch (err) {
-            console.error("❌ Modal Error:", err);
+            return this._replyError(interaction, err, "Modal Handler");
         }
     }
 }

@@ -12,7 +12,7 @@ module.exports = {
 
     async execute(interaction, client) {
 
-        const wsPing = client.getPing() ?? 'Calculando...';
+        
 
         await client.rest.post(
             Routes.interactionCallback(interaction.id, interaction.token),

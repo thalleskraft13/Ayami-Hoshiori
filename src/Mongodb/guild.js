@@ -48,6 +48,7 @@ const guildSchema = new Schema({
   guildId: { type: String, required: true, unique: true },
 
   premiumUser: { type: String, default: "0" },
+  premiumTime: { type: Number,default: 0 },
 
   ticket: {
     type: [ticketSchema],

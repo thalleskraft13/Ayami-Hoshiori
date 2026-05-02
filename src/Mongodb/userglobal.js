@@ -12,6 +12,19 @@ const userSchema = new Schema({
     type: Number,
     default: 0
   },
+  
+  premium_guild_limit: {
+  type: Number,
+  default: 1
+},
+
+premium_guilds: {
+  type: [{
+    guildId: String,
+    expireAt: Number
+  }],
+  default: []
+},
 
   /* ===============================
      💎 ECONOMIA
