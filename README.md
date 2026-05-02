@@ -52,17 +52,7 @@ A Lua Carmesim não é sobre preço.
 
 ---
 
-## 🚀 Estrutura do Projeto
 
-src/
- ├── Commands/
- ├── Events/
- ├── System/
- ├── Mongodb/
- ├── Utils/
- └── function/
-
----
 
 ## 📊 Diferenciais
 
