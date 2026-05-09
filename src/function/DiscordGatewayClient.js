@@ -3,12 +3,15 @@ const path = require('path');
 const { WebSocketManager, WebSocketShardEvents } = require('@discordjs/ws');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
-
+const DiscordRequest = require('./DiscordRequest.js');
 const connectMongo = require('./ConnectMongo.js');
 const InteractionManager = require("./InteractionManager.js");
 const NextMessageCollector = require("./MessageCollectorManager.js");
 const TicketSystem = require("./Manager/TicketSetup.js");
 const TaskManager = require("./TaskManager.js");
+const UserGlobalDb = require("../Mongodb/userglobal.js");
+const sendDm = require("./Utils/sendDm.js")
+const MessageEmbed = require("./Messages/EmbedBuild.js")
 
 class DiscordGatewayClient {
 
@@ -138,29 +141,239 @@ class DiscordGatewayClient {
 
                 if (payload.t !== 'INTERACTION_CREATE') return;
 
-                const interaction = payload.d;
+const interaction = payload.d;
 
-                if (interaction.type === 3)
-                    return this.interactions.handleComponent(interaction);
+const userId =
+  interaction.member?.user?.id;
 
-                if (interaction.type === 5)
-                    return this.interactions.handleModal(interaction);
+if (userId) {
 
-                if (interaction.type !== 2) return;
+  let user =
+    await UserGlobalDb.findOne({
+      userId
+    });
 
-                const command = this.commands.get(interaction.data.name);
-                if (!command) return;
+  if (!user) {
 
-                try {
-                    await command.execute(interaction, this);
-                } catch (error) {
-                    console.error("Erro ao executar comando:", error);
-                }
+    user = await UserGlobalDb.create({
+      userId,
+      rankaventureiro: {
+        nivelAtual: 0,
+        xpTotal: 0,
+        xpRestante: 1000
+      }
+    });
+  }
 
-            } catch (error) {
-                console.error("Erro no Dispatch:", error);
-            }
+  if (!user.rankaventureiro) {
+
+    user.rankaventureiro = {
+      nivelAtual: 0,
+      xpTotal: 0,
+      xpRestante: 1000
+    };
+  }
+
+  const MAX_LEVEL = 60;
+
+  const nivelAntes =
+    user.rankaventureiro.nivelAtual;
+
+  user.rankaventureiro.xpTotal += 10;
+
+  let nivel =
+    user.rankaventureiro.nivelAtual;
+
+  let xpTotal =
+    user.rankaventureiro.xpTotal;
+
+  while (nivel < MAX_LEVEL) {
+
+    const xpNecessaria =
+      (nivel + 1) * 1000;
+
+    if (xpTotal >= xpNecessaria) {
+      nivel++;
+    } else {
+      break;
+    }
+  }
+
+  user.rankaventureiro.nivelAtual =
+    nivel;
+
+  let recompensaGiros = 0;
+  let recompensaPrimogemas = 0;
+
+  if (nivel > nivelAntes) {
+
+    const levelsGanhos =
+      nivel - nivelAntes;
+
+    recompensaGiros =
+      levelsGanhos * 5;
+
+    recompensaPrimogemas =
+      recompensaGiros * 160;
+
+    user.primogemas.atm +=
+      recompensaPrimogemas;
+
+    if (
+      !Array.isArray(
+        user.primogemas.transacoes
+      )
+    ) {
+      user.primogemas.transacoes = [];
+    }
+
+    user.primogemas.transacoes.push({
+      type: "adventure_rank_reward",
+      value: recompensaPrimogemas,
+      rolls: recompensaGiros,
+      old_level: nivelAntes,
+      new_level: nivel,
+      date: Date.now()
+    });
+  }
+
+  if (nivel >= MAX_LEVEL) {
+
+    user.rankaventureiro.nivelAtual =
+      MAX_LEVEL;
+
+    user.rankaventureiro.xpRestante = 0;
+
+  } else {
+
+    const xpProximoNivel =
+      (nivel + 1) * 1000;
+
+    user.rankaventureiro.xpRestante =
+      xpProximoNivel - xpTotal;
+  }
+
+  await user.save();
+
+  if (
+    nivel > nivelAntes &&
+    user.dmNotificacoes
+  ) {
+
+    try {
+
+      const userData =
+        await DiscordRequest(
+          `/users/${userId}`,
+          {
+            method: "GET"
+          }
+        );
+
+      function getAvatarURL(user) {
+
+        if (!user.avatar) {
+          return `https://cdn.discordapp.com/embed/avatars/0.png`;
+        }
+
+        const isGif =
+          user.avatar.startsWith("a_");
+
+        const extension =
+          isGif ? "gif" : "png";
+
+        return (
+          `https://cdn.discordapp.com/avatars/` +
+          `${user.id}/${user.avatar}.${extension}?size=1024`
+        );
+      }
+
+      const embed =
+        new MessageEmbed();
+
+      embed
+        .setTitle(
+          "Novo Rank de Aventureiro!"
+        )
+        .setColor("Red")
+        .setThumbnail(
+          getAvatarURL(userData)
+        )
+        .setDescription(
+`Hm... então você evoluiu.
+
+Do Rank de Aventureiro **#${nivelAntes}** para **#${nivel}**.
+Nada mal. Você começa a entender o peso do próprio crescimento.
+
+Como reconhecimento pelo avanço, a Casa da Lareira concedeu a você **${recompensaGiros} giros**.
+
+💎 Recompensa recebida:
+**${recompensaPrimogemas.toLocaleString()} Primogemas**
+
+Use-os com sabedoria… ou desperdice-os como tantos outros fazem.
+
+Sua experiência atual é **${user.rankaventureiro.xpTotal}XP**.
+Ainda faltam **${user.rankaventureiro.xpRestante}XP** para alcançar o Rank de Aventureiro **#${nivel + 1}**.
+
+Não pense que isso é o suficiente.
+O verdadeiro valor não está no número… mas no quanto você suporta para alcançá-lo.
+
+Continue.
+
+Eu estarei observando.`
+        );
+        
+     
+
+      await sendDm(userId, {
+        embeds: [embed.build()]
+      });
+
+    } catch (err) {
+      console.log(
+        "Erro ao enviar DM:",
+        err
+      );
+    }
+  }
+}
+
+if (interaction.type === 3)
+  return this.interactions.handleComponent(interaction);
+
+if (interaction.type === 5)
+  return this.interactions.handleModal(interaction);
+
+if (interaction.type !== 2) return;
+
+const command =
+  this.commands.get(
+    interaction.data.name
+  );
+
+if (!command) return;
+
+try {
+
+  await command.execute(
+    interaction,
+    this
+  );
+
+} catch (error) {
+
+  console.error(
+    "Erro ao executar comando:",
+    error
+  );
+}
+} catch (err) {
+
+  console.log(err);
+
+}
         });
+        
 
         
         this.manager.on(WebSocketShardEvents.Error, (error) => {

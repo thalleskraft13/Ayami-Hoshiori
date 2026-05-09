@@ -7,6 +7,18 @@ const userSchema = new Schema({
     required: true,
     unique: true
   },
+  
+  uidGenshin: {
+    type:Number,
+    default: 0
+  },
+  
+  dmNotificacoes: { type: Boolean,default: false },
+  
+  server: {
+    type: String,
+    default: ""
+  },
 
   premium: {
     type: Number,
@@ -26,9 +38,6 @@ premium_guilds: {
   default: []
 },
 
-  /* ===============================
-     💎 ECONOMIA
-  =============================== */
   primogemas: {
 
     atm: {
@@ -36,20 +45,17 @@ premium_guilds: {
       default: 0
     },
 
-    transacoes: [{
-      tipo: String, // ex: "gacha", "daily", "admin"
-      quantidade: Number,
-      data: Number
-    }],
+    transacoes: {
+  type: Array,
+  default: []
+},
 
     daily_tempo: {
       type: Number,
       default: 0
     },
 
-    /* ===============================
-       🎯 BANNER LIMITADO
-    =============================== */
+
     bannerlimitado: {
       garantidot5: { type: Boolean, default: false },
       garantidot4: { type: Boolean, default: false },
@@ -57,18 +63,12 @@ premium_guilds: {
       pityt4: { type: Number, default: 0 }
     },
 
-    /* ===============================
-       🎒 MOCHILEIRO
-    =============================== */
     mochileiro: {
       pityt5: { type: Number, default: 0 },
       pityt4: { type: Number, default: 0 }
     }
   },
 
-  /* ===============================
-     🎒 INVENTÁRIO DE PERSONAGENS
-  =============================== */
   personagens: [{
     nome: String,
     raridade: String, // "4⭐" | "5⭐"
@@ -77,7 +77,13 @@ premium_guilds: {
       default: 0,
       max: 6
     }
-  }]
+  }],
+  
+  rankaventureiro: {
+    xpTotal: { type: Number,default: 0},
+    nivelAtual: { type: Number,default: 0},
+    xpRestante: { type: Number,default: 1000},
+  }
 
 });
 

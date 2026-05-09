@@ -1,5 +1,5 @@
 const { Routes } = require('discord-api-types/v10');
-
+const sendDM = require("../../function/Utils/sendDm")
 module.exports = {
   info: {
     name: 'ping',
@@ -11,8 +11,6 @@ module.exports = {
     },
 
     async execute(interaction, client) {
-
-        
 
         await client.rest.post(
             Routes.interactionCallback(interaction.id, interaction.token),

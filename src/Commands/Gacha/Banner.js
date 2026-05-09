@@ -41,13 +41,25 @@ module.exports = {
       bannerId === 2
         ? "Mochileiro"
         : `Banner ${bannerId} (${config.banners.atual.t5[bannerId]})`;
+        
+        let url;
+        if (bannerId === 0) url = "https://img.game8.co/4074835/ffa71c8b5ad5e4166bff81404b239344.png/show";
+        
+        if (bannerId === 1) url = "https://img.game8.co/4074832/0eaf83894f8917b69e7eac733707a054.png/show";
+        
+        if (bannerId === 2) url = "https://static.wikia.nocookie.net/genshin-impact/images/7/7c/Ora%C3%A7%C3%A3o_Invoca%C3%A7%C3%A3o_do_Mochileiro_11-11-2020.png/revision/latest?cb=20220530024332&path-prefix=pt-br"
+        
+        let pity = 0;
+        if (bannerId === 0 || bannerId === 1) pity = user.primogemas.bannerlimitado.pityt5;
+        if (bannerId === 2) pity = user.primogemas.mochileiro.pityt5;
 
     const embed = new MessageEmbed()
       .setTitle("Banner Selecionado")
       .setDescription(
-        `**${nomeBanner}**\n\nPrimogemas: **${user.primogemas.atm}**\n\nEscolha:`
+        `**Primogemas: **${user.primogemas.atm}**\nPity: **${pity}/90`
       )
       .randomColor()
+      .setImage(url)
       .build();
 
     const btn1 = client.interactions.createButton({
@@ -109,10 +121,25 @@ async function executarPull(interaction, user, bannerId, amount) {
   }
 
   user.primogemas.atm -= custo;
+  if (!Array.isArray(user.primogemas.transacoes)) {
+  user.primogemas.transacoes = [];
+}
+
+user.primogemas.transacoes.push({
+  type: "banner_pull",
+  value: custo,
+  amount: amount,
+  banner: bannerId,
+  banner_name:
+    bannerId === 2
+      ? "Mochileiro"
+      : config.banners.atual.t5[bannerId],
+  date: Date.now()
+});
 
   let results = amount === 1
     ? [gacha.pull(user, bannerId)]
-    : gacha.multi(user, bannerId, 10);
+    : await gacha.multi(user, bannerId, 10);
 
   await user.save();
 

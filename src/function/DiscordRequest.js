@@ -9,28 +9,44 @@ function sanitizeRoute(route) {
 
 function getMethodColor(method) {
   switch (method) {
-    case "GET": return 0x57F287;      // verde
-    case "POST": return 0x5865F2;     // azul
-    case "PATCH": return 0xFEE75C;    // amarelo/laranja
-    case "PUT": return 0xEB459E;      // rosa
-    case "DELETE": return 0xED4245;   // vermelho
-    default: return 0x95A5A6;         // cinza
+    case "GET": return 0x57F287;
+    case "POST": return 0x5865F2;
+    case "PATCH": return 0xFEE75C;
+    case "PUT": return 0xEB459E;
+    case "DELETE": return 0xED4245;
+    default: return 0x95A5A6;
   }
 }
 
-async function sendLogEmbed(embed) {
-  try {
-    await fetch(`${BASE_URL}/channels/${LOG_CHANNEL_ID}/messages`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bot ${process.env.DISCORD_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ embeds: [embed] })
-    });
-  } catch (err) {
-    console.error("Erro ao enviar log:", err.message);
-  }
+function getCaller() {
+  const stack = new Error().stack?.split("\n");
+  if (!stack) return "Desconhecido";
+
+  const line = stack.find(l =>
+    !l.includes("DiscordRequest") &&
+    !l.includes("getCaller") &&
+    l.includes(".js")
+  );
+
+  if (!line) return "Desconhecido";
+
+  return line
+    .replace(process.cwd(), "")
+    .replace(/\\/g, "/")
+    .replace("at ", "")
+    .replace(/\(.+\//, "(")
+    .trim();
+}
+
+function sendLogEmbed(embed) {
+  fetch(`${BASE_URL}/channels/${LOG_CHANNEL_ID}/messages`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bot ${process.env.DISCORD_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ embeds: [embed] })
+  }).catch(() => {});
 }
 
 async function DiscordRequest(route, options = {}) {
@@ -44,6 +60,7 @@ async function DiscordRequest(route, options = {}) {
   const safeRoute = sanitizeRoute(route);
   const url = BASE_URL + route;
   const method = options.method?.toUpperCase() || "GET";
+  const origin = getCaller();
 
   const config = {
     method,
@@ -64,28 +81,32 @@ async function DiscordRequest(route, options = {}) {
     const time = Date.now() - start;
 
     const embed = {
-      title: `Discord API • ${method}`,
+      title: `🌐 Discord API • ${method}`,
       color: getMethodColor(method),
       fields: [
-        { name: "Status", value: String(response.status), inline: true },
+        { name: "Status", value: `${response.status}`, inline: true },
         { name: "Tempo", value: `${time}ms`, inline: true },
-        { name: "Rota", value: `\`${safeRoute}\`` }
+        { name: "Rota", value: safeRoute },
+        { name: "Origem", value: origin }
       ],
       timestamp: new Date().toISOString()
     };
 
     if (!response.ok) {
-      embed.title = `Discord API ERROR • ${method}`;
+
+      embed.title = `❌ Discord API ERROR • ${method}`;
       embed.color = 0xED4245;
-      await sendLogEmbed(embed);
+
+      sendLogEmbed(embed);
 
       const error = await response.json().catch(() => ({}));
+
       throw new Error(
         `Discord API Error ${response.status}: ${JSON.stringify(error)}`
       );
     }
 
-    await sendLogEmbed(embed);
+    sendLogEmbed(embed);
 
     if (response.status === 204)
       return null;
@@ -96,13 +117,14 @@ async function DiscordRequest(route, options = {}) {
 
     const time = Date.now() - start;
 
-    await sendLogEmbed({
-      title: `Internal Error • ${method}`,
+    sendLogEmbed({
+      title: `💥 Internal Error • ${method}`,
       color: 0x992D22,
       fields: [
         { name: "Tempo", value: `${time}ms`, inline: true },
-        { name: "Rota", value: `\`${safeRoute}\`` },
-        { name: "Erro", value: error.message }
+        { name: "Rota", value: safeRoute },
+        { name: "Origem", value: origin },
+        { name: "Erro", value: error.message.slice(0, 1000) }
       ],
       timestamp: new Date().toISOString()
     });

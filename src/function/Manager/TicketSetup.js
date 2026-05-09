@@ -226,6 +226,11 @@ class TicketSystem {
   async create(interaction) {
   try {
     
+    const guild = await this.getGuild(interaction.guild_id);
+    const data = JSON.parse(interaction.data.custom_id);
+    const panel = this.getPanel(guild, data.p);
+
+    
    const permCheck = await this.checkBotPermissions(interaction, panel);
 
 if (!permCheck.ok) {
@@ -237,10 +242,7 @@ if (!permCheck.ok) {
   });
 } 
 
-    const guild = await this.getGuild(interaction.guild_id);
-    const data = JSON.parse(interaction.data.custom_id);
-    const panel = this.getPanel(guild, data.p);
-
+    
     if (!panel) {
       return this.reply(interaction, {
         content: "❌ Painel não encontrado",

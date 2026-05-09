@@ -35,9 +35,7 @@ async function renderMain(interaction, client, userId, edit = false) {
     return `${d}d ${h}h ${m}m ${s}s`;
   };
 
-  /* =======================================================
-     🔒 SE NÃO TIVER PREMIUM → MOSTRA PAINEL DE COMPRA
-  ======================================================== */
+
 
   if (!userPremium.status) {
 
@@ -97,18 +95,22 @@ Ao ativar a **Lua Carmesim**, você desbloqueia:
       body: {
         type: edit ? 7 : 4,
         data: {
+          flags: 64,
           embeds: [embed],
           components: [
-            { type: 1, components: [btnBuy] }
+            { type: 1, components: [{
+  "type": 2,
+  "label": "Adquirir Premium",
+  "style": 5,
+  "url": "https://discord.gg/wfaRZw5pGn"
+}] }
           ]
         }
       }
     });
   }
 
-  /* =======================================================
-     ✅ SE TIVER PREMIUM → PAINEL NORMAL
-  ======================================================== */
+
 
   let desc = "";
 

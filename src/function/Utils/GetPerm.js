@@ -66,26 +66,26 @@ async function getPerm({ channel = false, id, guildId, bot = false }) {
     ? (await DiscordRequest(`/users/@me`)).id
     : id;
 
-  // 🔥 Pega membro
+  
   const member = await DiscordRequest(
     `/guilds/${guildId}/members/${userId}`
   );
 
-  // 🔥 Dono do servidor = tudo
+  
   const guild = await DiscordRequest(`/guilds/${guildId}`);
   if (guild.owner_id === userId) {
     return Object.keys(ALL_PERMISSIONS);
   }
 
-  // 🔥 Pega cargos
+  
   const roles = await DiscordRequest(`/guilds/${guildId}/roles`);
 
-  // 🔥 Começa com @everyone
+  
   let permissions = BigInt(
     roles.find(r => r.id === guildId).permissions
   );
 
-  // 🔥 Soma permissões dos cargos
+ 
   for (const roleId of member.roles) {
     const role = roles.find(r => r.id === roleId);
     if (role) {
@@ -93,12 +93,12 @@ async function getPerm({ channel = false, id, guildId, bot = false }) {
     }
   }
 
-  // 🔥 ADMINISTRATOR = tudo
+  
   if ((permissions & ALL_PERMISSIONS.ADMINISTRATOR) === ALL_PERMISSIONS.ADMINISTRATOR) {
     return Object.keys(ALL_PERMISSIONS);
   }
 
-  // 🔥 Se for checar canal
+  
   if (channel) {
 
     const channelData = await DiscordRequest(`/channels/${id}`);
