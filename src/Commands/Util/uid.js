@@ -80,6 +80,13 @@ module.exports = {
       userdb.server = servidores[server];
       await userdb.save();
       
+      await client.UidManager.checkAndSendUid({
+  guildId: interaction.guild_id,
+  uid,
+  server: servidores[server],
+  user: interaction.member.user
+});
+      
       await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`,{
         method: "POST",
         body: {
@@ -133,7 +140,7 @@ module.exports = {
       } else {
         
         embed.setTitle(`Uid de ${user.global_name ? user.global_name : user.username}`);
-        embed.setDescription(`O UID de  [${user.global_name ? user.global_name : user.username}](https://discord.com/users/${userID}) é **${userdb.uidGenshin} \`(${userdb.server}\`**.`);
+        embed.setDescription(`O UID de  [${user.global_name ? user.global_name : user.username}](https://discord.com/users/${userID}) é **${userdb.uidGenshin} \`(${userdb.server})\`**.`);
         embed.setColor("Blue");
         embed.setThumbnail(getAvatarURL(user));
         

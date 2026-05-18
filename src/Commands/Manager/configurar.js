@@ -74,8 +74,25 @@ module.exports = {
 
         return client.ticketSystem.startSetup(i);
       }
-    });
+    })
+    
+    const uidBtn = client.interactions.createButton({
+      user,
 
+      data: {
+        label: "Sistema de UID",
+        emoji: {
+          name: "✨"
+        },
+        style: 2
+      },
+
+      funcao: async (i) => {
+
+        await client.UidManager.deferUpdate(i);
+        return client.UidManager.startSetup(i);
+      }
+    });
     
 
     await DiscordRequest(
@@ -102,7 +119,11 @@ module.exports = {
                     "Configure painéis, categorias, staff, modais e automações.",
                     "",
                     "✨ **Sistema de House**",
-                    "Configure recepção,salve personagens pra facilitar buscas,mensagens e etc.\n-# Ainda em desenvolvimento."
+                    "Configure recepção,salve personagens pra facilitar buscas,mensagens e etc.\n-# Ainda em desenvolvimento.",
+                    "",
+                    "📌 **Compartilhamento de UID**",
+                    "Configure envio automático de UID em canais específicos.",
+                    "Suporte a webhook com nome e foto do usuário."
                   ].join("\n"),
 
                 color: 0x2b2d31,
@@ -129,6 +150,7 @@ module.exports = {
                 type: 1,
                 components: [
                   ticketBtn,
+                  uidBtn,
                   {
   type: 2,
   style: 1,

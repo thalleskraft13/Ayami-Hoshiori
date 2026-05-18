@@ -8,6 +8,7 @@ const connectMongo = require('./ConnectMongo.js');
 const InteractionManager = require("./InteractionManager.js");
 const NextMessageCollector = require("./MessageCollectorManager.js");
 const TicketSystem = require("./Manager/TicketSetup.js");
+const UidSystem = require("./Manager/UidManager.js");
 const TaskManager = require("./TaskManager.js");
 const UserGlobalDb = require("../Mongodb/userglobal.js");
 const sendDm = require("./Utils/sendDm.js")
@@ -29,21 +30,23 @@ class DiscordGatewayClient {
         this.manager = new WebSocketManager({
             token: this.token,
             intents: options.intents ?? 0,
-            
+            rest: this.rest,  
             presence: {
-        status: "online",
-        activities: [
-            { name: "🌙 Lua Carmesin", type: 0 }
-        ],
-        afk: false
-    },
-  rest: this.rest,  
+                status: "online",
+                 activities: [{ 
+                   name: "🌙 Lua Carmesin", 
+                   type: 0 
+                   
+                 }],
+                afk: false
+             },
         });
 
         this.interactions = new InteractionManager(this);
         this.NextMessageCollector = new NextMessageCollector(this);
         this.ticketSystem = new TicketSystem(this);
         this.TaskManager = new TaskManager(this);
+        this.UidManager= new UidSystem(this);
 
         this._reconnectAttempts = 0;
         this._maxReconnectAttempts = 10;

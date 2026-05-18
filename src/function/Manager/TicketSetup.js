@@ -216,7 +216,10 @@ class TicketSystem {
       embeds: this.buildEmbeds(panel),
       components: [
         this.row(select),
-        this.row(this.btn(user, "⬅️ Voltar", 2, i => this.startSetup(i)))
+        this.row(this.btn(user, "⬅️ Voltar", 2,async (i) => {
+  await this.deferUpdate(i);
+  return this.startSetup(i);
+}))
       ]
     });
   }
@@ -604,6 +607,8 @@ async createTicketNormally(interaction, guild, panel) {
         content: "JSON inválido"
       });
     }
+    
+    
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
@@ -684,8 +689,12 @@ async createTicketNormally(interaction, guild, panel) {
     panel.tipoDeCriacao = value;
 
     await this.save(guild);
+    
+    this.followUpEphemeral(i, {
+    content: "✅ Tipo de canal configurado!"
+  });
 
-    return this.panelMenu(i, guild, panelId, user);
+    return this.panelMenu(interaction, guild, panelId, user);
   });
 
   return this.followUpEphemeral(interaction, {
@@ -749,6 +758,10 @@ async createTicketNormally(interaction, guild, panel) {
     panel.canalId = id;
 
     await this.save(guild);
+    
+    this.followUpEphemeral(interaction, {
+    content: "✅ Canal configurado!"
+  });
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
@@ -790,6 +803,10 @@ async createTicketNormally(interaction, guild, panel) {
   panel.ticketChatName = msg.content.slice(0, 90); // limite de segurança
 
   await this.save(guild);
+  
+  this.followUpEphemeral(interaction, {
+    content: "Nome do ticket configurado!"
+  });
 
   return this.panelMenu(interaction, guild, panelId, user);
 }
@@ -820,6 +837,10 @@ async createTicketNormally(interaction, guild, panel) {
     panel.categoriaId = id;
 
     await this.save(guild);
+    
+    this.followUpEphemeral(interaction, {
+    content: "✅ Cartegoria onfigurado!"
+  });
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
@@ -877,7 +898,10 @@ async createTicketNormally(interaction, guild, panel) {
       this.row(
         this.btn(user, "Modo de Envio", 2, i => this.setModalSendMode(i, guild, panelId, user)),
         this.btn(user, "Canal de Log", 1, i => this.setModalLogChannel(i, guild, panelId, user)),
-        this.btn(user, "⬅️ Voltar", 2, i => this.panelMenu(i, guild, panelId, user))
+        this.btn(user, "⬅️ Voltar", 2, async (i) => {
+  await this.deferUpdate(i);
+  return this.startSetup(i);
+})
       )
     ]
   });
@@ -897,7 +921,7 @@ async addModalField(interaction, guild, panelId, user) {
   }
 
   
-  if (panel.modalConfig.fields.length >= 5) {
+  if (panel.modalConfig.fields.length >= 15) {
     return this.followUpEphemeral(interaction, {
       content: "❌ Você pode adicionar no máximo 5 perguntas."
     });
@@ -946,7 +970,7 @@ async addModalField(interaction, guild, panelId, user) {
       const panelAtual = this.getPanel(guild, panelId);
 
       
-      if (panelAtual.modalConfig.fields.length >= 5) {
+      if (panelAtual.modalConfig.fields.length >= 15) {
         return DiscordRequest(
           `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
           {
@@ -1144,10 +1168,12 @@ async setModalLogChannel(interaction, guild, panelId, user) {
   panel.modalConfig.logChannelId = id;
 
   await this.save(guild);
-
-  return this.followUpEphemeral(interaction, {
+  
+  this.followUpEphemeral(interaction, {
     content: "✅ Canal de log configurado!"
   });
+  
+  return this.panelMenu(interaction, guild, panelId, user);
 }
 
 async removeLastField(interaction, guild, panelId, user) {

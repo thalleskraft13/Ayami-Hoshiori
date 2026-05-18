@@ -4,6 +4,8 @@ const UserGlobalDb = require("../Mongodb/userglobal.js");
 const sendDm = require("./Utils/sendDm.js")
 const MessageEmbed = require("./Messages/EmbedBuild.js")
 const STAFF = ["1438170698580361287"];
+const DiscordRequest = require("./DiscordRequest");
+
 
 class NextMessageCollector {
 
@@ -16,7 +18,7 @@ class NextMessageCollector {
   }
 
   async send(channelId, content) {
-    const DiscordRequest = require("./DiscordRequest");
+    
 
     return DiscordRequest(`/channels/${channelId}/messages`, {
       method: "POST",
@@ -286,7 +288,22 @@ await sendDm(userId,{
     clearTimeout(data.timeout);
     this.waiting.delete(key);
 
-    data.resolve(message);
+try {
+  
+  const deletee = async () => {
+    await DiscordRequest(
+    `/channels/${message.channel_id}/messages/${message.id}`,
+    {
+      method: "DELETE"
+    }
+  );
+  }
+  
+  deletee();
+} catch (err) {}
+
+
+data.resolve(message);
   }
 
   wait({ channelId, userId, time = 60000 }) {

@@ -12,7 +12,7 @@ const ticketSchema = new Schema({
 
   cargosStaff: { type: [String], default: [] },
 
-  ticketChatName: { type: String, default: null }, // PREMIUM
+  ticketChatName: { type: String, default: null },
 
   contadorTicket: { type: Number, default: 0 },
 
@@ -53,6 +53,18 @@ const guildSchema = new Schema({
   ticket: {
     type: [ticketSchema],
     default: []
+  },
+  
+  uidSend: {
+    ativado: { type: Boolean, default: false },
+    webhook: { type: Boolean, default: false },
+    channel: { type: String,default: "0" }
+  },
+  
+  starboard: {
+    chat: { type: String,default: "0"},
+    emoji: { type: String,default: "⭐" },
+    salvar: { type: Boolean,default: true}
   }
 
 });

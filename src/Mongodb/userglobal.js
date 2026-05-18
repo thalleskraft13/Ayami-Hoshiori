@@ -83,6 +83,13 @@ premium_guilds: {
     xpTotal: { type: Number,default: 0},
     nivelAtual: { type: Number,default: 0},
     xpRestante: { type: Number,default: 1000},
+  },
+  
+  exploracao: {
+    mondstadt: { 
+      tempo: { type: Number,default: 0 },
+      coletar: { type: Number, default: 0 }
+     }
   }
 
 });
