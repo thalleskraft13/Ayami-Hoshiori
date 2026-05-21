@@ -197,13 +197,13 @@ class TicketSystem {
       "Configurar",
       async (i) => {
 
-        await this.deferUpdate(i);
+        
         const v = i.data.values[0];
-
+        if (v === "json") return this.setJson(i, guild, panelId, user);
+        await this.deferUpdate(i);
         if (v === "staff") return this.setStaff(i, guild, panelId, user);
         if (v === "canal") return this.setCanal(i, guild, panelId, user);
         if (v === "categoria") return this.setCategoria(i, guild, panelId, user);
-        if (v === "json") return this.setJson(i, guild, panelId, user);
         if (v === "send") return this.sendPanel(i, guild, panelId);
         if (v === "delete") return this.deletePanel(i, guild, panelId, user);
         if (v === "tipo") return this.setTipo(i, guild, panelId, user);

@@ -2,6 +2,7 @@
 
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const GetPerm        = require("../../function/Utils/GetPerm.js");
+const EmbedsComponentDB = require("../../Mongodb/message.js")
 
 
 const MAX_EMBEDS         = 10;
