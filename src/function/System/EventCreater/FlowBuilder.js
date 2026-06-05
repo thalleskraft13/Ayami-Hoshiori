@@ -3,6 +3,9 @@
 const DiscordRequest = require('../../DiscordRequest.js');
 const { FlowModel }  = require('../../../Mongodb/flow.js');
 const { randomUUID } = require('crypto');
+const getPerm = require("../../Utils/GetPerm.js");
+const holeHighter = require("../../Utils/RoleHigher.js");
+
 
 /* ─────────────────────────────────────────────
    CATÁLOGOS — label e metadados de cada tipo
@@ -72,6 +75,10 @@ const CONDITION_CATALOG = [
   { category: 'message', type: 'length_gt',     label: '📏 Tamanho maior que X',  params: ['length'] },
   { category: 'message', type: 'length_lt',     label: '📏 Tamanho menor que X',  params: ['length'] },
   { category: 'message', type: 'matches_regex', label: '🔤 Regex',                params: ['pattern'] },
+  //Reacao
+  { category: 'reaction', type: 'bot_reacted',      label: '🤖 Bot reagiu na mensagem',          params: [] },
+{ category: 'reaction', type: 'bot_reacted_with', label: '🤖 Bot reagiu com emoji específico', params: ['emoji'] },
+{ category: 'reaction', type: 'reaction_is',      label: '😀 Reação é emoji específico',       params: ['emoji'] },
   //tempo
   { category: 'time', type: 'hour_eq', label: '🕐 Hora igual a', params: ['hour'] },
 { category: 'time', type: 'minute_eq', label: '🕐 Minuto igual a', params: ['minute'] },
@@ -91,20 +98,23 @@ const CONDITION_CATALOG = [
   { category: 'time', type: 'between', label: '⏰ Entre horários',   params: ['from', 'to'] },
   // Permissão
   { category: 'permission', type: 'is_admin',        label: '🛡️ É administrador', params: [] },
-  { category: 'permission', type: 'has_permission',  label: '🛡️ Tem permissão',   params: ['permission'] }
+  { category: 'permission', type: 'has_permission',  label: '🛡️ Tem permissão',   params: ['permission'] },
+  
 ];
 
 const ACTION_CATALOG = [
   // Mensagem
-{ category: 'message', type: 'send_message', label: '💬 Enviar mensagem', params: ['content', 'channelId'] },
-  { category: 'message', type: 'send_dm',       label: '📩 Enviar DM',           params: ['content'] },
-  { category: 'message', type: 'reply_message', label: '↩️ Responder mensagem',   params: ['content'] },
+{ category: 'message', type: 'send_message',  label: '💬 Enviar mensagem',   params: ['content', 'channelId', 'embed'] },
+{ category: 'message', type: 'send_dm',        label: '📩 Enviar DM',         params: ['content', 'embed'] },
+{ category: 'message', type: 'reply_message',  label: '↩️ Responder mensagem', params: ['content', 'ephemeral', 'embed'] },
   { category: 'message', type: 'delete_message',label: '🗑️ Apagar mensagem',      params: [] },
   { category: 'message', type: 'edit_message',  label: '✏️ Editar mensagem',      params: ['content'] },
+  { category: 'message', type: 'delete_bot_message', label: '🗑️ Apagar mensagem do bot', params: ['messageId', 'channelId'] },
   // Usuário
   { category: 'user', type: 'give_role',        label: '🏷️ Dar cargo',            params: ['roleId'] },
   { category: 'user', type: 'remove_role',      label: '🏷️ Remover cargo',        params: ['roleId'] },
   { category: 'user', type: 'give_temp_role',   label: '⏱️ Cargo temporário',     params: ['roleId', 'duration'] },
+  { category: 'user', type: 'toggle_role', label: '🔄 Alternar cargo', params: ['roleId'] },
   { category: 'user', type: 'ban',              label: '🔨 Banir usuário',        params: ['reason'] },
   { category: 'user', type: 'kick',             label: '👢 Expulsar usuário',     params: [] },
   { category: 'user', type: 'timeout',          label: '⏸️ Timeout',             params: ['duration'] },
@@ -116,6 +126,11 @@ const ACTION_CATALOG = [
   { category: 'variable', type: 'sub',    label: '➖ Subtrair variável',        params: ['name', 'value'] },
   { category: 'variable', type: 'mul',    label: '✖️ Multiplicar variável',     params: ['name', 'value'] },
   { category: 'variable', type: 'random', label: '🎲 Valor aleatório',          params: ['name', 'min', 'max'] },
+  { category: 'variable', type: 'push',         label: '➕ Adicionar à lista',         params: ['name', 'value'] },
+{ category: 'variable', type: 'remove_item',  label: '➖ Remover da lista (por valor)',params: ['name', 'value'] },
+{ category: 'variable', type: 'remove_index', label: '🗑️ Remover da lista (por índice)',params: ['name', 'value'] },
+{ category: 'variable', type: 'random_from',  label: '🎲 Aleatório da lista',         params: ['name', 'saveAs'] },
+{ category: 'variable', type: 'show_ranking', label: '🏆 Mostrar Ranking', params: ['varName', 'title', 'ephemeral'] },
   // Tempo
   { category: 'time', type: 'wait_seconds', label: '⏱️ Aguardar segundos',      params: ['seconds'] },
   { category: 'time', type: 'wait_minutes', label: '⏱️ Aguardar minutos',       params: ['minutes'] },
@@ -241,7 +256,7 @@ for (let i = 0; i < TRIGGER_CATALOG.length; i += 25) {
       label: a.label.slice(0, 100),
       value: `${a.category}:${a.type}`
     })),
-    `➕ Adicionar ação (${Math.floor(i / 25) + 1})`,
+    `➕ Adicionar Trigger${Math.floor(i / 25) + 1})`,
     async (i) => {
       await this.ui.deferUpdate(i);
       const [cat, typ] = i.data.values[0].split(':');
@@ -384,7 +399,7 @@ for (let i = 0; i < CONDITION_CATALOG.length; i += 25) {
       label: a.label.slice(0, 100),
       value: `${a.category}:${a.type}`
     })),
-    `➕ Adicionar ação (${Math.floor(i / 25) + 1})`,
+    `➕ Adicionar Condição (${Math.floor(i / 25) + 1})`,
     async (i) => {
       const [cat, typ] = i.data.values[0].split(':');
       return this._addCondition(i, user, flowId, cat, typ);
@@ -591,47 +606,154 @@ for (let i = 0; i < ACTION_CATALOG.length; i += 25) {
     }
 
     // Com params — modal de preenchimento
-    const components = meta.params.slice(0, 5).map(p => ({
-      type: 1,
-      components: [{
-        type:        4,
-        custom_id:   p,
-        label:       this._paramLabel(p),
-        style:       p === 'content' || p === 'reason' ? 2 : 1,
-        required:    !['reason', 'description', 'channelId', 'userId'].includes(p),
-        max_length:  p === 'content' ? 2000 : 200,
-        placeholder: this._paramPlaceholder(p)
-      }]
-    }));
+    const OPTIONAL_PARAMS = ['reason', 'description', 'channelId', 'userId', 'ephemeral', 'saveAs', 'messageId', "embed"];
+
+const components = meta.params.slice(0, 5).map(p => ({
+  type: 1,
+  components: [{
+    type:        4,
+    custom_id:   p,
+    label:       this._paramLabel(p),
+    style:       p === 'content' || p === 'reason' || p === 'embed' ? 2 : 1,
+    required:    !OPTIONAL_PARAMS.includes(p),
+    max_length:  p === 'content' || p === "embed" ? 4000 : 200,
+    placeholder: this._paramPlaceholder(p)
+  }]
+}));
 
     const modal = this.client.interactions.createModal({
       user,
       title: `Ação: ${meta.label.slice(0, 40)}`,
       components,
       funcao: async (modalInteraction, client, fields) => {
-        const params = {};
-        for (const p of meta.params) {
-          if (fields[p] !== undefined) params[p] = fields[p];
-        }
+  const params = {};
+  for (const p of meta.params) {
+    if (fields[p] !== undefined) params[p] = fields[p];
+  }
 
-        const flow    = await this._getFlow(modalInteraction.guild_id, flowId);
-        const actions = flow.actions || [];
-        actions.push({ id: this._uid(), category, type, params, order: actions.length });
+  const guildId  = modalInteraction.guild_id;
+  const warnings = [];
 
-        await this.client.logicEngine.updateFlow(flowId, modalInteraction.guild_id, { actions });
+  // ── validação de IDs ──
+  const idWarnings = await this._validateIds(guildId, params);
+  warnings.push(...idWarnings);
+  if (warnings.length) params.channelId = modalInteraction.channel_id;
 
-        await DiscordRequest(
-          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-          { method: 'POST', body: { type: 6 } }
-        );
-
-        await this.ui.followUpEphemeral(modalInteraction, { content: `✅ Ação **${meta.label}** adicionada.` });
-        return this.actionsMenu(modalInteraction, user, flowId);
+  // ── permissões do bot no canal ──
+  if (params.channelId && ['send_message', 'reply_message', 'edit_message'].includes(type)) {
+    const rawId   = params.channelId.replace(/[<#>]/g, '').trim();
+    try {
+      const perms   = await getPerm({ channel: true, id: rawId, guildId, bot: true });
+      if (!perms.includes('SEND_MESSAGES') || !perms.includes('VIEW_CHANNEL')) {
+        warnings.push(`⚠️ O bot não tem permissão para enviar mensagens no canal <#${rawId}>.`);
       }
+    } catch {}
+  }
+
+  // ── cargo do bot vs cargo alvo ──
+  if (['give_role', 'remove_role', 'toggle_role', 'give_temp_role'].includes(type) && params.roleId) {
+    const rawId = params.roleId.replace(/[<@&>]/g, '').trim();
+    try {
+      const higher = await holeHighter({ guildId, roleId: rawId, bot: true });
+      if (!higher) warnings.push(`⚠️ O cargo do bot é igual ou menor que o cargo <@&${rawId}>. A ação pode falhar.`);
+    } catch {}
+  }
+
+  // ── permissões gerais do bot ──
+  const PERM_MAP = {
+    'user:ban':            'BAN_MEMBERS',
+    'user:kick':           'KICK_MEMBERS',
+    'user:timeout':        'MODERATE_MEMBERS',
+    'user:give_role':      'MANAGE_ROLES',
+    'user:remove_role':    'MANAGE_ROLES',
+    'user:toggle_role':    'MANAGE_ROLES',
+    'user:give_temp_role': 'MANAGE_ROLES',
+    'user:change_nickname':'MANAGE_NICKNAMES',
+    'channel:create_channel':  'MANAGE_CHANNELS',
+    'channel:delete_channel':  'MANAGE_CHANNELS',
+    'channel:rename_channel':  'MANAGE_CHANNELS',
+    'channel:lock_channel':    'MANAGE_CHANNELS',
+    'channel:unlock_channel':  'MANAGE_CHANNELS',
+    'message:delete_message':  'MANAGE_MESSAGES',
+    'message:delete_bot_message': 'MANAGE_MESSAGES',
+  };
+  const requiredPerm = PERM_MAP[`${category}:${type}`];
+  if (requiredPerm) {
+    try {
+      const perms = await getPerm({ guildId, bot: true });
+      if (!perms.includes(requiredPerm)) {
+        warnings.push(`⚠️ O bot não tem a permissão **${requiredPerm}** no servidor.`);
+      }
+    } catch {}
+  }
+
+  // ── salva a ação ──
+  const flow    = await this._getFlow(guildId, flowId);
+  const actions = flow.actions || [];
+  actions.push({ id: this._uid(), category, type, params, order: actions.length });
+  await this.client.logicEngine.updateFlow(flowId, guildId, { actions });
+
+  await DiscordRequest(
+    `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+    { method: 'POST', body: { type: 6 } }
+  );
+
+  // mostra avisos se houver
+  if (warnings.length) {
+    await this.ui.followUpEphemeral(modalInteraction, {
+      content: `✅ Ação **${meta.label}** adicionada.\n\n${warnings.join('\n')}`
+    });
+  } else {
+    await this.ui.followUpEphemeral(modalInteraction, { content: `✅ Ação **${meta.label}** adicionada.` });
+  }
+
+  return this.actionsMenu(modalInteraction, user, flowId);
+}
     });
 
     return this.client.interactions.showModal(interaction, modal);
   }
+  
+  async _validateIds(guildId, params) {
+  const warnings = [];
+
+  // valida channelId
+  if (params.channelId) {
+    const rawId = params.channelId.replace(/[<#>]/g, '').trim();
+    try {
+      const ch = await DiscordRequest(`/channels/${rawId}`);
+      if (!ch || ch.guild_id !== guildId) {
+        warnings.push(`⚠️ Canal \`${rawId}\` não pertence a este servidor.`);
+      }
+    } catch {
+      warnings.push(`⚠️ Canal \`${rawId}\` não encontrado.`);
+    }
+  }
+
+  // valida roleId
+  if (params.roleId) {
+    const rawId = params.roleId.replace(/[<@&>]/g, '').trim();
+    try {
+      const roles = await DiscordRequest(`/guilds/${guildId}/roles`);
+      const exists = roles?.some(r => r.id === rawId);
+      if (!exists) warnings.push(`⚠️ Cargo \`${rawId}\` não encontrado neste servidor.`);
+    } catch {
+      warnings.push(`⚠️ Não foi possível verificar o cargo \`${rawId}\`.`);
+    }
+  }
+
+  // valida flowId (para run_flow)
+  if (params.flowId) {
+    try {
+      const flow = await this._getFlow(guildId, params.flowId);
+      if (!flow) warnings.push(`⚠️ Fluxo \`${params.flowId}\` não encontrado.`);
+    } catch {
+      warnings.push(`⚠️ Não foi possível verificar o fluxo \`${params.flowId}\`.`);
+    }
+  }
+
+  return warnings;
+}
 
   /* ═══════════════════════════════════════════
      MENU: VARIÁVEIS
@@ -924,7 +1046,13 @@ for (let i = 0; i < ACTION_CATALOG.length; i += 25) {
       categoryId: 'ID da categoria',
       hour:   'Hora (0-23)',
       minute: 'Minuto (0-59)',
-      roleId: 'ID do cargo (vazio = @everyone)'
+      roleId: 'ID do cargo (vazio = @everyone)',
+      saveAs: 'Salvar resultado em variável',
+      args:  'Argumentos do comando',
+      ephemeral: 'Ephemeral? (true/false)',
+      varName:   'Nome da variável',
+      title:     'Título do ranking',
+      embed: 'Embed (JSON opcional)'
     };
     return labels[p] || p;
   }
@@ -954,7 +1082,13 @@ for (let i = 0; i < ACTION_CATALOG.length; i += 25) {
       to:         '22:00',
       eventType:  'meu_evento',
       hour:   '18',
-      minute: '30'
+      minute: '30',
+      saveAs: 'resultado',
+      args: '{arg0} {arg1}...',
+      ephemeral: 'false',
+      varName:   'money',
+      title:     '🏆 Ranking de Moedas',
+      embed: '{"title":"Título","description":"Texto","color":5765120}'
     };
     return ph[p] || '';
   }

@@ -50,7 +50,7 @@ class ActionRunner {
 
   async _runOne(action, ctx) {
     try {
-      const params = ctx.interpolateParams(action.params || {});
+      const params = await ctx.interpolateParams(action.params || {});
       await this._dispatch(action.category, action.type, params, ctx);
     } catch (err) {
       console.error(`[ActionRunner] Erro na ação ${action.category}/${action.type}:`, err);
@@ -131,19 +131,43 @@ if (channelId) {
       }
 
       case 'reply_message': {
-        const refId = p.messageId || ctx.discord.message?.id;
-        if (!refId) { return this._message('send_message', p, ctx); }
-        const body = {
-          ...this._buildMessageBody(p),
-          message_reference: { message_id: refId }
-        };
-        const msg = await DiscordRequest(`/channels/${channelId}/messages`, {
-          method: 'POST',
-          body
-        });
-        if (msg?.id) ctx.lastMessageId = msg.id;
-        break;
-      }
+  const ephemeral = p.ephemeral === true || p.ephemeral === 'true';
+  const flags     = ephemeral ? 64 : undefined;
+
+  // se tem interaction no contexto, responde via interaction
+  if (ctx.discord.interaction) {
+    const interaction = ctx.discord.interaction;
+    const state       = this.client.interactions._getState?.(interaction.id);
+    const body        = this._buildMessageBody(p);
+    if (flags) body.flags = flags;
+
+    if (state && !state.replied && !state.deferred) {
+      await DiscordRequest(
+        `/interactions/${interaction.id}/${interaction.token}/callback`,
+        { method: 'POST', body: { type: 4, data: body } }
+      );
+    } else {
+      await DiscordRequest(
+        `/webhooks/${this.client.clientId}/${interaction.token}`,
+        { method: 'POST', body }
+      );
+    }
+    break;
+  }
+
+  // fallback — responde por mensagem normal com referência
+  const refId = p.messageId || ctx.discord.message?.id;
+  const body  = { ...this._buildMessageBody(p) };
+  if (refId) body.message_reference = { message_id: refId };
+  if (flags) body.flags = flags;
+
+  const msg = await DiscordRequest(`/channels/${channelId}/messages`, {
+    method: 'POST',
+    body
+  });
+  if (msg?.id) ctx.lastMessageId = msg.id;
+  break;
+}
 
       case 'send_dm': {
         const targetUserId = p.userId || ctx.discord.userId;
@@ -159,6 +183,21 @@ if (channelId) {
         });
         break;
       }
+      
+      case 'delete_bot_message': {
+  const cid = p.channelId || ctx.lastChannelId || ctx.discord.channelId;
+  const mid = p.messageId || ctx.lastMessageId;
+  if (!cid || !mid) break;
+
+  // verifica se a mensagem é do bot antes de apagar
+  try {
+    const msg = await DiscordRequest(`/channels/${cid}/messages/${mid}`);
+    const botId = process.env.CLIENT_ID;
+    if (msg?.author?.id !== botId) break; // segurança: só apaga mensagem do bot
+    await DiscordRequest(`/channels/${cid}/messages/${mid}`, { method: 'DELETE' });
+  } catch { break; }
+  break;
+}
     }
   }
 
@@ -167,11 +206,20 @@ if (channelId) {
    * Suporta: content, embed, content + embed
    */
   _buildMessageBody(p) {
-    const body = {};
-    if (p.content) body.content = p.content;
-    if (p.embed)   body.embeds  = [this._buildEmbed(p.embed)];
-    return body;
+  const body = {};
+  if (p.content) body.content = p.content;
+
+  if (p.embed) {
+    try {
+      const raw = typeof p.embed === 'string' ? JSON.parse(p.embed) : p.embed;
+      body.embeds = [this._buildEmbed(raw)];
+    } catch {
+      console.warn('[ActionRunner] Embed JSON inválido — ignorado.');
+    }
   }
+
+  return body;
+}
 
   _buildEmbed(e) {
     const embed = {};
@@ -238,7 +286,31 @@ if (channelId) {
           });
         }
         break;
+        
+        
       }
+      
+      case 'toggle_role': {
+  const roleId  = p.roleId;
+  if (!roleId) break;
+
+  // busca o membro para ver os cargos atuais
+  const member = await DiscordRequest(`/guilds/${guildId}/members/${userId}`);
+  if (!member) break;
+
+  const hasRole = member.roles?.includes(roleId);
+
+  if (hasRole) {
+    await DiscordRequest(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, {
+      method: 'DELETE'
+    });
+  } else {
+    await DiscordRequest(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, {
+      method: 'PUT'
+    });
+  }
+  break;
+}
 
       case 'ban':
         await DiscordRequest(`/guilds/${guildId}/bans/${userId}`, {
@@ -301,7 +373,7 @@ if (channelId) {
      VARIABLE ACTIONS
      ═══════════════════════════════════════════ */
 
-  _variable(type, p, ctx) {
+ async _variable(type, p, ctx) {
     switch (type) {
       case 'set':    ctx.setVar(p.name, p.value); break;
       case 'add':    ctx.addVar(p.name, p.value); break;
@@ -310,6 +382,14 @@ if (channelId) {
       case 'div':    ctx.divVar(p.name, p.value); break;
       case 'random': ctx.randomVar(p.name, Number(p.min) || 0, Number(p.max) || 100); break;
       case 'create': ctx.setVar(p.name, p.defaultValue ?? null); break;
+      case 'push':         ctx.pushVar(p.name, p.value); break;
+      case 'remove_item':  ctx.removeVarItem(p.name, p.value); break;
+      case 'remove_index': ctx.removeVarIndex(p.name, p.value); break;
+      case 'random_from':  ctx.setVar(p.saveAs || p.name + '_random', ctx.randomFromVar(p.name)); break;
+      case 'show_ranking': {
+      await this._showRanking(p, ctx);
+       break;
+      }
     }
   }
 
@@ -585,6 +665,118 @@ case 'unlock_channel': {
   _sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+  
+  async _showRanking(p, ctx) {
+  const { UserVarModel } = require('../../../Mongodb/flow.js');
+  const guildId   = ctx.discord.guildId;
+  const channelId = ctx.discord.channelId;
+  const varName   = p.varName  || 'money';
+  const title     = p.title    || '🏆 Ranking';
+  const ephemeral = p.ephemeral === 'true' || p.ephemeral === true;
+  const flags     = ephemeral ? 64 : undefined;
+
+  // busca todos os usuários com essa variável ordenado pelo valor desc
+  const docs = await UserVarModel.find({ guildId, name: varName })
+    .lean()
+    .sort({ value: -1 })
+    .limit(100);
+
+  if (!docs.length) {
+    const msg = '❌ Nenhum dado encontrado para este ranking.';
+    const interaction = ctx.discord.interaction;
+    if (interaction) {
+      await DiscordRequest(`/webhooks/${this.client.clientId}/${interaction.token}`, {
+        method: 'POST', body: { content: msg, flags: 64 }
+      });
+    } else if (channelId) {
+      await DiscordRequest(`/channels/${channelId}/messages`, {
+        method: 'POST', body: { content: msg }
+      });
+    }
+    return;
+  }
+
+  const PER_PAGE   = 10;
+  const totalPages = Math.ceil(docs.length / PER_PAGE);
+  const medals     = ['🥇', '🥈', '🥉'];
+
+  function buildEmbed(page) {
+    const start   = page * PER_PAGE;
+    const entries = docs.slice(start, start + PER_PAGE);
+    const desc    = entries.map((doc, idx) => {
+      const pos   = start + idx + 1;
+      const medal = medals[pos - 1] || `**${pos}.**`;
+      return `${medal} <@${doc.userId}> — \`${doc.value}\``;
+    }).join('\n');
+    return {
+      title,
+      description: desc,
+      color:  0x5865F2,
+      footer: { text: `Página ${page + 1} de ${totalPages} • ${docs.length} usuários` }
+    };
+  }
+
+  function buildComponents(page) {
+    const buttons = [];
+    if (page > 0)
+      buttons.push({ type: 2, style: 2, label: '◀ Anterior', custom_id: `rank_prev_${page}` });
+    if (page < totalPages - 1)
+      buttons.push({ type: 2, style: 2, label: 'Próxima ▶',  custom_id: `rank_next_${page}` });
+    return buttons.length ? [{ type: 1, components: buttons }] : [];
+  }
+
+  const interaction = ctx.discord.interaction;
+
+  // envia a primeira página
+  let messageId;
+
+  if (interaction) {
+    // responde via webhook follow-up (interaction já pode ter sido respondida)
+    const msg = await DiscordRequest(`/webhooks/${this.client.clientId}/${interaction.token}`, {
+      method: 'POST',
+      body: { embeds: [buildEmbed(0)], components: buildComponents(0), flags }
+    });
+    messageId = msg?.id;
+  } else if (channelId) {
+    const msg = await DiscordRequest(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: { embeds: [buildEmbed(0)], components: buildComponents(0) }
+    });
+    messageId = msg?.id;
+  }
+
+  if (!messageId || totalPages <= 1) return;
+
+  // registra handlers dos botões de paginação
+  for (let page = 0; page < totalPages; page++) {
+    // botão anterior
+    if (page > 0) {
+      this.client.interactions._cache.set(`rank_prev_${page}`, {
+        expires: Date.now() + 10 * 60_000,
+        funcao: async (i) => {
+          const newPage = page - 1;
+          await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+            method: 'POST',
+            body: { type: 7, data: { embeds: [buildEmbed(newPage)], components: buildComponents(newPage) } }
+          });
+        }
+      });
+    }
+    // botão próxima
+    if (page < totalPages - 1) {
+      this.client.interactions._cache.set(`rank_next_${page}`, {
+        expires: Date.now() + 10 * 60_000,
+        funcao: async (i) => {
+          const newPage = page + 1;
+          await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+            method: 'POST',
+            body: { type: 7, data: { embeds: [buildEmbed(newPage)], components: buildComponents(newPage) } }
+          });
+        }
+      });
+    }
+  }
+}
 }
 
 module.exports = ActionRunner;

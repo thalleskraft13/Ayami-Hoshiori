@@ -81,6 +81,7 @@ class ConditionEvaluator {
       case 'permission':  return this._permission(cond.type, p, ctx);
       case 'inventory':   return this._inventory(cond.type, p, ctx);
       case 'command':     return this._command(cond.type, p, ctx);
+      case 'reaction': return this._reaction(cond.type, p, ctx);
       default:
         console.warn(`[ConditionEvaluator] Categoria desconhecida: ${cond.category}`);
         return true;
@@ -271,6 +272,63 @@ class ConditionEvaluator {
       default: return true;
     }
   }
+  
+    /* ═══════════════════════════════════════════
+     REACTION CONDITIONS
+     ═══════════════════════════════════════════ */
+
+  
+  async _reaction(type, p, ctx) {
+  const channelId = ctx.discord.channelId;
+  const messageId = ctx.discord.message?.id;
+  const botId     = process.env.CLIENT_ID;
+
+  switch (type) {
+
+    case 'reaction_is': {
+      const eventEmoji  = ctx.discord.customData?.emoji;
+      const targetEmoji = p.emoji?.trim();
+      if (!eventEmoji || !targetEmoji) return false;
+      const eventName = eventEmoji.id
+        ? `${eventEmoji.name}:${eventEmoji.id}`
+        : eventEmoji.name;
+      return eventName === targetEmoji || eventEmoji.name === targetEmoji;
+    }
+
+    case 'bot_reacted': {
+      if (!channelId || !messageId) return false;
+      try {
+        const message   = await DiscordRequest(`/channels/${channelId}/messages/${messageId}`);
+        const reactions = message?.reactions || [];
+        for (const reaction of reactions) {
+          const emoji = reaction.emoji.id
+            ? `${reaction.emoji.name}:${reaction.emoji.id}`
+            : encodeURIComponent(reaction.emoji.name);
+          const users = await DiscordRequest(
+            `/channels/${channelId}/messages/${messageId}/reactions/${emoji}`
+          );
+          if (users?.some(u => u.id === botId)) return true;
+        }
+        return false;
+      } catch { return false; }
+    }
+
+    case 'bot_reacted_with': {
+      if (!channelId || !messageId) return false;
+      try {
+        const targetEmoji = p.emoji?.trim();
+        if (!targetEmoji) return false;
+        const encoded = encodeURIComponent(targetEmoji);
+        const users   = await DiscordRequest(
+          `/channels/${channelId}/messages/${messageId}/reactions/${encoded}`
+        );
+        return users?.some(u => u.id === botId) ?? false;
+      } catch { return false; }
+    }
+
+    default: return false;
+  }
+}
 
   /* ═══════════════════════════════════════════
      TIME CONDITIONS (horário do dia)

@@ -28,9 +28,10 @@ class TriggerRegistry extends EventEmitter {
   /**
    * @param {{ t: string, d: object }} payload — payload bruto do gateway
    */
-  handle(payload) {
+ async handle(payload) {
     const { t: event, d: data } = payload;
     if (!event || !data) return;
+    //console.log(event)
 
     switch (event) {
       // ── Mensagens ──
@@ -58,7 +59,7 @@ class TriggerRegistry extends EventEmitter {
       case 'VOICE_STATE_UPDATE': return this._onVoiceStateUpdate(data);
 
       // ── Componentes (botão, select, modal) ──
-      case 'INTERACTION_CREATE': return this._onInteraction(data);
+      case 'INTERACTION_CREATE': return await this._onInteraction(data);
     }
   }
 
@@ -259,52 +260,77 @@ class TriggerRegistry extends EventEmitter {
      COMPONENTES / INTERAÇÕES
      ═══════════════════════════════════════════ */
 
-  _onInteraction(data) {
-    if (!data.guild_id) return;
+  async _onInteraction(data) {
+  if (!data.guild_id) return;
 
-    const base = {
-      guildId:     data.guild_id,
-      channelId:   data.channel_id,
-      userId:      data.member?.user?.id,
-      member:      data.member,
-      interaction: data
-    };
+  const base = {
+    guildId:     data.guild_id,
+    channelId:   data.channel_id,
+    userId:      data.member?.user?.id,
+    member:      data.member,
+    interaction: data
+  };
+  
+  
 
-    // Tipo 3 = MESSAGE_COMPONENT
-    if (data.type === 3) {
-      const componentType = data.data?.component_type;
+  // Tipo 3 = MESSAGE_COMPONENT
+  if (data.type === 3) {
+    const componentType = data.data?.component_type;
+    const cid           = data.data?.custom_id || '';
 
-      if (componentType === 2) {
-        // Botão
-        this._emit('component', 'button_clicked', {
-          ...base,
-          customData: { customId: data.data.custom_id }
-        });
-      }
+    // ignora botões do cache interno e sistemas de ticket
+    const isInternal = cid.startsWith('temp_')
+      || cid === 'close_ticket'
+      || cid === 'ticket_atender'
+      || cid === 'ticket_atendido';
 
-      if (componentType === 3) {
-        // Select menu
-        this._emit('component', 'select_used', {
-          ...base,
-          customData: { customId: data.data.custom_id, values: data.data.values }
-        });
-      }
-    }
+    // ignora custom_ids JSON de sistemas internos
+    const parsed        = this._tryParseJson(cid);
+    const isSystemJson  = parsed?.t && ['create_ticket', 'hub_select', 'flow_trigger', 'cv2_select'].includes(parsed.t);
 
-    // Tipo 5 = MODAL_SUBMIT
-    if (data.type === 5) {
-      const fields = {};
-      for (const row of data.data?.components || []) {
-        for (const comp of row.components || []) {
-          fields[comp.custom_id] = comp.value;
-        }
-      }
-      this._emit('component', 'modal_submitted', {
+    if (componentType === 2 && !isInternal && !isSystemJson) {
+      //console.log(cid)
+      // botão normal — dispara trigger
+      this._emit('component', 'button_clicked', {
         ...base,
-        customData: { customId: data.data.custom_id, fields }
+        customData: { customId: cid }
+      });
+    }
+    
+   // console.log("Trigger:", componentType, isInternal, isSystemJson, parsed)
+
+    if (componentType === 3 && !isInternal && !isSystemJson) {
+      
+     // async handleComponent(interaction) {
+  const customId = interaction.data?.custom_id;
+  console.log('[handleComponent] customId:', customId);
+  console.log('[handleComponent] parsed:', this._tryParseJson(customId));
+      // select menu normal — dispara trigger
+      this._emit('component', 'select_used', {
+        ...base,
+        customData: { customId: cid, values: data.data.values }
       });
     }
   }
+
+  // Tipo 5 = MODAL_SUBMIT
+  if (data.type === 5) {
+    const fields = {};
+    for (const row of data.data?.components || []) {
+      for (const comp of row.components || []) {
+        fields[comp.custom_id] = comp.value;
+      }
+    }
+    this._emit('component', 'modal_submitted', {
+      ...base,
+      customData: { customId: data.data.custom_id, fields }
+    });
+  }
+}
+
+_tryParseJson(str) {
+  try { return JSON.parse(str); } catch { return null; }
+}
 
   /* ═══════════════════════════════════════════
      EVENTO INTERNO (emitido por ação run_flow/emit_event)

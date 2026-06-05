@@ -296,7 +296,7 @@ class DiscordGatewayClient {
         try {
             this.NextMessageCollector.handle(payload);
             this.guilds.handleDispatch(payload);
-            this.logicEngine.handleGateway(payload);
+            await this.logicEngine.handleGateway(payload);
 
             if (payload.t === 'READY')             return await this._onReady();
             if (payload.t === 'INTERACTION_CREATE') return await this._onInteraction(payload.d);

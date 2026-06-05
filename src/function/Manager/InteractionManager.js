@@ -141,6 +141,7 @@ class InteractionManager {
      * @param {object} interaction
      */
     async handleComponent(interaction) {
+      //console.log(interaction)
         const customId = interaction.data?.custom_id;
         if (!customId) return;
 
@@ -158,6 +159,55 @@ class InteractionManager {
                 return await this.client.ticketSystem.close(interaction)
                     .catch((err) => this._replyError(interaction, err, 'Ticket Close'));
             }
+            
+            if (parsed?.t === 'hub_select') {
+  const selectedValue = interaction.data?.values?.[0];
+  if (!selectedValue) return;
+
+  let valueParsed;
+  try { valueParsed = JSON.parse(selectedValue); }
+  catch { return; }
+
+  if (valueParsed?.t === 'create_ticket') {
+    interaction.data.custom_id = selectedValue;
+    return await this.client.ticketSystem.create(interaction)
+      .catch((err) => this._replyError(interaction, err, 'Hub Select Ticket Create'));
+  }
+  return;
+}
+
+// Botão de fluxo do CV2
+if (parsed?.t === 'flow_trigger' && parsed?.f) {
+  // verifica se realmente tem um flowId válido
+  if (typeof parsed.f !== 'string' || !parsed.f.length) return;
+  
+  return await this.client.logicEngine.runById(parsed.f, {
+    guildId:     interaction.guild_id,
+    channelId:   interaction.channel_id,
+    userId:      interaction.member?.user?.id,
+    interaction
+  }).catch((err) => this._replyError(interaction, err, 'CV2 Flow Button'));
+}
+
+// Select Menu do CV2
+if (parsed?.t === 'cv2_select') {
+  const selectedValue = interaction.data?.values?.[0];
+  if (!selectedValue) return;
+  let valueParsed;
+  try { valueParsed = JSON.parse(selectedValue); } catch { return; }
+ // console.log(valueParsed)
+  
+  //console.log(selectedValue, valueParsed)
+  if (valueParsed?.t === 'flow_trigger') {
+    return await this.client.logicEngine.runById(valueParsed.f, {
+      guildId:     interaction.guild_id,
+      channelId:   interaction.channel_id,
+      userId:      interaction.member?.user?.id,
+      interaction
+    }).catch((err) => this._replyError(interaction, err, 'CV2 Select Flow'));
+  }
+  return;
+}
 
 
             const entry = this._cache.get(customId);

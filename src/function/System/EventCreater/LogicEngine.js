@@ -7,7 +7,10 @@ const TriggerRegistry    = require('./TriggerRegistry.js');
 const ConditionEvaluator = require('./ConditionEvaluator.js');
 const ActionRunner       = require('./ActionRunner.js');
 const ExecutionContext   = require('./ExecutionContext.js');
+const DiscordRequest = require("../../DiscordRequest.js")
 
+
+const AUDIT_LOG_CHANNEL = '1511462019545563237';
 const MAX_CONCURRENT_FLOWS = 50; // por guild, evita flood
 
 /**
@@ -381,6 +384,15 @@ async _getCustomCommands(guildId) {
       cooldown:      data.cooldown || 0,
       createdBy:     data.createdBy || null
     });
+    
+    this._auditLog('flow_create', data.guildId, {
+  name:       flow.name,
+  flowId:     flow.flowId,
+  trigger:    flow.trigger,
+  conditions: flow.conditions,
+  actions:    flow.actions,
+  variables:  flow.variables
+}).catch(() => {});
 
     this.invalidateGuildCache(data.guildId);
     return flow;
@@ -392,14 +404,35 @@ async _getCustomCommands(guildId) {
       { ...updates, updatedAt: new Date() },
       { new: true }
     );
+    
+    if (flow) {
+  this._auditLog('flow_update', guildId, {
+    name:       flow.name,
+    flowId:     flow.flowId,
+    trigger:    flow.trigger,
+    conditions: flow.conditions,
+    actions:    flow.actions,
+    variables:  flow.variables
+  }).catch(() => {});
+}
     if (flow) this.invalidateGuildCache(guildId);
     return flow;
   }
-
+  
   async deleteFlow(flowId, guildId) {
-    await FlowModel.deleteOne({ flowId, guildId });
-    this.invalidateGuildCache(guildId);
+  const flow = await FlowModel.findOne({ flowId, guildId }).lean();
+  await FlowModel.deleteOne({ flowId, guildId });
+  this.invalidateGuildCache(guildId);
+
+  if (flow) {
+    this._auditLog('flow_delete', guildId, {
+      name:   flow.name,
+      flowId: flow.flowId
+    }).catch(() => {});
   }
+}
+
+  
 
   async getFlows(guildId) {
     return FlowModel.find({ guildId }).lean();
@@ -410,6 +443,12 @@ async _getCustomCommands(guildId) {
   if (!flow) return null;
   flow.enabled = !flow.enabled;
   await flow.save();
+  
+  this._auditLog('flow_toggle', guildId, {
+  name:    flow.name,
+  flowId:  flow.flowId,
+  enabled: flow.enabled
+}).catch(() => {});
 
   // ── Horário agendado ──
   if (flow.trigger?.type === 'scheduled_trigger') {
@@ -438,6 +477,99 @@ async _getCustomCommands(guildId) {
   return flow;
 }
 
+
+async _auditLog(action, guildId, data) {
+  try {
+    // busca nome do servidor
+    const guild = await DiscordRequest(`/guilds/${guildId}`).catch(() => null);
+    const guildName = guild?.name || guildId;
+
+    const actionLabel = {
+      flow_create:    '✅ Fluxo Criado',
+      flow_update:    '✏️ Fluxo Editado',
+      flow_delete:    '🗑️ Fluxo Excluído',
+      flow_toggle:    '🔄 Fluxo Alternado',
+      cmd_create:     '✅ Comando Criado',
+      cmd_delete:     '🗑️ Comando Excluído'
+    }[action] || action;
+
+    const fields = [
+      { name: '🏠 Servidor', value: `${guildName} \`(${guildId})\``, inline: false }
+    ];
+
+    if (data.name)    fields.push({ name: '📌 Nome',    value: data.name,    inline: true });
+    if (data.enabled !== undefined) fields.push({ name: '⚡ Status', value: data.enabled ? '🟢 Ativo' : '🔴 Desativado', inline: true });
+
+    // Trigger
+    if (data.trigger) {
+      const t = data.trigger;
+      fields.push({
+        name:  '🎯 Trigger',
+        value: `Categoria: \`${t.category}\`\nTipo: \`${t.type}\`` +
+               (Object.keys(t.filters || {}).length ? `\nFiltros: \`${JSON.stringify(t.filters)}\`` : ''),
+        inline: false
+      });
+    }
+
+    // Condições
+    if (data.conditions?.length) {
+      const lines = data.conditions.map((c, i) =>
+        `${i + 1}. \`${c.category}:${c.type}\`` +
+        (Object.keys(c.params || {}).length ? ` — ${JSON.stringify(c.params)}` : '') +
+        (c.negate ? ' *(negado)*' : '')
+      ).join('\n');
+      fields.push({ name: `🔍 Condições (${data.conditions.length})`, value: lines.slice(0, 1024), inline: false });
+    }
+
+    // Ações
+    if (data.actions?.length) {
+      const lines = data.actions
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((a, i) =>
+          `${i + 1}. \`${a.category}:${a.type}\`` +
+          (Object.keys(a.params || {}).length ? ` — ${JSON.stringify(a.params)}` : '')
+        ).join('\n');
+      fields.push({ name: `⚡ Ações (${data.actions.length})`, value: lines.slice(0, 1024), inline: false });
+    }
+
+    // Variáveis
+    if (data.variables?.length) {
+      const lines = data.variables.map(v =>
+        `• \`${v.name}\` (${v.type}/${v.scope || 'flow'}) = \`${JSON.stringify(v.defaultValue)}\`${v.persistent ? ' 💾' : ''}`
+      ).join('\n');
+      fields.push({ name: `📦 Variáveis (${data.variables.length})`, value: lines.slice(0, 1024), inline: false });
+    }
+
+    // Comando
+    if (data.prefix && data.commandName) {
+      fields.push({
+        name:  '🔧 Comando',
+        value: `Prefixo: \`${data.prefix}\`\nNome: \`${data.commandName}\`` +
+               (data.aliases?.length ? `\nAliases: \`${data.aliases.join(', ')}\`` : '') +
+               (data.cooldown ? `\nCooldown: \`${data.cooldown / 1000}s\`` : ''),
+        inline: false
+      });
+    }
+
+    if (data.flowId) fields.push({ name: '🔑 Flow ID', value: `\`${data.flowId}\``, inline: false });
+
+    await DiscordRequest(`/channels/${AUDIT_LOG_CHANNEL}/messages`, {
+      method: 'POST',
+      body: {
+        embeds: [{
+          title:     actionLabel,
+          color:     action.includes('delete') ? 0xED4245 : action.includes('update') || action.includes('toggle') ? 0xFEE75C : 0x57F287,
+          fields,
+          timestamp: new Date().toISOString(),
+          footer:    { text: `Logic Builder Audit Log` }
+        }]
+      }
+    });
+  } catch (err) {
+    console.error('[AuditLog] Erro ao enviar log:', err);
+  }
+}
+
   /* ═══════════════════════════════════════════
      GERENCIAMENTO DE COMANDOS PERSONALIZADOS
      ═══════════════════════════════════════════ */
@@ -456,6 +588,14 @@ async _getCustomCommands(guildId) {
       permissions:   data.permissions || [],
       requiredRoles: data.requiredRoles || []
     });
+    
+    this._auditLog('cmd_create', data.guildId, {
+  commandName: cmd.name,
+  prefix:      cmd.prefix,
+  aliases:     cmd.aliases,
+  cooldown:    cmd.cooldown,
+  flowId:      cmd.flowId
+}).catch(() => {});
 
     this._flowCache.delete(`cmd:${data.guildId}`);
     return cmd;
@@ -464,6 +604,11 @@ async _getCustomCommands(guildId) {
   async deleteCommand(commandId, guildId) {
     const cmd = await CustomCommandModel.findOne({ commandId, guildId });
     if (!cmd) return false;
+    this._auditLog('cmd_delete', guildId, {
+  commandName: cmd.name,
+  prefix:      cmd.prefix,
+  flowId:      cmd.flowId
+}).catch(() => {});
     await cmd.deleteOne();
     this._flowCache.delete(`cmd:${guildId}`);
     return true;

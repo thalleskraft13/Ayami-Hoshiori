@@ -208,14 +208,14 @@ function _sendLog({ title, color, method, safeRoute, origin, elapsed, extra = []
         timestamp: new Date().toISOString(),
     };
 
-    fetch(`${BASE_URL}/channels/${LOG_CHANNEL}/messages`, {
-        method:  'POST',
-        headers: {
-            Authorization:  `Bot ${process.env.DISCORD_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ embeds: [embed] }),
-    }).catch(() => {});
+   // fetch(`${BASE_URL}/channels/${LOG_CHANNEL}/messages`, {
+      //  method:  'POST',
+    //  headers: {
+      //      Authorization:  `Bot ${process.env.DISCORD_TOKEN}`,
+  //        'Content-Type': 'application/json',
+       // },
+     //   body: JSON.stringify({ embeds: [embed] }),
+ //   }).catch(() => {}); ,
 }
 
 

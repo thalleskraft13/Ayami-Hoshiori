@@ -1,3 +1,6 @@
+
+'use strict';
+
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
@@ -5,21 +8,161 @@ const PremiumManager = require("../../function/Utils/PremiumManager.js");
 module.exports = {
   data: {
     name: "premium",
-    description: "Painel de premium"
+    description: "Sistema Premium Lua Carmesim",
+    options: [
+      {
+        type: 1,
+        name: "visualizar",
+        description: "Visualizar seu premium"
+      },
+      {
+        type: 1,
+        name: "comprar",
+        description: "Comprar premium"
+      },
+      {
+        type: 1,
+        name: "resgatar",
+        description: "Resgatar uma key",
+        options: [
+          {
+            type: 3,
+            name: "codigo",
+            description: "Código da key",
+            required: true
+          }
+        ]
+      }
+    ]
   },
 
   async execute(interaction, client) {
+
+    const sub = interaction.data.options?.[0]?.name;
     const userId = interaction.member.user.id;
-    return renderMain(interaction, client, userId);
+
+    switch (sub) {
+
+      case "visualizar":
+        return renderPanel(interaction, client, userId);
+
+      case "comprar":
+        return renderBuy(interaction);
+
+      case "resgatar": {
+
+        const codigo =
+          interaction.data.options?.[0]?.options?.find(
+            o => o.name === "codigo"
+          )?.value;
+
+        const result = await PremiumManager.redeemKey(
+          userId,
+          interaction.guild_id,
+          codigo
+        );
+
+        const embed = new MessageEmbed()
+          .setTitle("🌙 Resgate de Premium")
+          .setDescription(
+            result.status
+              ? `✅ Key resgatada com sucesso.\n\nCódigo: \`${codigo}\``
+              : `❌ ${result.motivo}`
+          )
+          .randomColor()
+          .build();
+
+        return DiscordRequest(
+          `/interactions/${interaction.id}/${interaction.token}/callback`,
+          {
+            method: "POST",
+            body: {
+              type: 4,
+              data: {
+                flags: 64,
+                embeds: [embed]
+              }
+            }
+          }
+        );
+      }
+    }
   }
 };
 
-async function renderMain(interaction, client, userId, edit = false) {
+async function renderBuy(interaction) {
+
+  const embed = new MessageEmbed()
+    .setTitle("🌙 Lua Carmesim")
+    .setDescription(`
+**A Assinatura Oficial da Arlecchino**
+
+🗓 Mensal — R$ 8,99
+📆 Trimestral — R$ 24,99
+📅 Semestral — R$ 44,99
+
+━━━━━━━━━━━━━━━━━━
+
+🔥 Daily Aprimorado
+⚔️ XP aumentado
+🏅 Emblema exclusivo
+🎲 Mais sorteios
+🌟 Personagem T5 grátis
+🩸 Descontos exclusivos
+
+━━━━━━━━━━━━━━━━━━
+
+*A Lua Carmesim não é sobre preço.
+É sobre posição.*
+`)
+    .randomColor()
+    .build();
+
+  return DiscordRequest(
+    `/interactions/${interaction.id}/${interaction.token}/callback`,
+    {
+      method: "POST",
+      body: {
+        type: 4,
+        data: {
+          flags: 64,
+          embeds: [embed],
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  style: 5,
+                  label: "Comprar Agora",
+                  url: "https://discord.gg/wfaRZw5pGn"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  );
+}
+
+async function renderPanel(
+  interaction,
+  client,
+  userId,
+  edit = false
+) {
 
   const guildId = interaction.guild_id;
-  const userPremium = await PremiumManager.getUserPremium(userId);
-  const guildPremium = await PremiumManager.getGuildPremium(guildId);
-  const guilds = await PremiumManager.listUserGuilds(userId);
+
+  const userPremium =
+    await PremiumManager.getUserPremium(userId);
+
+  const guildPremium =
+    await PremiumManager.getGuildPremium(guildId);
+
+  const guilds =
+    await PremiumManager.listUserGuilds(userId);
 
   const user = interaction.member.user;
 
@@ -28,105 +171,100 @@ async function renderMain(interaction, client, userId, edit = false) {
     : `https://cdn.discordapp.com/embed/avatars/0.png`;
 
   const formatTempo = (ms) => {
-    const s = Math.floor(ms / 1000) % 60;
-    const m = Math.floor(ms / (1000 * 60)) % 60;
-    const h = Math.floor(ms / (1000 * 60 * 60)) % 24;
-    const d = Math.floor(ms / (1000 * 60 * 60 * 24));
+
+    const s =
+      Math.floor(ms / 1000) % 60;
+
+    const m =
+      Math.floor(ms / (1000 * 60)) % 60;
+
+    const h =
+      Math.floor(ms / (1000 * 60 * 60)) % 24;
+
+    const d =
+      Math.floor(ms / (1000 * 60 * 60 * 24));
+
     return `${d}d ${h}h ${m}m ${s}s`;
   };
 
-
-
   if (!userPremium.status) {
 
-    const desc = `
-**A Assinatura Oficial da Arlecchino Bot**
-
-Nem todos nasceram para o comum.
-Alguns escolhem o poder.
-
-Ao ativar a **Lua Carmesim**, você desbloqueia:
-
-🔥 Daily Aprimorado — Recompensas superiores todos os dias.
-⚔️ XP Aumentado no Rank de Aventureiro — Evolua mais rápido.
-🕯️ Sistemas Personalizados Exclusivos — Recursos ocultos para seu servidor.
-🏅 Emblema Oficial de Assinante — Um símbolo de autoridade.
-🎲 Mais chances em Sorteios Oficiais — A probabilidade favorece a elite.
-🌟 1 Personagem T5 Grátis ao ativar — Poder imediato.
-🩸 Desconto Especial na Loja Oficial — Benefícios estratégicos.
-
-━━━━━━━━━━━━━━━━━━
-
-🌙 **Planos Oficiais da Lua Carmesim**
-
-🗓 **Mensal — R$ 8,99**
-30 dias completos sob a influência da Lua.
-
-📆 **Trimestral — R$ 24,99**
-90 dias (3 meses) de vantagem contínua.
-
-📅 **Semestral — R$ 44,99**
-180 dias (6 meses) de poder consolidado.
-
-━━━━━━━━━━━━━━━━━━
-
-*A Lua Carmesim não é sobre preço.
-É sobre posição.*
-`;
-
     const embed = new MessageEmbed()
-      .setTitle("🌙 Assinatura Lua Carmesim")
-      .setDescription(desc)
+      .setTitle("🌙 Lua Carmesim")
+      .setDescription(`
+Você não possui Premium ativo.
+
+Use:
+
+\`/premium comprar\`
+
+para adquirir sua assinatura.
+`)
       .setThumbnail(avatar)
       .randomColor()
       .build();
 
-    const btnBuy = client.interactions.createButton({
-      user: userId,
-      data: {
-        label: "Adquirir Premium",
-        style: 5,
-        url: "https://discord.gg/wfaRZw5pGn"
-      }
-    });
-
-    return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
-      method: "POST",
-      body: {
-        type: edit ? 7 : 4,
-        data: {
-          flags: 64,
-          embeds: [embed],
-          components: [
-            { type: 1, components: [{
-  "type": 2,
-  "label": "Adquirir Premium",
-  "style": 5,
-  "url": "https://discord.gg/wfaRZw5pGn"
-}] }
-          ]
+    return DiscordRequest(
+      `/interactions/${interaction.id}/${interaction.token}/callback`,
+      {
+        method: "POST",
+        body: {
+          type: edit ? 7 : 4,
+          data: {
+            flags: 64,
+            embeds: [embed]
+          }
         }
       }
-    });
+    );
   }
 
-
+  const totalSlots =
+    guilds.length +
+    Math.max(
+      0,
+      (guildPremium.status &&
+      guildPremium.userId === userId &&
+      !guilds.find(g => g.guildId === guildId))
+        ? 1
+        : 0
+    );
 
   let desc = "";
 
-  desc += `Usuário: <@${userId}>\n`;
-  desc += `Status: Ativo\n`;
-  desc += `Tempo restante: ${formatTempo(userPremium.tempo)}\n`;
+  desc += `👤 Usuário: <@${userId}>\n`;
+  desc += `🌙 Status: Ativo\n`;
+  desc += `⏳ Restante: ${formatTempo(userPremium.tempo)}\n\n`;
 
-  desc += `\nServidores ativos: ${guilds.length}\n`;
+  desc += `🏠 Servidores Premium: ${guilds.length}\n\n`;
 
-  desc += `\nServidor atual:\n`;
-  desc += guildPremium.status
-    ? `Premium ativo (${formatTempo(guildPremium.tempo)})`
-    : "Sem premium";
+  if (guilds.length) {
+
+    desc += `**Servidores vinculados:**\n`;
+
+    for (const g of guilds) {
+      desc += `• ${g.guildId}\n`;
+    }
+
+    desc += "\n";
+  }
+
+  desc += `**Servidor Atual**\n`;
+
+  if (guildPremium.status) {
+
+    desc +=
+      `✅ Premium ativo\n` +
+      `⏳ ${formatTempo(guildPremium.tempo)}`;
+
+  } else {
+
+    desc +=
+      `❌ Sem premium`;
+  }
 
   const embed = new MessageEmbed()
-    .setTitle("Painel Premium")
+    .setTitle("🌙 Painel Premium")
     .setDescription(desc)
     .setThumbnail(avatar)
     .randomColor()
@@ -134,38 +272,99 @@ Ao ativar a **Lua Carmesim**, você desbloqueia:
 
   const components = [];
 
-  const btnKey = client.interactions.createButton({
-    user: userId,
-    data: { label: "Resgatar Key", style: 2 },
-    funcao: async () => {}
-  });
+  if (
+    userPremium.status &&
+    !guildPremium.status
+  ) {
 
-  if (userPremium.status && !guildPremium.status) {
+    const btnAdd =
+      client.interactions.createButton({
+        user: userId,
+        data: {
+          label: "Ativar neste Servidor",
+          style: 1
+        },
+        funcao: async (btn) => {
 
-    const btnAdd = client.interactions.createButton({
-      user: userId,
-      data: { label: "Ativar neste servidor", style: 1 },
-      funcao: async (btn) => {
+          await PremiumManager.addGuildPremium(
+            guildId,
+            userId
+          );
 
-        await PremiumManager.addGuildPremium(guildId, userId);
-        return renderMain(btn, client, userId, true);
-      }
+          return renderPanel(
+            btn,
+            client,
+            userId,
+            true
+          );
+        }
+      });
+
+    components.push({
+      type: 1,
+      components: [btnAdd]
     });
 
-    components.push({ type: 1, components: [btnAdd, btnKey] });
-
-  } else {
-    components.push({ type: 1, components: [btnKey] });
   }
 
-  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
-    method: "POST",
-    body: {
-      type: edit ? 7 : 4,
-      data: {
-        embeds: [embed],
-        components
+  if (
+    guildPremium.status &&
+    guildPremium.userId === userId
+  ) {
+
+    const btnRemove =
+      client.interactions.createButton({
+        user: userId,
+        data: {
+          label: "Remover deste Servidor",
+          style: 4
+        },
+        funcao: async (btn) => {
+
+          await PremiumManager.removeGuildPremium(
+            guildId,
+            userId
+          );
+
+          return renderPanel(
+            btn,
+            client,
+            userId,
+            true
+          );
+        }
+      });
+
+    components.push({
+      type: 1,
+      components: [btnRemove]
+    });
+  }
+
+  components.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 5,
+        label: "Comprar Premium",
+        url: "https://discord.gg/wfaRZw5pGn"
+      }
+    ]
+  });
+
+  return DiscordRequest(
+    `/interactions/${interaction.id}/${interaction.token}/callback`,
+    {
+      method: "POST",
+      body: {
+        type: edit ? 7 : 4,
+        data: {
+          flags: 64,
+          embeds: [embed],
+          components
+        }
       }
     }
-  });
+  );
 }

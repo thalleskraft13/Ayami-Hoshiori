@@ -505,7 +505,6 @@ async function runEmbedEditor(interaction, client) {
       await updateMessage(i);
     }
   });
-
   
   const jsonBtn = client.interactions.createButton({
     user: authorId,
@@ -524,21 +523,20 @@ async function runEmbedEditor(interaction, client) {
           const idx    = parseInt(si.data.values[0], 10);
           const clone  = JSON.parse(JSON.stringify(state.embeds[idx]));
           const clean  = cleanObject(clone);
-          const json   = JSON.stringify(clean, null, 2);
-          const output = json.length > 1900
-            ? json.slice(0, 1900) + "\n… (truncado)"
-            : json;
+          
+            
+  const payload = clean;
+  const json    = JSON.stringify(payload, null, 2);
+  const buffer  = Buffer.from(json, 'utf-8');
+  
+  await DiscordRequest(`/interactions/${si.id}/${si.token}/callback`, {
+    method: 'POST',
+    body:   { type: 4, data: { content: `📋 **${embedLabel(idx)}`,
+                flags: 64 } },
+    files:  [{ name: 'embed.json', data: buffer, contentType: 'application/json' }]
+  });
 
-          await DiscordRequest(`/interactions/${si.id}/${si.token}/callback`, {
-            method: "POST",
-            body  : {
-              type: 4,
-              data: {
-                content: `📋 **${embedLabel(idx)}**\n\`\`\`json\n${output}\n\`\`\``,
-                flags  : 64
-              }
-            }
-          });
+          
         }
       });
 
@@ -555,6 +553,12 @@ async function runEmbedEditor(interaction, client) {
       });
     }
   });
+
+  
+//embaixo e6lh ok
+
+  
+  
 
   
   const previewBtn = client.interactions.createButton({
@@ -751,7 +755,8 @@ async function runComponentsV2Editor(interaction, client) {
     section     : () => ({ _id: uid(), kind: "section",    text: "Texto da seção", accessory: null         }),
     separator   : () => ({ _id: uid(), kind: "separator",  divider: true, spacing: "small"                 }),
     container   : () => ({ _id: uid(), kind: "container",  accentColor: null, spoiler: false, children: [] }),
-    actionRow   : () => ({ _id: uid(), kind: "action_row", buttons: []                                     })
+    actionRow   : () => ({ _id: uid(), kind: "action_row", buttons: []                                     }),
+    selectMenu: () => ({ _id: uid(), kind: 'select_menu', placeholder: 'Selecione uma opção', options: [] })
   };
 
   const state = {
@@ -794,17 +799,29 @@ async function runComponentsV2Editor(interaction, client) {
     state.path = [state.blocks.length - 1];
   }
 
-  function serializeLinkButton(btn) {
-    const out = { type: CTYPE.BUTTON, style: 5, url: btn.url };
-    if (btn.label)    out.label    = btn.label;
-    if (btn.disabled) out.disabled = true;
-    if (btn.emoji) {
-      out.emoji = /^\d{17,20}$/.test(btn.emoji.trim())
-        ? { id: btn.emoji.trim() }
-        : { name: btn.emoji.trim() };
-    }
+  function serializeButton(btn) {
+  if (btn.kind === 'flow') {
+    const out = {
+      type:      CTYPE.BUTTON,
+      style:     Number(btn.style) || 1,
+      custom_id: JSON.stringify({ t: 'flow_trigger', f: btn.flowId })
+    };
+    if (btn.label) out.label = btn.label;
+    if (btn.emoji) out.emoji = /^\d{17,20}$/.test(btn.emoji.trim())
+      ? { id: btn.emoji.trim() }
+      : { name: btn.emoji.trim() };
     return out;
   }
+
+  // link
+  const out = { type: CTYPE.BUTTON, style: 5, url: btn.url };
+  if (btn.label)    out.label    = btn.label;
+  if (btn.disabled) out.disabled = true;
+  if (btn.emoji) out.emoji = /^\d{17,20}$/.test(btn.emoji.trim())
+    ? { id: btn.emoji.trim() }
+    : { name: btn.emoji.trim() };
+  return out;
+}
 
   function serializeBlock(block) {
     switch (block.kind) {
@@ -852,12 +869,34 @@ async function runComponentsV2Editor(interaction, client) {
         };
 
       case "action_row": {
-        if (!block.buttons?.length) return null;
-        return {
-          type      : CTYPE.ACTION_ROW,
-          components: block.buttons.map(serializeLinkButton)
-        };
-      }
+          if (!block.buttons?.length) return null;
+           return {
+             type      : CTYPE.ACTION_ROW,
+             components: block.buttons.map(serializeButton)
+           };
+       }
+
+      case 'select_menu': {
+  if (!block.options?.length) return null;
+  return {
+    type: 1, // Action Row
+    components: [{
+      type:        3,
+      custom_id:   JSON.stringify({ t: 'cv2_select', id: block._id }),
+      placeholder: block.placeholder || '',
+      min_values:  1,
+      max_values:  1,
+      disabled:    false,
+      options:     block.options.map(o => ({
+        label:       o.label,
+        value:       JSON.stringify({ t: 'flow_trigger', f: o.flowId }),
+        description: o.description || null,
+        emoji:       o.emoji ? { name: o.emoji } : null,
+        default:     false
+      }))
+    }]
+  };
+}
 
       case "container": {
         const children = (block.children || []).map(serializeBlock).filter(Boolean);
@@ -907,14 +946,23 @@ async function runComponentsV2Editor(interaction, client) {
         if (!block.buttons?.length) errors.push("Action Row está vazia — adicione ao menos 1 botão.");
         if (block.buttons?.length  > 5) errors.push(`Action Row tem ${block.buttons.length} botões (máximo: 5).`);
         block.buttons?.forEach((btn, bi) => {
-          if (!btn.url || !/^https?:\/\/.+/.test(btn.url)) {
-            errors.push(`Botão ${bi + 1} tem URL inválida.`);
-          }
+  if (btn.kind === 'flow') {
+    if (!btn.flowId) errors.push(`Botão ${bi + 1} (fluxo) sem flowId definido.`);
+  } else {
+    if (!btn.url || !/^https?:\/\/.+/.test(btn.url)) {
+      errors.push(`Botão ${bi + 1} tem URL inválida.`);
+    }
+  }
           if (!btn.label && !btn.emoji) {
             errors.push(`Botão ${bi + 1} precisa de label ou emoji.`);
           }
         });
       }
+      if (block.kind === 'select_menu') {
+  if (!block.options?.length) errors.push('Select Menu vazio — adicione ao menos 1 opção.');
+  if (block.options?.length > 25) errors.push(`Select Menu tem ${block.options.length} opções (máximo: 25).`);
+}
+      
       if (block.kind === "section" && !block.text?.trim()) {
         errors.push("Section tem texto vazio.");
       }
@@ -937,16 +985,17 @@ async function runComponentsV2Editor(interaction, client) {
     state.blocks.forEach(b => validateNode(b, 0));
     return errors;
   }
+ 
 
   const KIND_ICON = {
     text      : "📝", gallery   : "🖼️", section: "📐",
-    separator : "➖", action_row: "🔘", container: "📦"
+    separator : "➖", action_row: "🔘", container: "📦", select_menu: '📋'
   };
 
   const KIND_LABEL = {
     text      : "Text Display",  gallery   : "Media Gallery",
     section   : "Section",       separator : "Separator",
-    action_row: "Action Row",    container : "Container"
+    action_row: "Action Row",    container : "Container", select_menu: 'Select Menu'
   };
 
   function blockSummary(block) {
@@ -962,27 +1011,20 @@ async function runComponentsV2Editor(interaction, client) {
   }
 
   function buildPathBreadcrumb() {
-    if (!state.blocks.length) return "";
-    const parts = [];
-    let node = state.blocks[state.path[0]];
-    if (!node) return "";
-    parts.push(`${KIND_ICON[node.kind] ?? "❓"} ${KIND_LABEL[node.kind] ?? node.kind}`);
-    for (let i = 1; i < state.path.length; i++) {
-      if (!node.children) break;
-      node = node.children[state.path[i]];
-      if (!node) break;
-      parts.push(`${KIND_ICON[node.kind] ?? "❓"} ${KIND_LABEL[node.kind] ?? node.kind}`);
-    }
-    if (!parts.length) return "";
-    if (parts.length === 1) return `📍 **Editando:** ${parts[0]}`;
-    const lines = parts.map((p, i) => {
-      if (i === 0) return p;
-      const indent = "   ".repeat(i);
-      const conn   = i === parts.length - 1 ? "└─ " : "├─ ";
-      return `${indent}${conn}${p}`;
-    });
-    return `📍 **Caminho Atual:**\n${lines.join("\n")}`;
+  if (!state.blocks.length) return '';
+  const parts = [];
+  let node = state.blocks[state.path[0]];
+  if (!node) return '';
+  parts.push(`${KIND_ICON[node.kind]} ${KIND_LABEL[node.kind]}`);
+  for (let i = 1; i < state.path.length; i++) {
+    if (!node.children) break;
+    node = node.children[state.path[i]];
+    if (!node) break;
+    parts.push(`${KIND_ICON[node.kind]} ${KIND_LABEL[node.kind]}`);
   }
+  if (!parts.length) return '';
+  return `> 📍 **Selecionado:** ${parts.join(' › ')}`;
+}
 
   function renderTreeLines(blocks, parentPath, depthPrefix, isRoot) {
     const lines = [];
@@ -1015,32 +1057,29 @@ async function runComponentsV2Editor(interaction, client) {
   }
 
   function buildStatusText() {
-    const apiComps = buildApiComponents();
-    const crumb    = buildPathBreadcrumb();
+  const apiComps = buildApiComponents();
 
-    const divider  = "━━━━━━━━━━━━━━━━━━━━━━━━";
+  const lines = [
+    `### 🧩 Components V2 Builder`,
+    `> 📦 **${state.blocks.length}** blocos  •  🧱 **${apiComps.length}** componentes`,
+    ''
+  ];
 
-    const headerLines = [
-      "## 🧩 Discord Components V2 Builder",
-      "",
-      `📦 **Blocos raiz:** ${state.blocks.length}   🧱 **Componentes:** ${apiComps.length}   🔖 \`IS_COMPONENTS_V2\``,
-      ""
-    ];
-
-    if (crumb) {
-      headerLines.push(crumb, "");
-    }
-
-    headerLines.push(divider, "");
-
-    if (!state.blocks.length) {
-      headerLines.push("*Nenhum componente ainda.*", "*Use os menus abaixo para adicionar blocos.*");
-      return headerLines.join("\n");
-    }
-
-    const treeLines = renderTreeLines(state.blocks, [], "", true);
-    return headerLines.join("\n") + treeLines.join("\n");
+  if (!state.blocks.length) {
+    lines.push('> *Nenhum bloco ainda.*');
+    lines.push('> *Use os menus abaixo para adicionar.*');
+    return lines.join('\n');
   }
+
+  // breadcrumb simples
+  const crumb = buildPathBreadcrumb();
+  if (crumb) lines.push(crumb, '');
+
+  lines.push('**📋 Estrutura:**');
+  lines.push(...renderTreeLines(state.blocks, [], '', true));
+
+  return lines.join('\n');
+}
 
   async function safeUpdateEditor(i) {
     try {
@@ -1144,7 +1183,8 @@ async function runComponentsV2Editor(interaction, client) {
         options    : [
           { label: "📝 Text Display",  value: "textDisplay",  description: "Texto livre com suporte a markdown" },
           { label: "🖼️ Media Gallery", value: "mediaGallery", description: "Galeria de imagens/vídeos (até 10)" },
-          { label: "🔘 Action Row",    value: "actionRow",    description: "Linha de Link Buttons (até 5)" }
+          { label: "🔘 Action Row",    value: "actionRow",    description: "Linha de Buttons (até 5)" },
+          { label: '📋 Select Menu', value: 'selectMenu', description: 'Menu de seleção vinculado a fluxos' }
         ]
       },
       funcao: async (i) => {
@@ -1366,17 +1406,19 @@ async function runComponentsV2Editor(interaction, client) {
       user: authorId,
       data: { label: "{ } JSON", style: 2 },
       funcao: async (i) => {
-        const components = buildApiComponents();
-        if (!components.length) return safeEphemeral(i, "❌ Nenhum componente para exportar.");
-        const payload = { flags: IS_COMPONENTS_V2, components };
-        const json    = JSON.stringify(payload, null, 2);
-        if (json.length > 1950) {
-          return safeEphemeral(i,
-            `⚠️ JSON muito grande (${json.length} chars).\nPrimeiros 1900 chars:\n\`\`\`json\n${json.slice(0, 1900)}\n…\`\`\``
-          );
-        }
-        await safeEphemeral(i, `📋 **Components V2 — payload completo**\n\`\`\`json\n${json}\n\`\`\``);
-      }
+  const components = buildApiComponents();
+  if (!components.length) return safeEphemeral(i, '❌ Nenhum componente para exportar.');
+
+  const payload = { flags: IS_COMPONENTS_V2, components };
+  const json    = JSON.stringify(payload, null, 2);
+  const buffer  = Buffer.from(json, 'utf-8');
+
+  await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+    method: 'POST',
+    body:   { type: 4, data: { content: '📋 **Payload Components V2**', flags: 64 } },
+    files:  [{ name: 'components_v2.json', data: buffer, contentType: 'application/json' }]
+  });
+}
     });
 
     const helpBtn = client.interactions.createButton({
@@ -1531,11 +1573,122 @@ async function runComponentsV2Editor(interaction, client) {
       section   : openSectionEditor,
       action_row: openActionRowEditor,
       separator : openSeparatorEditor,
-      container : openContainerEditor
+      container : openContainerEditor,
+      select_menu: openSelectMenuEditor
     };
     return MAP[block.kind]?.(i, block)
       ?? safeEphemeral(i, "❌ Tipo de bloco sem editor disponível.");
   }
+  
+  async function openSelectMenuEditor(i, block) {
+  const { FlowModel } = require('../../Mongodb/flow.js');
+  const flows = await FlowModel.find({ guildId: interaction.guild_id, enabled: true }).lean();
+
+  if (!Array.isArray(block.options)) block.options = [];
+
+  const baseOptions = [
+    { label: '✏️ Editar placeholder', value: 'placeholder', description: `Atual: ${block.placeholder || 'vazio'}` },
+    { label: '➕ Adicionar opção',    value: 'add',         description: `${block.options.length}/25` }
+  ];
+  const editOptions   = block.options.map((o, idx) => ({
+    label:       `✏️ Opção ${idx + 1}: ${o.label.slice(0, 40)}`,
+    value:       `edit_${idx}`,
+    description: `Fluxo: ${flows.find(f => f.flowId === o.flowId)?.name?.slice(0, 40) || o.flowId}`
+  }));
+  const removeOptions = block.options.map((_, idx) => ({
+    label: `🗑️ Remover opção ${idx + 1}`,
+    value: `rm_${idx}`
+  }));
+
+  const sel = client.interactions.createSelect({
+    user: authorId,
+    data: {
+      placeholder: `📋 Select Menu — ${block.options.length} opções`,
+      options:     [...baseOptions, ...editOptions, ...removeOptions].slice(0, 25)
+    },
+    funcao: async (si) => {
+      const val = si.data.values[0];
+
+      if (val === 'placeholder') {
+        const modal = client.interactions.createModal({
+          user: authorId, title: 'Editar Placeholder',
+          components: [{ type: 1, components: [{ type: 4, custom_id: 'ph', label: 'Placeholder', style: 1, required: false, value: block.placeholder || '', max_length: 150 }] }],
+          funcao: async (mi, _, fields) => {
+            block.placeholder = fields.ph || '';
+            await safeUpdateEditor(mi);
+          }
+        });
+        return client.interactions.showModal(si, modal);
+      }
+
+      if (val.startsWith('rm_')) {
+        block.options.splice(parseInt(val.slice(3), 10), 1);
+        return safeUpdateEditor(si);
+      }
+
+      const isEdit  = val.startsWith('edit_');
+      const editIdx = isEdit ? parseInt(val.slice(5), 10) : -1;
+      const existing = isEdit ? block.options[editIdx] : null;
+
+      if (!isEdit && block.options.length >= 25) return safeEphemeral(si, '❌ Máximo de 25 opções.');
+      if (!flows.length) return safeEphemeral(si, '❌ Nenhum fluxo ativo disponível.');
+
+      const flowSel = client.interactions.createSelect({
+        user: authorId,
+        data: {
+          placeholder: 'Selecione o fluxo desta opção',
+          options:     flows.slice(0, 25).map(f => ({
+            label:   f.name.slice(0, 100),
+            value:   f.flowId,
+            default: existing?.flowId === f.flowId
+          }))
+        },
+        funcao: async (fsi) => {
+          const flowId = fsi.data.values[0];
+          const modal  = client.interactions.createModal({
+            user: authorId, title: isEdit ? 'Editar Opção' : 'Nova Opção',
+            components: [
+              { type: 1, components: [{ type: 4, custom_id: 'label',       label: 'Label',               style: 1, required: true,  max_length: 100, value: existing?.label       || '' }] },
+              { type: 1, components: [{ type: 4, custom_id: 'description', label: 'Descrição (opcional)', style: 1, required: false, max_length: 100, value: existing?.description || '' }] },
+              { type: 1, components: [{ type: 4, custom_id: 'emoji',       label: 'Emoji (opcional)',     style: 1, required: false, max_length: 10,  value: existing?.emoji       || '' }] }
+            ],
+            funcao: async (mi, _, fields) => {
+              const option = {
+                label:       fields.label?.trim() || 'Opção',
+                description: fields.description?.trim() || '',
+                emoji:       fields.emoji?.trim() || '',
+                flowId
+              };
+              if (isEdit) block.options[editIdx] = option;
+              else        block.options.push(option);
+              await safeUpdateEditor(mi);
+            }
+          });
+          return client.interactions.showModal(fsi, modal);
+        }
+      });
+
+      await DiscordRequest(`/interactions/${si.id}/${si.token}/callback`, {
+        method: 'POST',
+        body: { type: 4, data: { content: '⚡ **Selecione o fluxo para esta opção:**', flags: 64, components: [{ type: 1, components: [flowSel] }] } }
+      });
+    }
+  });
+
+  const content = [
+    `📋 **Select Menu**`,
+    `Placeholder: \`${block.placeholder || 'vazio'}\``,
+    `Opções: ${block.options.length}/25`,
+    block.options.length
+      ? block.options.map((o, idx) => `  ${idx + 1}. **${o.label}** → \`${flows.find(f => f.flowId === o.flowId)?.name || o.flowId}\``).join('\n')
+      : '  *Vazio — adicione opções acima.*'
+  ].join('\n');
+
+  await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+    method: 'POST',
+    body: { type: 7, data: { content: buildStatusText() + '\n\n' + content, embeds: [], components: [{ type: 1, components: [sel] }, ...buildEditorUI().slice(1)] } }
+  });
+}
 
   async function openTextDisplayEditor(i, block) {
     const modal = client.interactions.createModal({
@@ -1745,10 +1898,10 @@ async function runComponentsV2Editor(interaction, client) {
     const baseOptions = [{ label: "➕ Adicionar Link Button", value: "add", description: `Atual: ${block.buttons.length}/5` }];
 
     const editOptions = block.buttons.map((b, idx) => ({
-      label      : `✏️ Editar Botão ${idx + 1}${b.label ? `: ${b.label}` : ""}`,
-      value      : `edit_${idx}`,
-      description: b.url.slice(0, 50)
-    }));
+  label:       `✏️ Botão ${idx + 1}: ${b.label || '(sem label)'} — ${b.kind === 'flow' ? '⚡ Fluxo' : '🔗 Link'}`,
+  value:       `edit_${idx}`,
+  description: b.kind === 'flow' ? `flowId: ${b.flowId?.slice(0, 40)}` : (b.url || '').slice(0, 50)
+}));
 
     const removeOptions = block.buttons.map((_, idx) => ({
       label: `🗑️ Remover Botão ${idx + 1}`,
@@ -1768,12 +1921,12 @@ async function runComponentsV2Editor(interaction, client) {
 
         if (val === "add") {
           if (block.buttons.length >= 5) return safeEphemeral(si, "❌ Máximo de 5 botões por Action Row.");
-          return openLinkButtonModal(si, null, newBtn => block.buttons.push(newBtn));
+          return openButtonEditor(si, null, newBtn => block.buttons.push(newBtn));
         }
 
         if (val.startsWith("edit_")) {
           const idx = parseInt(val.slice(5), 10);
-          return openLinkButtonModal(si, block.buttons[idx], edited => { block.buttons[idx] = edited; });
+          return openButtonEditor(si, block.buttons[idx], edited => { block.buttons[idx] = edited; });
         }
 
         if (val.startsWith("rm_")) {
@@ -1807,31 +1960,160 @@ async function runComponentsV2Editor(interaction, client) {
     });
   }
 
-  async function openLinkButtonModal(i, existing, onSave) {
-    const modal = client.interactions.createModal({
-      user : authorId,
-      title: existing ? "Editar Link Button" : "Novo Link Button",
-      components: [
-        { type: 1, components: [{ type: 4, custom_id: "label",    label: "Label (texto visível no botão)",  style: 1, required: false, value: existing?.label    || "", max_length: 80  }] },
-        { type: 1, components: [{ type: 4, custom_id: "url",      label: "URL de destino (https://...)",    style: 1, required: true,  value: existing?.url      || "", max_length: 512 }] },
-        { type: 1, components: [{ type: 4, custom_id: "emoji",    label: "Emoji (unicode 🔗 ou ID custom)", style: 1, required: false, value: existing?.emoji    || ""                  }] },
-        { type: 1, components: [{ type: 4, custom_id: "disabled", label: "Desativado? sim/nao",             style: 1, required: false, value: existing?.disabled ? "sim" : "nao"        }] }
-      ],
-      funcao: async (mi, _, fields) => {
-        const url = (fields.url || "").trim();
-        if (!url || !/^https?:\/\/.+/.test(url)) return safeEphemeral(mi, "❌ URL inválida. Deve começar com https://");
-        if (!fields.label?.trim() && !fields.emoji?.trim()) return safeEphemeral(mi, "❌ O botão precisa de pelo menos um label ou emoji.");
-        onSave({
-          label   : fields.label?.trim()  || "",
-          url,
-          emoji   : fields.emoji?.trim()  || "",
-          disabled: fields.disabled?.toLowerCase() === "sim"
-        });
-        await safeUpdateEditor(mi);
+  async function openButtonEditor(i, existing, onSave) {
+  const tipoSelect = client.interactions.createSelect({
+    user: authorId,
+    data: {
+      placeholder: 'Qual tipo de botão?',
+      options: [
+        { label: '🔗 Link — abre uma URL',          value: 'link', description: 'Botão estilo link externo' },
+        { label: '⚡ Interação — dispara um fluxo', value: 'flow', description: 'Botão conectado ao Logic Builder' }
+      ]
+    },
+    funcao: async (si) => {
+      if (si.data.values[0] === 'link') {
+        return openLinkButtonModal(si, existing?.kind === 'link' ? existing : null, onSave);
       }
-    });
-    await client.interactions.showModal(i, modal);
-  }
+      return openFlowButtonEditor(si, existing?.kind === 'flow' ? existing : null, onSave);
+    }
+  });
+
+  await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+    method: 'POST',
+    body: { type: 4, data: { content: '**Escolha o tipo de botão:**', flags: 64, components: [{ type: 1, components: [tipoSelect] }] } }
+  });
+}
+
+async function openFlowButtonEditor(i, existing, onSave) {
+  const { FlowModel } = require('../../Mongodb/flow.js');
+  const flows = await FlowModel.find({ guildId: interaction.guild_id, enabled: true }).lean();
+
+  if (!flows.length) return safeEphemeral(i, '❌ Nenhum fluxo ativo. Crie um no Logic Builder primeiro.');
+
+  const flowSelect = client.interactions.createSelect({
+    user: authorId,
+    data: {
+      placeholder: 'Selecione o fluxo do botão',
+      options: flows.slice(0, 25).map(f => ({
+        label:       f.name.slice(0, 100),
+        value:       f.flowId,
+        description: `Trigger: ${f.trigger?.type || 'N/A'}`,
+        default:     existing?.flowId === f.flowId
+      }))
+    },
+    funcao: async (si) => {
+      const flowId = si.data.values[0];
+      const modal  = client.interactions.createModal({
+        user: authorId,
+        title: 'Configurar Botão de Fluxo',
+        components: [
+          { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Label do botão', style: 1, required: true,  max_length: 80, value: existing?.label || '', placeholder: 'Clique aqui' }] },
+          { type: 1, components: [{ type: 4, custom_id: 'style', label: 'Estilo (1=Azul 2=Cinza 3=Verde 4=Vermelho)',style: 1, required: false, max_length: 1, placeholder: '1', value: String(existing?.style || 1) }] },
+          { type: 1, components: [{ type: 4, custom_id: 'emoji', label: 'Emoji (opcional)', style: 1, required: false, max_length: 50, value: existing?.emoji || '' }] }
+        ],
+        funcao: async (mi, _, fields) => {
+          const style = [1,2,3,4].includes(Number(fields.style)) ? Number(fields.style) : 1;
+          onSave({ kind: 'flow', label: fields.label?.trim() || '', flowId, style, emoji: fields.emoji?.trim() || '' });
+          await safeUpdateEditor(mi);
+        }
+      });
+      return client.interactions.showModal(si, modal);
+    }
+  });
+
+  await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+    method: 'POST',
+    body: { type: 4, data: { content: '⚡ **Selecione o fluxo:**', flags: 64, components: [{ type: 1, components: [flowSelect] }] } }
+  });
+}
+
+async function openButtonEditor(i, existing, onSave) {
+  const tipoSelect = client.interactions.createSelect({
+    user: authorId,
+    data: {
+      placeholder: 'Qual tipo de botão?',
+      options: [
+        { label: '🔗 Link — abre uma URL',          value: 'link', description: 'Botão estilo link externo' },
+        { label: '⚡ Interação — dispara um fluxo', value: 'flow', description: 'Botão conectado ao Logic Builder' }
+      ]
+    },
+    funcao: async (si) => {
+      if (si.data.values[0] === 'link') {
+        return openLinkButtonModal(si, existing?.kind === 'link' ? existing : null, onSave);
+      }
+      return openFlowButtonEditor(si, existing?.kind === 'flow' ? existing : null, onSave);
+    }
+  });
+
+  await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+    method: 'POST',
+    body: { type: 4, data: { content: '**Escolha o tipo de botão:**', flags: 64, components: [{ type: 1, components: [tipoSelect] }] } }
+  });
+}
+
+async function openFlowButtonEditor(i, existing, onSave) {
+  const { FlowModel } = require('../../Mongodb/flow.js');
+  const flows = await FlowModel.find({ guildId: interaction.guild_id, enabled: true }).lean();
+
+  if (!flows.length) return safeEphemeral(i, '❌ Nenhum fluxo ativo. Crie um no Logic Builder primeiro.');
+
+  const flowSelect = client.interactions.createSelect({
+    user: authorId,
+    data: {
+      placeholder: 'Selecione o fluxo do botão',
+      options: flows.slice(0, 25).map(f => ({
+        label:       f.name.slice(0, 100),
+        value:       f.flowId,
+        description: `Trigger: ${f.trigger?.type || 'N/A'}`,
+        default:     existing?.flowId === f.flowId
+      }))
+    },
+    funcao: async (si) => {
+      const flowId = si.data.values[0];
+      const modal  = client.interactions.createModal({
+        user: authorId,
+        title: 'Configurar Botão de Fluxo',
+        components: [
+          { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Label do botão', style: 1, required: true,  max_length: 80, value: existing?.label || '', placeholder: 'Clique aqui' }] },
+          { type: 1, components: [{ type: 4, custom_id: 'style', label: 'Estilo: 1=Azul 2=Cinza 3=Verde 4=Verm.', style: 1, required: false, max_length: 1, placeholder: '1', value: String(existing?.style || 1) }] },
+          { type: 1, components: [{ type: 4, custom_id: 'emoji', label: 'Emoji (opcional)', style: 1, required: false, max_length: 50, value: existing?.emoji || '' }] }
+        ],
+        funcao: async (mi, _, fields) => {
+          const style = [1,2,3,4].includes(Number(fields.style)) ? Number(fields.style) : 1;
+          onSave({ kind: 'flow', label: fields.label?.trim() || '', flowId, style, emoji: fields.emoji?.trim() || '' });
+          await safeUpdateEditor(mi);
+        }
+      });
+      return client.interactions.showModal(si, modal);
+    }
+  });
+
+  await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+    method: 'POST',
+    body: { type: 4, data: { content: '⚡ **Selecione o fluxo:**', flags: 64, components: [{ type: 1, components: [flowSelect] }] } }
+  });
+}
+
+async function openLinkButtonModal(i, existing, onSave) {
+  const modal = client.interactions.createModal({
+    user: authorId,
+    title: existing ? 'Editar Link Button' : 'Novo Link Button',
+    components: [
+      { type: 1, components: [{ type: 4, custom_id: 'label',    label: 'Label',                        style: 1, required: false, value: existing?.label    || '', max_length: 80  }] },
+      { type: 1, components: [{ type: 4, custom_id: 'url',      label: 'URL (https://...)',             style: 1, required: true,  value: existing?.url      || '', max_length: 512 }] },
+      { type: 1, components: [{ type: 4, custom_id: 'emoji',    label: 'Emoji (opcional)',              style: 1, required: false, value: existing?.emoji    || ''                  }] },
+      { type: 1, components: [{ type: 4, custom_id: 'disabled', label: 'Desativado? sim/nao',           style: 1, required: false, value: existing?.disabled ? 'sim' : 'nao'        }] }
+    ],
+    funcao: async (mi, _, fields) => {
+      const url = (fields.url || '').trim();
+      if (!url || !/^https?:\/\/.+/.test(url)) return safeEphemeral(mi, '❌ URL inválida.');
+      if (!fields.label?.trim() && !fields.emoji?.trim()) return safeEphemeral(mi, '❌ Precisa de label ou emoji.');
+      onSave({ kind: 'link', label: fields.label?.trim() || '', url, emoji: fields.emoji?.trim() || '', disabled: fields.disabled?.toLowerCase() === 'sim' });
+      await safeUpdateEditor(mi);
+    }
+  });
+  await client.interactions.showModal(i, modal);
+}
 
   async function openSeparatorEditor(i, block) {
     const options = [
@@ -1900,7 +2182,7 @@ async function runComponentsV2Editor(interaction, client) {
     const addOptions = [
       { label: "📝 Adicionar Text Display",  value: "child_textDisplay",  description: "Texto markdown" },
       { label: "🖼️ Adicionar Media Gallery", value: "child_mediaGallery", description: "Galeria de mídias" },
-      { label: "🔘 Adicionar Action Row",    value: "child_actionRow",    description: "Botões de link" },
+      { label: "🔘 Adicionar Action Row",    value: "child_actionRow",    description: "Botões" },
       { label: "📐 Adicionar Section",       value: "child_section",      description: "Texto + acessório" },
       { label: "➖ Adicionar Separator",     value: "child_separator",    description: "Divisor visual" }
     ];

@@ -119,6 +119,34 @@ class ExecutionContext {
     const val = Math.floor(Math.random() * (max - min + 1)) + min;
     this._vars.set(name, val);
   }
+  
+  pushVar(name, value) {
+  const current = this._vars.get(name);
+  const list    = Array.isArray(current) ? current : [];
+  list.push(value);
+  this._vars.set(name, list);
+}
+
+removeVarItem(name, value) {
+  const current = this._vars.get(name);
+  if (!Array.isArray(current)) return;
+  const idx = current.indexOf(value);
+  if (idx !== -1) current.splice(idx, 1);
+  this._vars.set(name, current);
+}
+
+removeVarIndex(name, index) {
+  const current = this._vars.get(name);
+  if (!Array.isArray(current)) return;
+  current.splice(Number(index), 1);
+  this._vars.set(name, current);
+}
+
+randomFromVar(name) {
+  const current = this._vars.get(name);
+  if (!Array.isArray(current) || !current.length) return null;
+  return current[Math.floor(Math.random() * current.length)];
+}
 
   _systemVars() {
     const d = this.discord;
@@ -137,37 +165,112 @@ class ExecutionContext {
       '{count}':        String(d.customData?.count || 0),
       '{timestamp}':    String(Date.now()),
       '{date}':         new Date().toLocaleDateString('pt-BR'),
-      '{time}':         new Date().toLocaleTimeString('pt-BR')
+      '{time}':         new Date().toLocaleTimeString('pt-BR'),
+      '{aleatorio}': '',
+      '{args}':  d.customData?.args?.join(' ') || '',
+      '{arg0}':  d.customData?.args?.[0]       || '',
+      '{arg1}':  d.customData?.args?.[1]       || '',
+      '{arg2}':  d.customData?.args?.[2]       || '',
+      '{arg3}':  d.customData?.args?.[3]       || '',
+      '{arg4}':  d.customData?.args?.[4]       || '',
     };
   }
 
-  interpolate(template) {
-    if (typeof template !== 'string') return template;
+  async interpolate(template) {
+  if (typeof template !== 'string') return template;
 
-    const sysVars = this._systemVars();
+  const sysVars = this._systemVars();
+  let result = template;
 
-    let result = template;
-    for (const [key, value] of Object.entries(sysVars)) {
-      result = result.replaceAll(key, value);
-    }
-
-    result = result.replace(/\{var:([^}]+)\}/g, (_, name) => {
-      // busca na ordem: vars locais → userVars → persistent
-      const val = this._vars.get(name) ?? this._userVars.get(name) ?? this._persistent.get(name);
-      return val !== null && val !== undefined ? String(val) : '';
-    });
-
-    return result;
+  // 1. resolve variáveis de sistema ({user_id}, {arg0}, etc.)
+  for (const [key, value] of Object.entries(sysVars)) {
+    result = result.replaceAll(key, value ?? '');
   }
 
-  interpolateParams(params) {
+  // 2. coleta todas as referências {var:nome:qualquercoisa} para buscar no banco
+  const userVarMatches = [];
+  result.replace(/\{var:([^:}]+):([^}]*)\}/g, (_, name, rawPart) => {
+    // ignora :aleatorio e índices numéricos puros
+    if (rawPart === 'aleatorio' || /^\d+$/.test(rawPart)) return;
+
+    // extrai ID de menção <@123> ou <@!123>
+    const mentionMatch = rawPart.match(/^<@!?(\d{17,20})>$/);
+    let userId = mentionMatch ? mentionMatch[1] : rawPart.trim();
+
+    // se vazio ou inválido, usa o authorId de quem disparou
+    if (!userId || !/^\d{17,20}$/.test(userId)) {
+      userId = this.discord.userId || '';
+    }
+
+    if (/^\d{17,20}$/.test(userId)) {
+      userVarMatches.push({ name, rawPart, userId });
+    }
+  });
+
+  // busca todas no banco em paralelo
+  if (userVarMatches.length) {
+    const { UserVarModel } = require('../../../Mongodb/flow.js');
+    const results = await Promise.all(
+      userVarMatches.map(({ name, userId }) =>
+        UserVarModel.findOne({ guildId: this.discord.guildId, userId, name }).lean()
+      )
+    );
+    userVarMatches.forEach(({ name, rawPart }, idx) => {
+      const value = results[idx]?.value !== undefined ? String(results[idx].value) : '';
+      result = result.replaceAll(`{var:${name}:${rawPart}}`, value);
+    });
+  }
+
+  // 3. resolve {var:...} restantes (locais, user, persistent)
+  result = result.replace(/\{var:([^}]+)\}/g, (_, expr) => {
+
+    // {var:nome:aleatorio} — aleatório de lista
+    if (expr.endsWith(':aleatorio')) {
+      const name = expr.slice(0, -10);
+      const val  = this._vars.get(name) ?? this._userVars.get(name) ?? this._persistent.get(name);
+      if (Array.isArray(val) && val.length) return String(val[Math.floor(Math.random() * val.length)]);
+      return '';
+    }
+
+    // {var:nome:N} — índice específico da lista
+    const parts = expr.split(':');
+    if (parts.length === 2 && !isNaN(parts[1])) {
+      const name  = parts[0];
+      const index = Number(parts[1]);
+      const val   = this._vars.get(name) ?? this._userVars.get(name) ?? this._persistent.get(name);
+      if (Array.isArray(val)) return String(val[index] ?? '');
+      return '';
+    }
+
+    // {var:nome} — valor normal
+    const val = this._vars.get(expr) ?? this._userVars.get(expr) ?? this._persistent.get(expr);
+    return val !== null && val !== undefined ? String(val) : '';
+  });
+
+  // 4. {aleatorio:a,b,c}
+  result = result.replace(/\{aleatorio:([^}]+)\}/g, (_, content) => {
+    const options = content.split(',').map(v => v.trim()).filter(Boolean);
+    if (!options.length) return '';
+    return options[Math.floor(Math.random() * options.length)];
+  });
+
+  // 5. {aleatorio:MIN-MAX}
+  result = result.replace(/\{aleatorio:(\d+)-(\d+)\}/g, (_, min, max) => {
+    const n = Math.floor(Math.random() * (Number(max) - Number(min) + 1)) + Number(min);
+    return String(n);
+  });
+
+  return result;
+}
+
+  async interpolateParams(params) {
     if (typeof params === 'string') return this.interpolate(params);
     if (typeof params !== 'object' || params === null) return params;
     if (Array.isArray(params)) return params.map(v => this.interpolateParams(v));
 
     const result = {};
     for (const [key, value] of Object.entries(params)) {
-      result[key] = this.interpolateParams(value);
+      result[key] = await this.interpolateParams(value);
     }
     return result;
   }

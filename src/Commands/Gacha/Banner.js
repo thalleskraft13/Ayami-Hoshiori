@@ -58,10 +58,10 @@ module.exports = {
     let url;
 
     if (bannerId === 0)
-      url = "https://files.catbox.moe/o22ib8.jpeg";
+      url = "https://files.catbox.moe/v2thvp.jpg"
 
     if (bannerId === 1)
-      url = "https://files.catbox.moe/qsvfo7.jpeg";
+      url = "https://files.catbox.moe/matx17.jpeg";
 
     if (bannerId === 2)
       url = "https://static.wikia.nocookie.net/genshin-impact/images/7/7c/Ora%C3%A7%C3%A3o_Invoca%C3%A7%C3%A3o_do_Mochileiro_11-11-2020.png/revision/latest?cb=20220530024332&path-prefix=pt-br";
@@ -75,7 +75,7 @@ module.exports = {
     const embed = new MessageEmbed()
       .setTitle("Banner Selecionado")
       .setDescription(
-        `Primogemas: ${user.primogemas.atm}\nPity: ${pity}/90\nGarantido: ${user.primogemas.bannerlimitado.garantidot5 ? "Sim" : "Não"}\n\nO banner se encerra <t:1780862100:R>`
+        `Primogemas: ${user.primogemas.atm}\nPity: ${pity}/90\nGarantido: ${user.primogemas.bannerlimitado.garantidot5 ? "Sim" : "Não"}\n\nO banner se encerra<t:1782065760:R>`
       )
       .randomColor()
       .setImage(url)
