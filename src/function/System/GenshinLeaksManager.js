@@ -1,4 +1,4 @@
-const GuildDb = require("../../Mongodb/guild.js");
+const {GuildDb} = require("../../Mongodb/guild.js");
 const DiscordRequest = require("../DiscordRequest.js");
 const PremiumManager = require("../Utils/PremiumManager.js");
 const getPerm = require("../Utils/GetPerm.js");

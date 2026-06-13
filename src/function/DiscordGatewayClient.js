@@ -21,10 +21,15 @@ const sendDm               = require('./Utils/sendDm.js');
 const MessageEmbed         = require('./Messages/EmbedBuild.js');
 const GenshinLeaksManager  = require('./System/GenshinLeaksManager.js');
 const LogicEngine = require('./System/EventCreater/LogicEngine.js')
-const FlowUI = require('./System/EventCreater/FlowUI.js');
+const FlowUI = require('./System/EventCreater/Flow.js');
 const BirthdayManager = require("./System/BirthdayManager.js");
 const LibraryManager = require("./System/EventCreater/LibraryManager.js");
 const MissionManager = require('./System/MissionManager.js');
+const SecuritySystem = require("./System/SecuritySystem.js")
+const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
+const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js');
+const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
+
 const EventEmitter = require('events');
 
 
@@ -58,7 +63,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.token    = process.env.DISCORD_TOKEN;
         this.clientId = process.env.CLIENT_ID;
         this.options  = options;
-        this.CLUSTERS_NAME = ["Knave", "Sweet Night"];
+        this.CLUSTERS_NAME = ["Azure Dream", "Sweet Night"];
 
         this.commands = new Map();
 
@@ -86,9 +91,15 @@ class DiscordGatewayClient extends EventEmitter {
         this.libraryManager = new LibraryManager(this);
         this.birthdayManager = new BirthdayManager(this);
         this.missionManager = new MissionManager(this);
+        this.security = new SecuritySystem(this);
+        this.giveaway   = new GiveawaySystem(this);
+        this.gScheduler = new GiveawayScheduler(this);
+        this.giveaway.messageTracker = new GiveawayMessageTracker();
+
 
         
         this.guilds = new GuildManager(this);
+        this.emoji = require("../public/emojis.js")
 
         this._reconnectAttempts = 0;
         this._isReconnecting    = false;
@@ -130,6 +141,7 @@ class DiscordGatewayClient extends EventEmitter {
         const localMap = new Map(localCommands.map(c => [c.name, c]));
 
         const stats = { created: 0, updated: 0, deleted: 0, skipped: 0 };
+        
 
 
         for (const apiCmd of apiCommands) {
@@ -178,7 +190,7 @@ class DiscordGatewayClient extends EventEmitter {
         d: {
             since:      opts.since  ?? null,
             activities: [{
-                name:    opts.name  ?? `🌙 Lua Carmesin | Cluster ${process.env.CLUSTER_ID ?? 0}`,
+                name:    opts.name  ?? `🌙 Constellation | Cluster ${process.env.CLUSTER_ID ?? 0}`,
                 type:    opts.type  ?? 0,
                 url:     opts.url,
                 state:   opts.state,
@@ -267,7 +279,17 @@ class DiscordGatewayClient extends EventEmitter {
         process.on('unhandledRejection',        (r)   => console.error('[AntiCrash] Unhandled Rejection:', r));
         process.on('uncaughtException',         (err) => console.error('[AntiCrash] Uncaught Exception:', err));
         process.on('uncaughtExceptionMonitor',  (err) => console.error('[AntiCrash] Exception Monitor:', err));
-        process.on('warning',                   (w)   => console.warn('[AntiCrash] Warning:', w));
+        process.on('warning', (w) => {
+
+    if (
+        w.code === 'MONGOOSE' &&
+        w.message?.includes('new option')
+    ) {
+        return;
+    }
+
+    console.warn('[AntiCrash] Warning:', w);
+});
     }
 
 
@@ -322,17 +344,49 @@ class DiscordGatewayClient extends EventEmitter {
             this.NextMessageCollector.handle(payload);
             this.guilds.handleDispatch(payload);
             await this.logicEngine.handleGateway(payload);
+            
+            if (payload.t === 'MESSAGE_CREATE') return await this._onMessage(payload.d);
 
             if (payload.t === 'READY')             return await this._onReady(payload.d);
             if (payload.t === 'INTERACTION_CREATE') return await this._onInteraction(payload.d);
             
             if (payload.t === 'VOICE_STATE_UPDATE')   return await this._onVoiceStateUpdate(payload.d);   
         if (payload.t === 'MESSAGE_REACTION_ADD') return await this._onReactionAdd(payload.d);        
+        if (payload.t === 'GUILD_MEMBER_ADD')    return await this._onMemberAdd(payload.d);
+if (payload.t === 'GUILD_ROLE_CREATE')   return await this._onRoleCreate(payload.d);
+if (payload.t === 'CHANNEL_CREATE')      return await this._onChannelCreate(payload.d);
+if (payload.t === 'GUILD_MEMBER_UPDATE') return await this._onMemberUpdate(payload.d);
+if (payload.t === 'WEBHOOKS_UPDATE')     return await this._onWebhooksUpdate(payload.d);
 
         } catch (err) {
             console.error('[Dispatch] Unhandled error:', err);
         }
     }
+    
+    async _onMessage(data) {
+  await this.security.handleMessage(data);
+  await this.giveaway.messageTracker.onMessage(data)
+}
+    
+    async _onMemberAdd(data) {
+  await this.security.handleMemberJoin(data);
+}
+
+async _onRoleCreate(data) {
+  await this.security.handleRoleCreate(data);
+}
+
+async _onChannelCreate(data) {
+  await this.security.handleChannelCreate(data);
+}
+
+async _onMemberUpdate(data) {
+  await this.security.handleMemberUpdate(data);
+}
+
+async _onWebhooksUpdate(data) {
+  await this.security.handleWebhookCreate(data);
+}
     
     
     _onVoiceStateUpdate(d) {
@@ -401,6 +455,7 @@ async _onReactionAdd(d) {
     if (LISTASHARDS.includes(d.shard[0])) {
         await this._connectMongo()
         await this._startTaskManager();
+        await this.gScheduler.boot();
         await this.logicEngine.start();
         await this.libraryManager.start()
         await this.registerSlashCommands();
@@ -410,7 +465,7 @@ async _onReactionAdd(d) {
    
 
     this.setPresence(d.shard[0],{
-      name: `🌙 Assinatura Lua Carmesin por R$8,99 | Cluster ${this.CLUSTERS_NAME[process.env.CLUSTER_ID ?? 0]}, Shard: ${d.shard[0]}/4`
+      name: `🌙 Assinatura "Constellation" por R$7,99 | Cluster ${this.CLUSTERS_NAME[process.env.CLUSTER_ID ?? 0]}, Shard: ${d.shard[0]}/4`
     });
     
 
@@ -604,28 +659,25 @@ async _onReactionAdd(d) {
 
     _buildLevelUpDescription({ levelBefore, levelAfter, rolls, primogemas, xpTotal, xpRestante }) {
         return (
-`Hm... então você evoluiu.
+`${this.emoji.animada} Uau, você subiu de rank!! Do **#${levelBefore}** pro **#${levelAfter}**, que incrível!!
 
-Do Rank de Aventureiro **#${levelBefore}** para **#${levelAfter}**.
-Nada mal. Você começa a entender o peso do próprio crescimento.
+Fico tão feliz em ver você crescendo assim! ${this.emoji.corao}
 
-Como reconhecimento pelo avanço, a Casa da Lareira concedeu a você **${rolls} giros**.
+Fiquei tão animada que separei **${rolls} giros** pra você de presente~!
 
 💎 Recompensa recebida:
 **${primogemas.toLocaleString()} Primogemas**
 
-Use-os com sabedoria… ou desperdice-os como tantos outros fazem.
+${this.emoji.festa} Aproveita bem, tá?! Cada primogema conta~
 
-Sua experiência atual é **${xpTotal}XP**.
-Ainda faltam **${xpRestante}XP** para alcançar o Rank de Aventureiro **#${levelAfter + 1}**.
+Sua experiência atual é **${xpTotal} XP**!
+Faltam só **${xpRestante} XP** pro Rank **#${levelAfter + 1}**!
 
-Não pense que isso é o suficiente.
-O verdadeiro valor não está no número… mas no quanto você suporta para alcançá-lo.
+${this.emoji.carinho} Você consegue, eu acredito em você!!
+Continua assim e logo logo você vai estar no topo~
 
-Continue.
-
-Eu estarei observando.`
-        );
+Torço muito por você! ${this.emoji.feliz}`
+)
     }
 
 

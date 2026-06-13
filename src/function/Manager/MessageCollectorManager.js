@@ -54,6 +54,7 @@ class NextMessageCollector {
 
        
         if (message.author?.id === process.env.CLIENT_ID) return;
+        if (message.author.bot) return;
 
 
         this._runPipeline(message);
@@ -268,8 +269,7 @@ Eu estarei observando.`
             method: 'POST',
             body: {
                 content:
-                    `<@${message.author.id}> | Use </ajuda:0> para visualizar todos os comandos e sistemas disponíveis.\n` +
-                    `-# Continue crescendo. Eu observo cada passo seu…`,
+                    `${this.client.emoji.default} **Oi, <@${message.author.id}>! Você me chamou?**\nSe precisar de ajuda, use /ajuda para ver todos os meus comandos e sistemas disponíveis! ✨\n\nVou estar aqui esperando~ 💙`,
             },
         });
     }

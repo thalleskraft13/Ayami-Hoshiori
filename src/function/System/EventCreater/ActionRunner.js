@@ -355,6 +355,24 @@ class ActionRunner {
       case 'remove_index': ctx.removeVarIndex(p.name, p.value); break;
       case 'random_from':  ctx.setVar(p.saveAs || p.name + '_random', ctx.randomFromVar(p.name)); break;
       case 'show_ranking': await this._showRanking(p, ctx); break;
+      case 'set_user_var': {
+  const { UserVarModel } = require('../../../Mongodb/flow.js');
+  const guildId = ctx.discord.guildId;
+
+  let targetUserId = p.targetUserId?.trim() || '';
+  const mentionMatch = targetUserId.match(/^<@!?(\d{17,20})>$/);
+  if (mentionMatch) targetUserId = mentionMatch[1];
+  if (!targetUserId || !/^\d{17,20}$/.test(targetUserId)) {
+    targetUserId = ctx.discord.userId;
+  }
+
+  await UserVarModel.findOneAndUpdate(
+    { guildId, userId: targetUserId, name: p.name },
+    { value: p.value, updatedAt: new Date() },
+    { upsert: true, returnDocument: 'after' }
+  );
+  break;
+}
     }
   }
 
@@ -549,6 +567,11 @@ class ActionRunner {
       case 'stop_execution':
         ctx.stop();
         break;
+        
+        case 'ask_confirm': {
+          await this._askConfirm(p, ctx);
+          break;
+        }
     }
   }
 
@@ -741,6 +764,80 @@ class ActionRunner {
       }
     }
   }
+  
+  async _askConfirm(p, ctx) {
+  const channelId = ctx.discord.channelId;
+  if (!channelId) return;
+
+  // resolve o userId alvo — pode ser {arg0} já interpolado
+  let targetUserId = p.targetUserId?.trim() || '';
+  const mentionMatch = targetUserId.match(/^<@!?(\d{17,20})>$/);
+  if (mentionMatch) targetUserId = mentionMatch[1];
+  if (!targetUserId || !/^\d{17,20}$/.test(targetUserId)) {
+    targetUserId = ctx.discord.userId;
+  }
+
+  const timeoutSec = Number(p.timeout) || 30;
+  const cancelMsg  = p.cancelMessage || '❌ Operação cancelada.';
+  const content    = p.content || '❓ Confirmar a operação?';
+
+  return new Promise(async (resolve) => {
+    let resolved = false;
+
+    const btnConfirm = this.client.interactions.createButton({
+      user: targetUserId,
+      tempo: timeoutSec * 1000,
+      data:  { label: '✅ Confirmar', style: 3 },
+      funcao: async (i) => {
+        if (resolved) return;
+        resolved = true;
+        await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+          method: 'POST',
+          body:   { type: 7, data: { components: [] } }
+        });
+        resolve(true);
+      }
+    });
+
+    const btnCancel = this.client.interactions.createButton({
+      user: targetUserId,
+      tempo: timeoutSec * 1000,
+      data:  { label: '❌ Cancelar', style: 4 },
+      funcao: async (i) => {
+        if (resolved) return;
+        resolved = true;
+        await DiscordRequest(`/interactions/${i.id}/${i.token}/callback`, {
+          method: 'POST',
+          body:   { type: 7, data: { content: cancelMsg, components: [], embeds: [] } }
+        });
+        resolve(false);
+      }
+    });
+
+    // envia a mensagem de confirmação
+    await DiscordRequest(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: {
+        content,
+        components: [{ type: 1, components: [btnConfirm, btnCancel] }]
+      }
+    });
+
+    // timeout — se não responder, cancela
+    setTimeout(async () => {
+      if (resolved) return;
+      resolved = true;
+      await DiscordRequest(`/channels/${channelId}/messages`, {
+        method: 'POST',
+        body:   { content: `⏱️ Tempo esgotado. ${cancelMsg}` }
+      });
+      resolve(false);
+    }, timeoutSec * 1000);
+
+  }).then(confirmed => {
+    if (!confirmed) ctx.cancel();
+  });
+}
 }
 
 module.exports = ActionRunner;

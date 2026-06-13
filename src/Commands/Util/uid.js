@@ -1,3 +1,5 @@
+'use strict';
+
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const db = require("../../Mongodb/userglobal.js");
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
@@ -46,129 +48,135 @@ module.exports = {
       }]
     }]
   },
-  
-  async execute(interaction, client){
+
+  async execute(interaction, client) {
+
     const subcommand = interaction.data.options[0];
     const authorId = interaction.member.user.id;
-    
-    if (subcommand.name === "salvar"){
-      let uid = subcommand.options?.[0]?.value;
-      let server = subcommand.options?.[1]?.value;
-      let servidores = {
-        "1": "America Server",
-        "2": "Europa Server",
-        "3": "Asia Server"
-      };
-      
-      let userdb = await db.findOne({
-        userId: authorId
-      });
-      
-      if (!userdb){
-        let newuser = new db({
-          userId: authorId
-        });
-        
+    const emoji = client.emoji;
+
+    const servidores = {
+      "1": "America Server",
+      "2": "Europa Server",
+      "3": "Asia Server"
+    };
+
+    // ──────────────────────────────────────────
+    //  SALVAR
+    // ──────────────────────────────────────────
+    if (subcommand.name === "salvar") {
+
+      const uid = subcommand.options?.[0]?.value;
+      const server = subcommand.options?.[1]?.value;
+
+      let userdb = await db.findOne({ userId: authorId });
+
+      if (!userdb) {
+        const newuser = new db({ userId: authorId });
         await newuser.save();
-        
-        userdb = await db.findOne({
-          userId: authorId
-        });
-      };
-      
+        userdb = await db.findOne({ userId: authorId });
+      }
+
       userdb.uidGenshin = uid;
       userdb.server = servidores[server];
       await userdb.save();
+
+      
+
+      return DiscordRequest(
+        `/interactions/${interaction.id}/${interaction.token}/callback`,
+        {
+          method: "POST",
+          body: {
+            type: 4,
+            data: {
+              content: `${emoji.animada} UID salvo com sucesso! Agora todo mundo pode te encontrar no jogo~\n**${uid}** \`(${servidores[server]})\` ${emoji.corao}`
+            }
+          }
+        }
+      );
       
       await client.UidManager.checkAndSendUid({
-  guildId: interaction.guild_id,
-  uid,
-  server: servidores[server],
-  user: interaction.member.user
-});
-      
-      await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`,{
-        method: "POST",
-        body: {
-          type: 4,
-          data: {
-            content: `✨ | Seu UID foi salvo para **${uid} \`(${servidores[server]})\`** com sucesso.`
-          }
-        }
-      })
-    } else if (subcommand.name === "ver"){
-      
-      let userID = subcommand.options?.[0]?.value;
-      let embed = new MessageEmbed();
-      let userdb = await db.findOne({
-        userId: userID
-      })
-      
-      if (!userdb){
-        let newuser = new db({
-          userId: userID
-        });
-        
-        await newuser.save();
-        
-        userdb = await db.findOne({
-          userId: userID
-        });
-      };
-      
-      let user = await DiscordRequest(`/users/${userID}`, {
-        method: 'GET'
+        guildId: interaction.guild_id,
+        uid,
+        server: servidores[server],
+        user: interaction.member.user
       });
-      
-      if (userdb.uidGenshin === null || userdb.uidGenshin === 0){
-        
-        embed.setTitle("Uid não encontrado...");
-        embed.setDescription(`[${user.global_name ? user.global_name : user.username}](https://discord.com/users/${userID}) não tem um UID salvo.`);
-        embed.setColor("Red")
-        
-        
-        return await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`,{
-        method: "POST",
-        body: {
-          type: 4,
-          data: {
-            content: `<@${authorId}>`,
-            embeds: [embed.build()]
+    }
+
+    // ──────────────────────────────────────────
+    //  VER
+    // ──────────────────────────────────────────
+    if (subcommand.name === "ver") {
+
+      const userID = subcommand.options?.[0]?.value;
+
+      let userdb = await db.findOne({ userId: userID });
+
+      if (!userdb) {
+        const newuser = new db({ userId: userID });
+        await newuser.save();
+        userdb = await db.findOne({ userId: userID });
+      }
+
+      const user = await DiscordRequest(`/users/${userID}`, { method: "GET" });
+      const userName = user.global_name || user.username;
+
+      // ── Sem UID ──
+      if (!userdb.uidGenshin || userdb.uidGenshin === 0) {
+
+        const embed = new MessageEmbed()
+          .setTitle(`${emoji.emduvida} UID não encontrado...`)
+          .setDescription(`${emoji.emburrada} [${userName}](https://discord.com/users/${userID}) ainda não salvou nenhum UID...\n\nUse \`/uid salvar\` pra registrar o seu!`)
+          .setColor("Red")
+          .build();
+
+        return DiscordRequest(
+          `/interactions/${interaction.id}/${interaction.token}/callback`,
+          {
+            method: "POST",
+            body: {
+              type: 4,
+              data: {
+                content: `<@${authorId}>`,
+                embeds: [embed]
+              }
+            }
+          }
+        );
+      }
+
+      // ── Com UID ──
+      const embed = new MessageEmbed()
+        .setTitle(`${emoji.feliz} UID de ${userName}`)
+        .setDescription(`${emoji.curtida} O UID de [${userName}](https://discord.com/users/${userID}) é **${userdb.uidGenshin}** \`(${userdb.server})\`!\n\nVá lá e adiciona ele no jogo~ ${emoji.animada}`)
+        .setColor("Blue")
+        .setThumbnail(getAvatarURL(user))
+        .build();
+
+      return DiscordRequest(
+        `/interactions/${interaction.id}/${interaction.token}/callback`,
+        {
+          method: "POST",
+          body: {
+            type: 4,
+            data: {
+              content: `<@${authorId}>`,
+              embeds: [embed]
+            }
           }
         }
-      })
-      } else {
-        
-        embed.setTitle(`Uid de ${user.global_name ? user.global_name : user.username}`);
-        embed.setDescription(`O UID de  [${user.global_name ? user.global_name : user.username}](https://discord.com/users/${userID}) é **${userdb.uidGenshin} \`(${userdb.server})\`**.`);
-        embed.setColor("Blue");
-        embed.setThumbnail(getAvatarURL(user));
-        
-      
-      await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`,{
-        method: "POST",
-        body: {
-          type: 4,
-          data: {
-            content: `<@${authorId}>`,
-            embeds: [embed.build()]
-          }
-        }
-      })
-      };
-      
+      );
     }
   }
-}
-
+};
 
 function getAvatarURL(user) {
-
   if (!user.avatar)
     return `https://cdn.discordapp.com/embed/avatars/0.png`;
 
   const isGif = user.avatar.startsWith("a_");
-  const extension = isGif ? "gif" : "png";
+  const ext = isGif ? "gif" : "png";
 
-  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${extension}?size=1024`;
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=1024`;
 }

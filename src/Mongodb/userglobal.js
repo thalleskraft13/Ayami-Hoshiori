@@ -229,4 +229,4 @@ const userSchema = new Schema({
 
 });
 
-module.exports = model("User Global-Canary", userSchema);
+module.exports = model("User Global", userSchema);

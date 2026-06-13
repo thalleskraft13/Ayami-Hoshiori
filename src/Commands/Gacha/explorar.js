@@ -1,3 +1,5 @@
+'use strict';
+
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const db = require("../../Mongodb/userglobal.js");
 
@@ -24,22 +26,23 @@ module.exports = {
 
     const subcommand = interaction.data.options?.[0];
     const authorId = interaction.member.user.id;
+    const emoji = client.emoji;
     if (!subcommand) return;
 
     let user = await db.findOne({ userId: authorId });
     if (!user) user = await db.create({ userId: authorId }).save();
-    
-
-    
 
     const agora = Date.now();
 
+    // ──────────────────────────────────────────
+    //  TEMPO
+    // ──────────────────────────────────────────
     if (subcommand.name === "tempo") {
 
       const exploracao = user.exploracao.mondstadt;
 
       if (!exploracao.tempo || exploracao.tempo <= agora) {
-        return await DiscordRequest(
+        return DiscordRequest(
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
@@ -47,7 +50,7 @@ module.exports = {
               type: 4,
               data: {
                 flags: 64,
-                content: "🌿 Você não possui nenhuma exploração ativa no momento."
+                content: `${emoji.pensando} Você não possui nenhuma exploração ativa no momento... Que tal explorar um pouco?`
               }
             }
           }
@@ -59,7 +62,7 @@ module.exports = {
       const minutos = Math.floor((restante / 1000 / 60) % 60);
       const segundos = Math.floor((restante / 1000) % 60);
 
-      return await DiscordRequest(
+      return DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
           method: "POST",
@@ -67,25 +70,28 @@ module.exports = {
             type: 4,
             data: {
               flags: 64,
-              content:
-                `⏳ Exploração em andamento.\nTempo restante: **${horas > 0 ? `${horas}h ` : ""}${minutos}m ${segundos}s**`
+              content: `${emoji.sonolenta} Exploração em andamento, aguenta aí!\nTempo restante: **${horas > 0 ? `${horas}h ` : ""}${minutos}m ${segundos}s** ${emoji.animada}`
             }
           }
         }
       );
     }
 
+    // ──────────────────────────────────────────
+    //  MONDSTADT
+    // ──────────────────────────────────────────
     if (subcommand.name === "mondstadt") {
 
       const exploracao = user.exploracao.mondstadt;
 
+      // Já tem exploração em andamento
       if (exploracao.tempo > agora) {
 
         const restante = exploracao.tempo - agora;
         const horas = Math.floor(restante / 1000 / 60 / 60);
         const minutos = Math.floor((restante / 1000 / 60) % 60);
 
-        return await DiscordRequest(
+        return DiscordRequest(
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
@@ -93,37 +99,30 @@ module.exports = {
               type: 4,
               data: {
                 flags: 64,
-                content:
-                  `⏳ Tem uma exploração em andamento.\nVocê poderá explorar novamente em ${horas > 0 ? `${horas}h ` : ""}${minutos}min.`
+                content: `${emoji.emburrada} Ei, você ainda tem uma exploração rolando!\nVolta em ${horas > 0 ? `${horas}h ` : ""}${minutos}min, tá? ${emoji.carinho}`
               }
             }
           }
         );
       }
 
+      // Tem recompensa pra coletar
       if (exploracao.tempo <= agora && exploracao.coletar > 0) {
 
         const quantidade = exploracao.coletar;
 
-        if (!user.primogemas) {
-          user.primogemas = { atm: 0, transacoes: [] };
-        }
+        if (!user.primogemas) user.primogemas = { atm: 0, transacoes: [] };
 
         user.primogemas.atm += quantidade;
-        user.primogemas.transacoes.push({
-          tipo: "exploracao",
-          quantidade,
-          data: agora
-        });
-        
+        user.primogemas.transacoes.push({ tipo: "exploracao", quantidade, data: agora });
+
         await client.missionManager.trackEvent(authorId, 'explore', 1, interaction.guild_id);
 
         user.exploracao.mondstadt.coletar = 0;
         user.exploracao.mondstadt.tempo = 0;
-
         await user.save();
 
-        return await DiscordRequest(
+        return DiscordRequest(
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
@@ -131,31 +130,31 @@ module.exports = {
               type: 4,
               data: {
                 flags: 64,
-                content:
-                  `🎁 Sua exploração terminou.\nVocê coletou **${quantidade} Primogemas**.`
+                content: `${emoji.festa} Sua exploração terminou! Você coletou **${quantidade} Primogemas**! ${emoji.corao}\n\nBom trabalho, aventureiro~`
               }
             }
           }
         );
       }
 
-      const msg = [
+      // Painel de exploração
+      const buildPanel = (disabled = false) => ([
         {
           type: 10,
           content: `<@${authorId}>`
         },
         {
           type: 17,
-          accent_color: 1167437,
+          accent_color: 0x11CC8D,
           spoiler: false,
           components: [
             {
               type: 10,
-              content: "# Exploração de Mondstadt"
+              content: `# ${emoji.animada} Exploração de Mondstadt`
             },
             {
               type: 10,
-              content: "Os ventos de Mondstadt raramente carregam apenas canções e liberdade. Vá. Explore cada trilha, observe cada detalhe... e retorne apenas quando tiver algo de valor para me mostrar."
+              content: `${emoji.pensando} Mondstadt está chamando por você! Os ventos de Barbatos raramente carregam só canções...\n\nEscolha por quanto tempo quer explorar e eu aviso quando terminar, pode deixar comigo! ${emoji.carinho}`
             },
             {
               type: 12,
@@ -175,26 +174,26 @@ module.exports = {
                 client.interactions.createSelect({
                   user: authorId,
                   data: {
-                    placeholder: "Escolha o tempo de exploração",
+                    placeholder: `${disabled ? "✅ Exploração iniciada!" : "Escolha o tempo de exploração"}`,
                     options: [
                       {
                         label: "Rastros dos Ventos",
-                        description: "Explore Mondstadt por 30 minutos",
+                        description: "Explore Mondstadt por 30 minutos • 300 Primogemas",
                         value: "30min"
                       },
                       {
                         label: "Planícies Anemo",
-                        description: "Explore Mondstadt por 1 hora",
+                        description: "Explore Mondstadt por 1 hora • 600 Primogemas",
                         value: "1h"
                       },
                       {
                         label: "Expedição da Liberdade",
-                        description: "Explore Mondstadt por 2 horas",
+                        description: "Explore Mondstadt por 2 horas • 1200 Primogemas",
                         value: "2h"
                       },
                       {
                         label: "Grande Jornada dos Mil Ventos",
-                        description: "Explore Mondstadt por 10 horas",
+                        description: "Explore Mondstadt por 10 horas • 6000 Primogemas",
                         value: "10h"
                       }
                     ]
@@ -210,91 +209,95 @@ module.exports = {
                     let tempoTexto = "";
 
                     switch (value) {
-                      case "30min":
-                        tempo = 30 * 60 * 1000;
-                        recompensa = 300;
-                        tempoTexto = "30 minutos";
-                        break;
-
-                      case "1h":
-                        tempo = 1 * 60 * 60 * 1000;
-                        recompensa = 600;
-                        tempoTexto = "1 hora";
-                        break;
-
-                      case "2h":
-                        tempo = 2 * 60 * 60 * 1000;
-                        recompensa = 1200;
-                        tempoTexto = "2 horas";
-                        break;
-
-                      case "10h":
-                        tempo = 10 * 60 * 60 * 1000;
-                        recompensa = 6000;
-                        tempoTexto = "10 horas";
-                        break;
-
-                      default:
-                        return;
+                      case "30min": tempo = 30 * 60 * 1000;        recompensa = 300;  tempoTexto = "30 minutos"; break;
+                      case "1h":    tempo = 1 * 60 * 60 * 1000;    recompensa = 600;  tempoTexto = "1 hora";     break;
+                      case "2h":    tempo = 2 * 60 * 60 * 1000;    recompensa = 1200; tempoTexto = "2 horas";    break;
+                      case "10h":   tempo = 10 * 60 * 60 * 1000;   recompensa = 6000; tempoTexto = "10 horas";   break;
+                      default: return;
                     }
 
-                    const user = await db.findOne({ userId });
+                    const userDoc = await db.findOne({ userId });
+                    userDoc.exploracao.mondstadt.tempo = Date.now() + tempo;
+                    userDoc.exploracao.mondstadt.coletar = recompensa;
+                    await userDoc.save();
 
-                    user.exploracao.mondstadt.tempo = Date.now() + tempo;
-                    user.exploracao.mondstadt.coletar = recompensa;
-
-                    await user.save();
-
+                    // Edita a mensagem original desabilitando o select
                     await DiscordRequest(
                       `/interactions/${i.id}/${i.token}/callback`,
                       {
                         method: "POST",
                         body: {
-                          type: 4,
+                          type: 7,
                           data: {
-                            flags: 64,
-                            content:
-                              `🌿 Sua exploração em Mondstadt começou.\n` +
-                              `⏳ Duração: **${tempoTexto}**`,
+                            flags: 32768,
                             components: [
                               {
-                                type: 1,
+                                type: 10,
+                                content: `<@${userId}>`
+                              },
+                              {
+                                type: 17,
+                                accent_color: 0x11CC8D,
+                                spoiler: false,
                                 components: [
-                                  client.interactions.createButton({
-                                    user: userId,
-                                    data: {
-                                      label: "Ativar Lembrete",
-                                      style: 2
-                                    },
-                                    funcao: async (btn) => {
+                                  {
+                                    type: 10,
+                                    content: `# ${emoji.feliz} Exploração Iniciada!`
+                                  },
+                                  {
+                                    type: 10,
+                                    content: `${emoji.animada} Boa aventura em Mondstadt! Você vai por **${tempoTexto}** e volta com **${recompensa} Primogemas**!\n\nEu fico aqui te esperando, vai lá! ${emoji.corao}`
+                                  },
+                                  {
+                                    type: 12,
+                                    items: [
+                                      {
+                                        media: {
+                                          url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS-SdaIFV7rzuOApt4UI4QIFA1yZXJ4SOyzOmSvcIpD6CTIWOmP4TXuPobC&s=10"
+                                        },
+                                        description: null,
+                                        spoiler: false
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    type: 1,
+                                    components: [
+                                      client.interactions.createButton({
+                                        user: userId,
+                                        data: {
+                                          label: "⏰ Ativar Lembrete",
+                                          style: 2
+                                        },
+                                        funcao: async (btn) => {
 
-                                      await DiscordRequest(
-                                        `/interactions/${btn.id}/${btn.token}/callback`,
-                                        {
-                                          method: "POST",
-                                          body: {
-                                            type: 4,
-                                            data: {
-                                              flags: 64,
-                                              content:
-                                                "⏰ Lembrete ativado. Avisarei você quando a exploração terminar."
+                                          await DiscordRequest(
+                                            `/interactions/${btn.id}/${btn.token}/callback`,
+                                            {
+                                              method: "POST",
+                                              body: {
+                                                type: 4,
+                                                data: {
+                                                  flags: 64,
+                                                  content: `${emoji.carinho} Lembrete ativado! Eu mesma venho te avisar quando terminar~`
+                                                }
+                                              }
                                             }
-                                          }
-                                        }
-                                      );
+                                          );
 
-                                      await client.TaskManager.create({
-                                        tipo: "lembrete",
-                                        delay: tempo,
-                                        dados: {
-                                          userId,
-                                          channelId: btn.channel_id,
-                                          mensagem:
-                                            "Sua exploração em Mondstadt terminou. Vá coletar suas Primogemas."
+                                          await client.TaskManager.create({
+                                            tipo: "lembrete",
+                                            delay: tempo,
+                                            dados: {
+                                              userId,
+                                              channelId: btn.channel_id,
+                                              mensagem: `${emoji.festa} Sua exploração em Mondstadt terminou! Corre lá coletar suas **${recompensa} Primogemas**! ${emoji.animada}`
+                                            }
+                                          });
                                         }
-                                      });
-                                    }
-                                  })
+                                      })
+                                    ]
+                                  }
                                 ]
                               }
                             ]
@@ -308,9 +311,9 @@ module.exports = {
             }
           ]
         }
-      ];
+      ]);
 
-      await DiscordRequest(
+      return DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
           method: "POST",
@@ -318,7 +321,7 @@ module.exports = {
             type: 4,
             data: {
               flags: 32768,
-              components: msg
+              components: buildPanel()
             }
           }
         }

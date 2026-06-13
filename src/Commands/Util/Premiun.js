@@ -1,4 +1,3 @@
-
 'use strict';
 
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
@@ -8,27 +7,27 @@ const PremiumManager = require("../../function/Utils/PremiumManager.js");
 module.exports = {
   data: {
     name: "premium",
-    description: "Sistema Premium Lua Carmesim",
+    description: "Sistema Constellation — Ayami Hoshiori",
     options: [
       {
         type: 1,
         name: "visualizar",
-        description: "Visualizar seu premium"
+        description: "Visualize sua assinatura Constellation"
       },
       {
         type: 1,
         name: "comprar",
-        description: "Comprar premium"
+        description: "Conheça os planos Constellation"
       },
       {
         type: 1,
         name: "resgatar",
-        description: "Resgatar uma key",
+        description: "Resgatar um código Constellation",
         options: [
           {
             type: 3,
             name: "codigo",
-            description: "Código da key",
+            description: "Seu código de resgate",
             required: true
           }
         ]
@@ -40,6 +39,7 @@ module.exports = {
 
     const sub = interaction.data.options?.[0]?.name;
     const userId = interaction.member.user.id;
+    const emoji = client.emoji;
 
     switch (sub) {
 
@@ -47,7 +47,7 @@ module.exports = {
         return renderPanel(interaction, client, userId);
 
       case "comprar":
-        return renderBuy(interaction);
+        return renderBuy(interaction, emoji);
 
       case "resgatar": {
 
@@ -63,11 +63,11 @@ module.exports = {
         );
 
         const embed = new MessageEmbed()
-          .setTitle("🌙 Resgate de Premium")
+          .setTitle(`${emoji.animada} Resgate de Constellation`)
           .setDescription(
             result.status
-              ? `✅ Key resgatada com sucesso.\n\nCódigo: \`${codigo}\``
-              : `❌ ${result.motivo}`
+              ? `${emoji.festa} Key resgatada com sucesso!\n\nCódigo: \`${codigo}\`\n\nBem-vinda à Constellation~ ${emoji.corao}`
+              : `${emoji.chorando} Ops! ${result.motivo}`
           )
           .randomColor()
           .build();
@@ -90,30 +90,43 @@ module.exports = {
   }
 };
 
-async function renderBuy(interaction) {
+// ──────────────────────────────────────────
+//  COMPRAR
+// ──────────────────────────────────────────
+
+async function renderBuy(interaction, emoji) {
 
   const embed = new MessageEmbed()
-    .setTitle("🌙 Lua Carmesim")
+    .setTitle(`${emoji.feliz} Constellation — Ayami Hoshiori`)
     .setDescription(`
-**A Assinatura Oficial da Arlecchino**
+${emoji.animada} **A assinatura oficial da Ayami chegou!**
 
-🗓 Mensal — R$ 8,99
-📆 Trimestral — R$ 24,99
-📅 Semestral — R$ 44,99
+✨ Escolha seu plano:
 
-━━━━━━━━━━━━━━━━━━
+> 🗓 **Mensal** — R$ 7,99
+> 📆 **Trimestral** — R$ 21,99
+> 📅 **Semestral** — R$ 39,99
 
-🔥 Daily Aprimorado
-⚔️ XP aumentado
-🏅 Emblema exclusivo
-🎲 Mais sorteios
-🌟 Personagem T5 grátis
-🩸 Descontos exclusivos
+${emoji.curtida} **Ou adquira um Código Constellation**
+> 🔑 Key avulsa — R$ 8,50
 
-━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━
 
-*A Lua Carmesim não é sobre preço.
-É sobre posição.*
+${emoji.corao} **Benefícios exclusivos:**
+
+🏅 Cargo exclusivo no Servidor Oficial
+⭐ Mais chances ao obter Personagens 5 Estrelas
+💎 Bônus de Primogemas no Daily
+⚙️ Configurações avançadas nos sistemas
+　*(Tipo de Chat, Form Sequencial, Form por Modal,*
+　*Cargos Temporários, Ticket Setup e muito mais)*
+🔗 Uso de Webhook em Sistemas
+📌 Botão Fixo + Webhook no Sistema de Aniversário
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+${emoji.pensando} *Constellation não é só um plano.*
+*É o seu lugar entre as estrelas.* ${emoji.sria}
 `)
     .randomColor()
     .build();
@@ -134,7 +147,7 @@ async function renderBuy(interaction) {
                 {
                   type: 2,
                   style: 5,
-                  label: "Comprar Agora",
+                  label: "✨ Assinar Constellation",
                   url: "https://discord.gg/wfaRZw5pGn"
                 }
               ]
@@ -146,23 +159,20 @@ async function renderBuy(interaction) {
   );
 }
 
-async function renderPanel(
-  interaction,
-  client,
-  userId,
-  edit = false
-) {
+// ──────────────────────────────────────────
+//  PAINEL
+// ──────────────────────────────────────────
+
+async function renderPanel(interaction, client, userId, edit = false) {
 
   const guildId = interaction.guild_id;
+  const emoji = client.emoji;
 
-  const userPremium =
-    await PremiumManager.getUserPremium(userId);
-
-  const guildPremium =
-    await PremiumManager.getGuildPremium(guildId);
-
-  const guilds =
-    await PremiumManager.listUserGuilds(userId);
+  const [userPremium, guildPremium, guilds] = await Promise.all([
+    PremiumManager.getUserPremium(userId),
+    PremiumManager.getGuildPremium(guildId),
+    PremiumManager.listUserGuilds(userId)
+  ]);
 
   const user = interaction.member.user;
 
@@ -171,34 +181,25 @@ async function renderPanel(
     : `https://cdn.discordapp.com/embed/avatars/0.png`;
 
   const formatTempo = (ms) => {
-
-    const s =
-      Math.floor(ms / 1000) % 60;
-
-    const m =
-      Math.floor(ms / (1000 * 60)) % 60;
-
-    const h =
-      Math.floor(ms / (1000 * 60 * 60)) % 24;
-
-    const d =
-      Math.floor(ms / (1000 * 60 * 60 * 24));
-
+    const s = Math.floor(ms / 1000) % 60;
+    const m = Math.floor(ms / (1000 * 60)) % 60;
+    const h = Math.floor(ms / (1000 * 60 * 60)) % 24;
+    const d = Math.floor(ms / (1000 * 60 * 60 * 24));
     return `${d}d ${h}h ${m}m ${s}s`;
   };
 
+  // ── Sem premium ──
   if (!userPremium.status) {
 
     const embed = new MessageEmbed()
-      .setTitle("🌙 Lua Carmesim")
+      .setTitle(`${emoji.emduvida} Constellation`)
       .setDescription(`
-Você não possui Premium ativo.
+${emoji.emburrada} Você ainda não possui a Constellation ativa...
 
-Use:
+Use \`/premium comprar\` para conhecer os planos
+ou \`/premium resgatar\` se já tiver um código!
 
-\`/premium comprar\`
-
-para adquirir sua assinatura.
+${emoji.carinho} *Venha brilhar com a Ayami~*
 `)
       .setThumbnail(avatar)
       .randomColor()
@@ -219,52 +220,52 @@ para adquirir sua assinatura.
     );
   }
 
-  const totalSlots =
-    guilds.length +
-    Math.max(
-      0,
-      (guildPremium.status &&
-      guildPremium.userId === userId &&
-      !guilds.find(g => g.guildId === guildId))
-        ? 1
-        : 0
-    );
+  // ── Buscar nomes dos servidores vinculados ──
+  const guildNames = await Promise.all(
+    guilds.map(async (g) => {
+      try {
+        const data = await DiscordRequest(`/guilds/${g.guildId}`, {
+          method: "GET"
+        });
+        return { guildId: g.guildId, name: data?.name ?? g.guildId };
+      } catch {
+        return { guildId: g.guildId, name: g.guildId };
+      }
+    })
+  );
 
+  // ── Montar descrição ──
   let desc = "";
 
-  desc += `👤 Usuário: <@${userId}>\n`;
-  desc += `🌙 Status: Ativo\n`;
-  desc += `⏳ Restante: ${formatTempo(userPremium.tempo)}\n\n`;
+  desc += `${emoji.animada} **Assinante:** <@${userId}>\n`;
+  desc += `✨ **Status:** Constellation Ativa\n`;
+  desc += `⏳ **Expira em:** \`${formatTempo(userPremium.tempo)}\`\n\n`;
 
-  desc += `🏠 Servidores Premium: ${guilds.length}\n\n`;
+  desc += `🏠 **Servidores com Constellation:** ${guilds.length}\n`;
 
-  if (guilds.length) {
-
-    desc += `**Servidores vinculados:**\n`;
-
-    for (const g of guilds) {
-      desc += `• ${g.guildId}\n`;
+  if (guildNames.length) {
+    desc += `\n**Servidores vinculados:**\n`;
+    for (const g of guildNames) {
+      desc += `${emoji.curtida} **${g.name}** \`(${g.guildId})\`\n`;
     }
-
     desc += "\n";
   }
 
+  desc += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   desc += `**Servidor Atual**\n`;
 
   if (guildPremium.status) {
-
     desc +=
-      `✅ Premium ativo\n` +
-      `⏳ ${formatTempo(guildPremium.tempo)}`;
-
+      `${emoji.feliz} Constellation **ativa** aqui!\n` +
+      `⏳ \`${formatTempo(guildPremium.tempo)}\``;
   } else {
-
     desc +=
-      `❌ Sem premium`;
+      `${emoji.emburrada} Constellation **não ativa** neste servidor.\n` +
+      `Use o botão abaixo para ativar!`;
   }
 
   const embed = new MessageEmbed()
-    .setTitle("🌙 Painel Premium")
+    .setTitle(`${emoji.festa} Painel Constellation`)
     .setDescription(desc)
     .setThumbnail(avatar)
     .randomColor()
@@ -272,82 +273,50 @@ para adquirir sua assinatura.
 
   const components = [];
 
-  if (
-    userPremium.status &&
-    !guildPremium.status
-  ) {
+  // Botão: Ativar
+  if (userPremium.status && !guildPremium.status) {
 
-    const btnAdd =
-      client.interactions.createButton({
-        user: userId,
-        data: {
-          label: "Ativar neste Servidor",
-          style: 1
-        },
-        funcao: async (btn) => {
-
-          await PremiumManager.addGuildPremium(
-            guildId,
-            userId
-          );
-
-          return renderPanel(
-            btn,
-            client,
-            userId,
-            true
-          );
-        }
-      });
-
-    components.push({
-      type: 1,
-      components: [btnAdd]
+    const btnAdd = client.interactions.createButton({
+      user: userId,
+      data: {
+        label: "✨ Ativar neste Servidor",
+        style: 1
+      },
+      funcao: async (btn) => {
+        await PremiumManager.addGuildPremium(guildId, userId);
+        return renderPanel(btn, client, userId, true);
+      }
     });
 
+    components.push({ type: 1, components: [btnAdd] });
   }
 
-  if (
-    guildPremium.status &&
-    guildPremium.userId === userId
-  ) {
+  // Botão: Remover
+  if (guildPremium.status && guildPremium.userId === userId) {
 
-    const btnRemove =
-      client.interactions.createButton({
-        user: userId,
-        data: {
-          label: "Remover deste Servidor",
-          style: 4
-        },
-        funcao: async (btn) => {
-
-          await PremiumManager.removeGuildPremium(
-            guildId,
-            userId
-          );
-
-          return renderPanel(
-            btn,
-            client,
-            userId,
-            true
-          );
-        }
-      });
-
-    components.push({
-      type: 1,
-      components: [btnRemove]
+    const btnRemove = client.interactions.createButton({
+      user: userId,
+      data: {
+        label: "🗑️ Remover deste Servidor",
+        style: 4
+      },
+      funcao: async (btn) => {
+        await PremiumManager.removeGuildPremium(guildId, userId);
+        return renderPanel(btn, client, userId, true);
+      }
     });
+
+    components.push({ type: 1, components: [btnRemove] });
   }
 
+  // Botão: Comprar (link)
   components.push({
     type: 1,
     components: [
       {
         type: 2,
         style: 5,
-        label: "Comprar Premium",
+        label: "✨ Ver Planos Constellation",
         url: "https://discord.gg/wfaRZw5pGn"
       }
     ]

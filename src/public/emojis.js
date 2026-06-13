@@ -1,0 +1,20 @@
+module.exports = {
+  "default": "<:ayami:1513904360407695370>",
+  "animada": "<:ayamianimada:1513895694824378408>",
+  "assustada": "<:ayamiassustada:1513895638809579720>",
+  "brava": "<:ayamibrava:1513895453912076420>",
+  "carinho": "<:ayamicarinho:1513903963240530121>",
+  "chorando": "<:ayamichorando:1513895575026663575>",
+  "chorando2": "<:ayamichorando2:1513904145193766912>",
+  "corao": "<:ayamicorao:1513895869420929094>",
+  "curtida": "<:ayamicurtida:1513904205306400930>",
+  "emburrada": "<:ayamiemburrada:1513904309480456374>",
+  "emduvida": "<:ayamiemduvida:1513904029556670546>",
+  "escondida": "<:ayamiescondida:1513904510387355818>",
+  "feliz": "<:ayamifeliz:1513904597649981561>",
+  "festa": "<:ayamifesta:1513895771676737746>",
+  "pensando": "<:ayamipensando:1513891183036989533>",
+  "rindo": "<:ayamirindo:1513886810806157382>",
+  "sonolenta": "<:ayamisonolenta:1513895512997367980>",
+  "sria": "<:ayamisria:1513904083969380372>"
+}

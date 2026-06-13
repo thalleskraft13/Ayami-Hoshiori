@@ -83,22 +83,12 @@ module.exports = {
               name: "✨"
             }
           },
-
           {
-            label: "Genshin Vazamentos",
-            description: "Notícias, anúncios e vazamentos",
-            value: "leaks",
-            emoji: {
-              name: "📰"
-            }
-          },
-
-/*{
-  label:       "Sistema de Aniversários",
-  description: "Mensagens automáticas, cargo e botão de registro",
-  value:       "birthday",
-  emoji: { name: "🎂" }
-},*/
+  label: "Sistema de segurança",
+  description: "Analise permissões, cargos, bots e segurança",
+  value: "verification",
+  emoji: { name: "🔍" }
+},
 
           {
             label: "Logic Builder",
@@ -130,9 +120,11 @@ module.exports = {
             return client.GenshinLeaksManager.startSetup(i);
             
             case "birthday":
-  await client.birthdayManager.deferUpdate(i);
-  return client.birthdayManager.startSetup(i);
-
+  //await client.giveaway.deferReply(interaction)
+  return client.giveaway.startMenu(interaction);
+  case "verification":
+  await client.security.deferUpdate(i);
+  return client.security.startSetup(i);
           case "logic":
 
             if (client.logicUI.ui?.deferUpdate) {
@@ -169,10 +161,6 @@ module.exports = {
                     "",
                     "🎫 **Sistema de Tickets**",
                     "Configure painéis, categorias, staff, modais e automações.",
-                    "",
-                    "📰 **Genshin Vazamentos**",
-                    "Receba automaticamente vazamentos, anúncios e notícias do servidor principal.",
-                    "Suporte a imagens, vídeos, embeds e cargo de ping.",
                     "",
                     "✨ **Compartilhamento de UID**",
                     "Configure envio automático de UID em canais específicos.",

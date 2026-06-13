@@ -29,15 +29,404 @@ const CATEGORY_EMOJI = {
 };
 
 const COLORS = {
-  default:  0x5865F2,
+  default:  0x7C8FFF,
   success:  0x57F287,
   warning:  0xFEE75C,
   danger:   0xED4245,
-  library:  0x9B59B6
+  library:  0x7C8FFF
 };
 
-// Canal público de anúncios da biblioteca no servidor de suporte
 const SUPPORT_ANNOUNCE_CHANNEL = '1508910999753850910';
+
+/* ═══════════════════════════════════════════════════════════
+   MAPA DE CAMPOS QUE PRECISAM SER CONFIGURADOS NA INSTALAÇÃO
+   Chave: "category:type" → array de campos obrigatórios
+   ═══════════════════════════════════════════════════════════ */
+
+const INSTALL_REQUIRED_FIELDS = {
+  // Ações — mensagem
+  'message:send_message':        [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal onde as mensagens serão enviadas.' }],
+  'message:delete_bot_message':  [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal onde a mensagem do bot está.' }],
+  // Ações — canal
+  'channel:delete_channel':      [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal a ser deletado.' }],
+  'channel:rename_channel':      [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal a ser renomeado.' }],
+  'channel:lock_channel':        [
+    { field: 'channelId', label: '📌 Canal', description: 'Mencione ou envie o ID do canal a ser trancado.' },
+    { field: 'roleId',    label: '🏷️ Cargo', description: 'Mencione ou envie o ID do cargo que terá o acesso bloqueado (vazio = @everyone).' }
+  ],
+  'channel:unlock_channel':      [
+    { field: 'channelId', label: '📌 Canal', description: 'Mencione ou envie o ID do canal a ser destrancado.' },
+    { field: 'roleId',    label: '🏷️ Cargo', description: 'Mencione ou envie o ID do cargo (vazio = @everyone).' }
+  ],
+  // Ações — usuário
+  'user:give_role':              [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a ser dado.' }],
+  'user:remove_role':            [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a ser removido.' }],
+  'user:give_temp_role':         [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo temporário.' }],
+  'user:toggle_role':            [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a ser alternado.' }],
+  // Condições — usuário
+  'user:has_role':               [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a verificar.' }],
+  'user:not_has_role':           [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a verificar.' }],
+  // Condições — canal
+  'channel:is_channel':          [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal específico.' }],
+  'channel:not_channel':         [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal a ignorar.' }],
+  // Trigger filters
+  'trigger:message':             [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal filtro do trigger (deixe em branco para qualquer canal).' }],
+  'trigger:reaction':            [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal filtro do trigger.' }],
+  'trigger:component':           [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal filtro do trigger.' }],
+};
+
+/* ═══════════════════════════════════════════════════════════
+   LABEL AMIGÁVEL PARA AÇÕES/CONDIÇÕES
+   ═══════════════════════════════════════════════════════════ */
+
+function _actionLabel(category, type) {
+  const map = {
+    'message:send_message':       '💬 Enviar mensagem',
+    'message:send_dm':            '📩 Enviar DM',
+    'message:reply_message':      '↩️ Responder mensagem',
+    'message:delete_message':     '🗑️ Apagar mensagem',
+    'message:delete_bot_message': '🗑️ Apagar mensagem do bot',
+    'user:give_role':             '🏷️ Dar cargo',
+    'user:remove_role':           '🏷️ Remover cargo',
+    'user:give_temp_role':        '⏱️ Cargo temporário',
+    'user:toggle_role':           '🔄 Alternar cargo',
+    'user:has_role':              '👤 Possui cargo',
+    'user:not_has_role':          '👤 Não possui cargo',
+    'channel:lock_channel':       '🔒 Trancar canal',
+    'channel:unlock_channel':     '🔓 Destrancar canal',
+    'channel:delete_channel':     '❌ Apagar canal',
+    'channel:rename_channel':     '✏️ Renomear canal',
+    'channel:is_channel':         '📌 Canal específico',
+    'channel:not_channel':        '📌 Não é canal',
+  };
+  return map[`${category}:${type}`] || `${category}/${type}`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONSTRUÇÃO DAS PERGUNTAS DE INSTALAÇÃO
+   — Varre CADA campo individualmente em ações, condições e
+     trigger.filters de TODOS os fluxos.
+   — SEMPRE pergunta, independente de ter valor hardcoded.
+   — Deduplicação por (flowName + category:type + field):
+     se dois fluxos diferentes têm a mesma ação, pergunta separado.
+   ═══════════════════════════════════════════════════════════ */
+
+/**
+ * Retorna um array de perguntas, cada uma com:
+ * {
+ *   storeKey:    string único (ex: "flow0_act1_channelId") — chave no collected
+ *   flowIndex:   number  — índice do fluxo no array entry.flows
+ *   flowName:    string  — nome do fluxo
+ *   location:    string  — 'action' | 'condition' | 'trigger'
+ *   itemIndex:   number  — índice da ação/condição dentro do fluxo
+ *   category:    string
+ *   type:        string
+ *   field:       string  — 'channelId' | 'roleId'
+ *   label:       string  — label amigável do campo
+ *   description: string  — instrução para o usuário
+ *   actionLabel: string  — label amigável da ação/condição
+ * }
+ */
+function _buildInstallQuestions(entry) {
+  const questions = [];
+  const flows     = entry.flows || [];
+
+  for (let fi = 0; fi < flows.length; fi++) {
+    const flow     = flows[fi];
+    const flowName = flow.name || `Fluxo ${fi + 1}`;
+
+    // ── Ações ──────────────────────────────────────────────
+    for (let ai = 0; ai < (flow.actions || []).length; ai++) {
+      const action  = flow.actions[ai];
+      const key     = `${action.category}:${action.type}`;
+      const reqFields = INSTALL_REQUIRED_FIELDS[key];
+      if (!reqFields) continue;
+
+      for (const { field, label, description } of reqFields) {
+        questions.push({
+          storeKey:    `f${fi}_a${ai}_${field}`,
+          flowIndex:   fi,
+          flowName,
+          location:    'action',
+          itemIndex:   ai,
+          category:    action.category,
+          type:        action.type,
+          field,
+          label,
+          description,
+          actionLabel: `${_actionLabel(action.category, action.type)} (${flowName})`
+        });
+      }
+    }
+
+    // ── Condições ──────────────────────────────────────────
+    for (let ci = 0; ci < (flow.conditions || []).length; ci++) {
+      const cond    = flow.conditions[ci];
+      const key     = `${cond.category}:${cond.type}`;
+      const reqFields = INSTALL_REQUIRED_FIELDS[key];
+      if (!reqFields) continue;
+
+      for (const { field, label, description } of reqFields) {
+        questions.push({
+          storeKey:    `f${fi}_c${ci}_${field}`,
+          flowIndex:   fi,
+          flowName,
+          location:    'condition',
+          itemIndex:   ci,
+          category:    cond.category,
+          type:        cond.type,
+          field,
+          label,
+          description,
+          actionLabel: `${_actionLabel(cond.category, cond.type)} — condição (${flowName})`
+        });
+      }
+    }
+
+    // ── Trigger filters ────────────────────────────────────
+    if (flow.trigger?.filters) {
+      const triggerKey = `trigger:${flow.trigger.category}`;
+      const reqFields  = INSTALL_REQUIRED_FIELDS[triggerKey];
+      if (reqFields) {
+        for (const { field, label, description } of reqFields) {
+          // Só pergunta se o trigger realmente tem esse filtro OU se a categoria exige
+          // (sempre pergunta para que o instalador possa definir ou deixar em branco)
+          questions.push({
+            storeKey:    `f${fi}_t_${field}`,
+            flowIndex:   fi,
+            flowName,
+            location:    'trigger',
+            itemIndex:   -1,
+            category:    flow.trigger.category,
+            type:        flow.trigger.type,
+            field,
+            label,
+            description: description + '\nEnvie `-` para não filtrar por canal.',
+            actionLabel: `🎯 Trigger (${flowName})`
+          });
+        }
+      }
+    }
+  }
+
+  return questions;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   APLICAÇÃO DOS VALORES COLETADOS NOS FLUXOS
+   — Substitui cada campo individualmente usando o storeKey,
+     ao invés de uma substituição global por tipo.
+   ═══════════════════════════════════════════════════════════ */
+
+function _applyCollectedValues(flows, questions, collected) {
+  // Clona profundo para não mutar o original
+  const cloned = JSON.parse(JSON.stringify(flows));
+
+  for (const q of questions) {
+    const rawValue = (collected[q.storeKey] || '').replace(/[<#@&!>]/g, '').trim();
+
+    // Valor vazio ou "-" = não aplicar (mantém sem valor ou remove)
+    const value = (rawValue === '' || rawValue === '-') ? '' : rawValue;
+
+    const flow = cloned[q.flowIndex];
+    if (!flow) continue;
+
+    if (q.location === 'action') {
+      const action = flow.actions?.[q.itemIndex];
+      if (action) {
+        action.params = action.params || {};
+        action.params[q.field] = value;
+      }
+    } else if (q.location === 'condition') {
+      const cond = flow.conditions?.[q.itemIndex];
+      if (cond) {
+        cond.params = cond.params || {};
+        cond.params[q.field] = value;
+      }
+    } else if (q.location === 'trigger') {
+      flow.trigger = flow.trigger || {};
+      flow.trigger.filters = flow.trigger.filters || {};
+      if (value === '') {
+        delete flow.trigger.filters[q.field];
+      } else {
+        flow.trigger.filters[q.field] = value;
+      }
+    }
+  }
+
+  return cloned;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WIZARD DE INSTALAÇÃO
+   ═══════════════════════════════════════════════════════════ */
+
+async function _startInstallWizard(interaction, client, lib, entry, userId, guildId, e) {
+  guildId = guildId || interaction.guild_id;
+  const channelId = interaction.channel_id;
+
+  // Verifica permissão
+  let perms = [];
+  try {
+    perms = await getPerm({ guildId, id: userId });
+  } catch (err) {
+    console.error('[instalar] getPerm error:', err);
+  }
+
+  if (!perms.includes('MANAGE_GUILD') && !perms.includes('ADMINISTRATOR')) {
+    return _edit(interaction, client, {
+      embeds: [{
+        title:       `${e.brava} Sem permissão`,
+        description: 'Você precisa da permissão **Gerenciar Servidor** para instalar sistemas.',
+        color:       COLORS.danger
+      }]
+    });
+  }
+
+  const questions = _buildInstallQuestions(entry);
+
+  // Sem perguntas — instala direto
+  if (!questions.length) {
+    return _executeInstall(interaction, client, lib, entry, userId, guildId, [], {}, null, e);
+  }
+
+  // Mostra resumo das perguntas antes de começar
+  await _edit(interaction, client, {
+    embeds: [{
+      title:       `${e.pensando} Configurando — ${entry.name}`,
+      description: (
+        `Esse sistema precisa de **${questions.length} configuração(ões)** antes de instalar.\n\n` +
+        `Responda as próximas mensagens neste canal.\n` +
+        `Você tem **2 minutos** para cada resposta.\n\n` +
+        `> Envie \`-\` para pular (quando possível) ou \`cancelar\` para abortar.`
+      ),
+      color:  COLORS.library,
+      fields: questions.map((q, i) => ({
+        name:   `${i + 1}. ${q.label}`,
+        value:  `_${q.actionLabel}_`,
+        inline: true
+      })).slice(0, 25), // Discord limita 25 fields
+      footer: { text: `${entry.flows?.length || 0} fluxo(s) serão instalados • Ayami Hoshiori` }
+    }],
+    components: []
+  });
+
+  const collected = {};
+
+  for (let i = 0; i < questions.length; i++) {
+    const q        = questions[i];
+    const progress = `(${i + 1}/${questions.length})`;
+
+    // Envia a pergunta no canal
+    await DiscordRequest(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: {
+        embeds: [{
+          title:       `${e.emduvida} ${progress} ${q.label}`,
+          description: q.description,
+          color:       COLORS.library,
+          fields: [
+            { name: 'Para', value: q.actionLabel, inline: true },
+            { name: 'Fluxo', value: q.flowName,   inline: true }
+          ],
+          footer: { text: 'Envie `-` para pular • `cancelar` para abortar' }
+        }]
+      }
+    });
+
+    // Aguarda resposta
+    let msg;
+    try {
+      msg = await client.NextMessageCollector.wait({ channelId, userId, time: 120_000 });
+    } catch {
+      await DiscordRequest(`/channels/${channelId}/messages`, {
+        method: 'POST',
+        body: {
+          embeds: [{
+            title:       `${e.sonolenta} Tempo esgotado`,
+            description: 'A instalação foi cancelada por inatividade. Pode tentar de novo quando quiser~',
+            color:       COLORS.danger
+          }]
+        }
+      });
+      return;
+    }
+
+    const content = msg.content?.trim();
+
+    if (!content || content.toLowerCase() === 'cancelar') {
+      await DiscordRequest(`/channels/${channelId}/messages`, {
+        method: 'POST',
+        body: {
+          embeds: [{
+            title:       `${e.emburrada} Instalação cancelada`,
+            description: 'Tudo bem, pode instalar quando quiser~',
+            color:       COLORS.default
+          }]
+        }
+      });
+      return;
+    }
+
+    // Armazena o valor bruto — a limpeza de menções é feita em _applyCollectedValues
+    collected[q.storeKey] = content;
+  }
+
+  return _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId, e);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EXECUÇÃO DA INSTALAÇÃO
+   ═══════════════════════════════════════════════════════════ */
+
+async function _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId = null, e) {
+  try {
+    // Aplica os valores coletados diretamente nos fluxos (field a field)
+    const preparedFlows = _applyCollectedValues(entry.flows || [], questions, collected);
+
+    // Instala usando os fluxos já preparados (sem substituição de templateVars genérica)
+    const flowIds = await lib.installPrepared({
+      libId:   entry.libId,
+      guildId,
+      userId,
+      flows:   preparedFlows,
+      version: entry.version
+    });
+
+    // Monta resumo das configurações aplicadas
+    const configLines = questions.length
+      ? questions.map(q => {
+          const raw   = collected[q.storeKey] || '-';
+          const clean = raw.replace(/[<#@&!>]/g, '').trim();
+          return `• **${q.actionLabel}** → \`${q.field}\` = ${clean || '_não definido_'}`;
+        }).join('\n')
+      : '_Nenhuma configuração necessária_';
+
+    const embed = {
+      title:       `${e.festa} ${entry.name} instalado!`,
+      description: `**${flowIds.length}** fluxo(s) criado(s) neste servidor!\n\n**Configurações aplicadas:**\n${configLines}`,
+      color:       COLORS.success,
+      footer:      { text: 'Logic Builder • Ayami Hoshiori' }
+    };
+
+    if (channelId) {
+      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: { embeds: [embed] } });
+    }
+    return _edit(interaction, client, { embeds: [embed] });
+
+  } catch (err) {
+    const embed = {
+      title:       `${e.assustada} Erro na instalação`,
+      description: err.message,
+      color:       COLORS.danger
+    };
+
+    if (channelId) {
+      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: { embeds: [embed] } });
+    }
+    return _edit(interaction, client, { embeds: [embed] });
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════
    DEFINIÇÃO DO COMANDO
@@ -134,16 +523,13 @@ module.exports = {
     ]
   },
 
-  /* ═══════════════════════════════════════════
-     EXECUTE
-     ═══════════════════════════════════════════ */
-
   async execute(interaction, client) {
     const sub     = interaction.data.options?.[0]?.name;
     const opts    = _opts(interaction);
     const userId  = interaction.member?.user?.id || interaction.user?.id;
     const guildId = interaction.guild_id;
     const lib     = client.libraryManager;
+    const e       = client.emoji;
 
     const MODAL_SUBS = ['publicar', 'atualizar', 'editar'];
     if (!MODAL_SUBS.includes(sub)) {
@@ -152,25 +538,31 @@ module.exports = {
 
     try {
       switch (sub) {
-        case 'pesquisar': return await _pesquisar(interaction, client, lib, opts, userId);
-        case 'ver':       return await _ver(interaction, client, lib, opts, userId);
-        case 'instalar':  return await _instalar(interaction, client, lib, opts, userId, guildId);
-        case 'publicar':  return await _publicar(interaction, client, lib, userId, guildId);
-        case 'atualizar': return await _atualizar(interaction, client, lib, opts, userId, guildId);
-        case 'editar':    return await _editar(interaction, client, lib, opts, userId);
-        case 'apagar':    return await _apagar(interaction, client, lib, opts, userId);
-        case 'minhas':    return await _minhas(interaction, client, lib, userId);
-        case 'perfil':    return await _perfil(interaction, client, lib, opts, userId);
-        case 'destaques': return await _destaques(interaction, client, lib);
+        case 'pesquisar': return await _pesquisar(interaction, client, lib, opts, userId, e);
+        case 'ver':       return await _ver(interaction, client, lib, opts, userId, e);
+        case 'instalar':  return await _instalar(interaction, client, lib, opts, userId, guildId, e);
+        case 'publicar':  return await _publicar(interaction, client, lib, userId, guildId, e);
+        case 'atualizar': return await _atualizar(interaction, client, lib, opts, userId, guildId, e);
+        case 'editar':    return await _editar(interaction, client, lib, opts, userId, e);
+        case 'apagar':    return await _apagar(interaction, client, lib, opts, userId, e);
+        case 'minhas':    return await _minhas(interaction, client, lib, userId, e);
+        case 'perfil':    return await _perfil(interaction, client, lib, opts, userId, e);
+        case 'destaques': return await _destaques(interaction, client, lib, e);
         default:
-          return _edit(interaction, client, { content: '❌ Subcomando desconhecido.' });
+          return _edit(interaction, client, {
+            embeds: [{
+              title:       `${e.assustada} Subcomando desconhecido`,
+              description: 'Não reconheci esse comando. Tente novamente!',
+              color:       COLORS.danger
+            }]
+          });
       }
     } catch (err) {
       console.error(`[biblioteca/${sub}]`, err);
       return _edit(interaction, client, {
         embeds: [{
-          title:       '❌ Erro',
-          description: err.message || 'Ocorreu um erro inesperado.',
+          title:       `${e.assustada} Algo deu errado...`,
+          description: err.message || 'Ocorreu um erro inesperado. Me desculpe!',
           color:       COLORS.danger
         }]
       });
@@ -180,20 +572,16 @@ module.exports = {
 
 /* ═══════════════════════════════════════════════════════════
    HELPER — resolve nome de autor
-   Tenta buscar no perfil de criador; fallback para Discord API.
    ═══════════════════════════════════════════════════════════ */
 
 async function _resolveAuthorName(lib, authorId, fallback = null) {
-  // 1. Usa o nome já gravado na entrada (mais rápido)
   if (fallback && fallback !== authorId) return fallback;
 
-  // 2. Tenta o perfil de criador
   try {
     const profile = await lib.getCreatorProfile(authorId);
     if (profile?.username && profile.username !== authorId) return profile.username;
   } catch {}
 
-  // 3. Fallback para Discord API
   try {
     const userData = await DiscordRequest(`/users/${authorId}`);
     return userData?.global_name || userData?.username || `Usuário ${authorId.slice(-4)}`;
@@ -206,9 +594,7 @@ async function _resolveAuthorName(lib, authorId, fallback = null) {
    SUBCOMANDOS
    ═══════════════════════════════════════════════════════════ */
 
-/* ── /biblioteca pesquisar ─────────────────────────────── */
-
-async function _pesquisar(interaction, client, lib, opts, userId) {
+async function _pesquisar(interaction, client, lib, opts, userId, e) {
   const { results } = await lib.search({
     query:    opts.nome,
     category: opts.categoria,
@@ -222,8 +608,8 @@ async function _pesquisar(interaction, client, lib, opts, userId) {
   if (!results.length) {
     return _edit(interaction, client, {
       embeds: [{
-        title:       '🔍 Nenhum resultado',
-        description: 'Nenhum fluxo foi encontrado com esses filtros.\nTente outros termos ou remova alguns filtros.',
+        title:       `${e.emduvida} Nenhum resultado encontrado`,
+        description: 'Não encontrei nenhum fluxo com esses filtros.\nTente outros termos ou remova alguns filtros~',
         color:       COLORS.library
       }]
     });
@@ -235,19 +621,16 @@ async function _pesquisar(interaction, client, lib, opts, userId) {
     tag:      opts.tag,
     authorId: opts.autor,
     sort:     opts.ordenar || 'installs'
-  }, 0, userId);
+  }, 0, userId, e);
 }
 
-async function _renderSearchPage(interaction, client, lib, filters, page, userId) {
+async function _renderSearchPage(interaction, client, lib, filters, page, userId, e) {
   const { results, total, pages } = await lib.search({ ...filters, page, limit: 8 });
 
-  // Resolve nomes de autor para todos os resultados em paralelo
   const authorNames = await Promise.all(
-    results.map(e => _resolveAuthorName(lib, e.authorId, e.authorName))
+    results.map(entry => _resolveAuthorName(lib, entry.authorId, entry.authorName))
   );
-
-  // Atualiza authorName nos resultados para uso posterior
-  results.forEach((e, i) => { e._resolvedAuthor = authorNames[i]; });
+  results.forEach((entry, i) => { entry._resolvedAuthor = authorNames[i]; });
 
   const filterDesc = [];
   if (filters.query)    filterDesc.push(`🔎 \`${filters.query}\``);
@@ -255,35 +638,40 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
   if (filters.tag)      filterDesc.push(`🏷️ \`${filters.tag}\``);
   const filterLine = filterDesc.length ? `**Filtros:** ${filterDesc.join('  •  ')}\n\n` : '';
 
-  const sortLabels = { installs: '📥 Mais instalados', rating: '⭐ Melhor avaliados', trending: '🔥 Tendência', recent: '🕐 Mais recentes' };
-  const sortLine   = `**Ordem:** ${sortLabels[filters.sort] || '📥 Mais instalados'}\n`;
+  const sortLabels = {
+    installs: '📥 Mais instalados',
+    rating:   '⭐ Melhor avaliados',
+    trending: '🔥 Tendência',
+    recent:   '🕐 Mais recentes'
+  };
+  const sortLine = `**Ordem:** ${sortLabels[filters.sort] || '📥 Mais instalados'}\n`;
 
-  const lines = results.map((e, i) => {
-    const emoji = CATEGORY_EMOJI[e.category] || '📦';
-    const stars = _stars(e.stats.avgRating, e.stats.ratingCount);
+  const lines = results.map((entry, i) => {
+    const emoji = CATEGORY_EMOJI[entry.category] || '📦';
+    const stars = _stars(entry.stats.avgRating, entry.stats.ratingCount);
     const num   = page * 8 + i + 1;
     return (
-      `**${num}.** ${emoji} **${e.name}** \`v${e.version}\`\n` +
-      `👤 ${e._resolvedAuthor}  •  📥 ${e.stats.installs.toLocaleString('pt-BR')} instalações  •  ${stars}\n` +
-      `_${e.shortDesc || 'Sem descrição'}_`
+      `**${num}.** ${emoji} **${entry.name}** \`v${entry.version}\`\n` +
+      `👤 ${entry._resolvedAuthor}  •  📥 ${entry.stats.installs.toLocaleString('pt-BR')} instalações  •  ${stars}\n` +
+      `_${entry.shortDesc || 'Sem descrição'}_`
     );
   }).join('\n\n');
 
-  const selectOptions = results.map(e => ({
-    label:       e.name.slice(0, 100),
-    value:       e.libId,
-    description: (`v${e.version} • ${e._resolvedAuthor} • ${e.stats.installs} instalações`).slice(0, 100),
-    emoji:       { name: (CATEGORY_EMOJI[e.category] || '📦').replace(/\uFE0F/g, '') }
+  const selectOptions = results.map(entry => ({
+    label:       entry.name.slice(0, 100),
+    value:       entry.libId,
+    description: (`v${entry.version} • ${entry._resolvedAuthor} • ${entry.stats.installs} instalações`).slice(0, 100),
+    emoji:       { name: (CATEGORY_EMOJI[entry.category] || '📦').replace(/\uFE0F/g, '') }
   }));
 
   const components = [];
 
   const sel = client.interactions.createSelect({
     user: userId,
-    data: { placeholder: '🔍 Selecione para ver detalhes...', options: selectOptions },
+    data: { placeholder: '✨ Selecione para ver detalhes~', options: selectOptions },
     funcao: async (i) => {
       await _deferUpdate(i);
-      return _renderDetail(i, client, lib, i.data.values[0], userId);
+      return _renderDetail(i, client, lib, i.data.values[0], userId, e);
     }
   });
   components.push({ type: 1, components: [sel] });
@@ -295,7 +683,7 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
       data: { label: '◀ Anterior', style: 2 },
       funcao: async (i) => {
         await _deferUpdate(i);
-        return _renderSearchPage(i, client, lib, filters, page - 1, userId);
+        return _renderSearchPage(i, client, lib, filters, page - 1, userId, e);
       }
     }));
   }
@@ -310,7 +698,7 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
       data: { label: 'Próxima ▶', style: 2 },
       funcao: async (i) => {
         await _deferUpdate(i);
-        return _renderSearchPage(i, client, lib, filters, page + 1, userId);
+        return _renderSearchPage(i, client, lib, filters, page + 1, userId, e);
       }
     }));
   }
@@ -318,50 +706,51 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
 
   return _edit(interaction, client, {
     embeds: [{
-      title:       `📚 Biblioteca de Fluxos`,
+      title:       `${e.animada} Biblioteca de Fluxos`,
       description: `${filterLine}${sortLine}\n${lines}`,
       color:       COLORS.library,
-      footer:      { text: `${total} resultado${total !== 1 ? 's' : ''} • Página ${page + 1} de ${pages}` }
+      footer:      { text: `${total} resultado${total !== 1 ? 's' : ''} • Página ${page + 1} de ${pages} • Ayami Hoshiori` }
     }],
     components
   });
 }
 
-/* ── /biblioteca ver ───────────────────────────────────── */
-
-async function _ver(interaction, client, lib, opts, userId) {
+async function _ver(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
     return _edit(interaction, client, {
-      embeds: [{ title: '❌ Não encontrado', description: 'Entrada não encontrada na biblioteca.', color: COLORS.danger }]
+      embeds: [{
+        title:       `${e.emduvida} Entrada não encontrada`,
+        description: 'Não encontrei nada com esse ID. Confere se digitou certinho~',
+        color:       COLORS.danger
+      }]
     });
   }
-  return _renderDetail(interaction, client, lib, opts.id, userId, entry);
+  return _renderDetail(interaction, client, lib, opts.id, userId, e, entry);
 }
 
-async function _renderDetail(interaction, client, lib, libId, userId, entry = null) {
+async function _renderDetail(interaction, client, lib, libId, userId, e, entry = null) {
   entry = entry || await lib.getById(libId);
   if (!entry) return;
 
-  // Resolve nome do autor corretamente
-  const authorName = await _resolveAuthorName(lib, entry.authorId, entry.authorName);
-
+  const authorName   = await _resolveAuthorName(lib, entry.authorId, entry.authorName);
   const userRating   = await lib.getUserRating(libId, userId);
   const emoji        = CATEGORY_EMOJI[entry.category] || '📦';
   const stars        = _stars(entry.stats.avgRating, entry.stats.ratingCount);
   const tags         = entry.tags?.length ? entry.tags.map(t => `\`${t}\``).join(' ') : '_Sem tags_';
-  const vars         = entry.templateVars?.length
-    ? entry.templateVars.map(v => `\`{${v}}\``).join(', ')
-    : '_Nenhuma_';
   const likeStyle    = userRating?.vote === 'like'    ? 3 : 2;
   const dislikeStyle = userRating?.vote === 'dislike' ? 4 : 2;
+
+  // Calcula quantas perguntas de configuração serão feitas
+  const questions      = _buildInstallQuestions(entry);
+  const configsNeeded  = questions.length;
 
   const btnInstall = client.interactions.createButton({
     user: userId,
     data: { label: '📥 Instalar', style: 3 },
     funcao: async (i) => {
       await _deferUpdate(i);
-      return _startInstallWizard(i, client, lib, entry, userId, i.guild_id);
+      return _startInstallWizard(i, client, lib, entry, userId, i.guild_id, e);
     }
   });
 
@@ -372,7 +761,7 @@ async function _renderDetail(interaction, client, lib, libId, userId, entry = nu
       await _deferUpdate(i);
       await lib.vote(libId, userId, 'like');
       const updated = await lib.getById(libId);
-      return _renderDetail(i, client, lib, libId, userId, updated);
+      return _renderDetail(i, client, lib, libId, userId, e, updated);
     }
   });
 
@@ -383,14 +772,14 @@ async function _renderDetail(interaction, client, lib, libId, userId, entry = nu
       await _deferUpdate(i);
       await lib.vote(libId, userId, 'dislike');
       const updated = await lib.getById(libId);
-      return _renderDetail(i, client, lib, libId, userId, updated);
+      return _renderDetail(i, client, lib, libId, userId, e, updated);
     }
   });
 
   const btnRate = client.interactions.createButton({
     user: userId,
     data: { label: '⭐ Avaliar', style: 2 },
-    funcao: async (i) => _openRateModal(i, client, lib, libId, userId)
+    funcao: async (i) => _openRateModal(i, client, lib, libId, userId, e)
   });
 
   const btnAuthor = client.interactions.createButton({
@@ -398,7 +787,7 @@ async function _renderDetail(interaction, client, lib, libId, userId, entry = nu
     data: { label: '👤 Ver Autor', style: 2 },
     funcao: async (i) => {
       await _deferUpdate(i);
-      return _renderProfile(i, client, lib, entry.authorId, userId);
+      return _renderProfile(i, client, lib, entry.authorId, userId, e);
     }
   });
 
@@ -408,16 +797,16 @@ async function _renderDetail(interaction, client, lib, libId, userId, entry = nu
       description: entry.fullDesc || entry.shortDesc || '_Sem descrição_',
       color:       COLORS.library,
       fields: [
-        { name: '👤 Autor',       value: authorName,                                         inline: true },
-        { name: '📂 Categoria',   value: entry.category,                                     inline: true },
-        { name: '📥 Instalações', value: entry.stats.installs.toLocaleString('pt-BR'),       inline: true },
-        { name: '⭐ Avaliação',   value: `${stars} (${entry.stats.ratingCount} avaliações)`, inline: true },
-        { name: '🔗 Fluxos',      value: String(entry.flows?.length || 0),                  inline: true },
-        { name: '🏷️ Tags',        value: tags,                                               inline: false },
-        { name: '🔧 Variáveis',   value: vars,                                               inline: false },
-        { name: '🆔 ID',          value: `\`${entry.libId}\``,                              inline: false }
+        { name: '👤 Autor',          value: authorName,                                         inline: true },
+        { name: '📂 Categoria',      value: entry.category,                                     inline: true },
+        { name: '📥 Instalações',    value: entry.stats.installs.toLocaleString('pt-BR'),       inline: true },
+        { name: '⭐ Avaliação',      value: `${stars} (${entry.stats.ratingCount} avaliações)`, inline: true },
+        { name: '🔗 Fluxos',         value: String(entry.flows?.length || 0),                  inline: true },
+        { name: '🔧 Configurações',  value: configsNeeded > 0 ? `${configsNeeded} campo(s)` : '_Nenhuma necessária_', inline: true },
+        { name: '🏷️ Tags',           value: tags,                                               inline: false },
+        { name: '🆔 ID',             value: `\`${entry.libId}\``,                              inline: false }
       ],
-      footer:    { text: `Publicado por ${authorName}` },
+      footer:    { text: `Publicado por ${authorName} • Ayami Hoshiori` },
       timestamp: entry.updatedAt
     }],
     components: [
@@ -426,297 +815,31 @@ async function _renderDetail(interaction, client, lib, libId, userId, entry = nu
   });
 }
 
-/* ── /biblioteca instalar ──────────────────────────────── */
-
-async function _instalar(interaction, client, lib, opts, userId, guildId) {
+async function _instalar(interaction, client, lib, opts, userId, guildId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
     return _edit(interaction, client, {
-      embeds: [{ title: '❌ Não encontrado', description: 'Entrada não encontrada na biblioteca.', color: COLORS.danger }]
-    });
-  }
-  return _startInstallWizard(interaction, client, lib, entry, userId, guildId);
-}
-
-/* ─────────────────────────────────────────────────────────
-   INSTALL WIZARD
-   Pergunta APENAS channelId e roleId que estão faltando em
-   ações E condições. Sistemas sem essas dependências instalam
-   direto, sem nenhuma pergunta.
-   ───────────────────────────────────────────────────────── */
-
-async function _startInstallWizard(interaction, client, lib, entry, userId, guildId) {
-  guildId = guildId || interaction.guild_id;
-  const channelId = interaction.channel_id;
-
-  // ── 1. Verifica MANAGE_GUILD ──────────────────────────
-  let perms = [];
-  try {
-    perms = await getPerm({ guildId, id: userId });
-  } catch (err) {
-    console.error('[instalar] getPerm error:', err);
-  }
-
-  if (!perms.includes('MANAGE_GUILD') && !perms.includes('ADMINISTRATOR')) {
-    return _edit(interaction, client, {
       embeds: [{
-        title:       '❌ Sem permissão',
-        description: 'Você precisa da permissão **Gerenciar Servidor** para instalar sistemas.',
+        title:       `${e.emduvida} Entrada não encontrada`,
+        description: 'Não encontrei nada com esse ID. Confere se digitou certinho~',
         color:       COLORS.danger
       }]
     });
   }
-
-  // ── 2. Monta perguntas APENAS para channelId/roleId ausentes ──
-  const questions = _buildInstallQuestions(entry);
-
-  if (!questions.length) {
-    // Nenhuma variável necessária — instala imediatamente
-    return _executeInstall(interaction, client, lib, entry, userId, guildId, {});
-  }
-
-  // ── 3. Anuncia o wizard ───────────────────────────────
-  await _edit(interaction, client, {
-    embeds: [{
-      title:       `⚙️ Configuração — ${entry.name}`,
-      description: (
-        `Este sistema precisa de **${questions.length} configuração(ões)** antes de instalar.\n\n` +
-        `Responda as próximas mensagens neste canal.\n` +
-        `Você tem **2 minutos** para cada resposta.\n\n` +
-        `> Envie \`cancelar\` a qualquer momento para abortar.`
-      ),
-      color:       COLORS.library,
-      fields: questions.map((q, i) => ({
-        name:   `${i + 1}. ${q.label}`,
-        value:  `_${q.actionLabel}_`,
-        inline: true
-      })),
-      footer: { text: `${entry.flows?.length || 0} fluxo(s) serão instalados` }
-    }],
-    components: []
-  });
-
-  // ── 4. Coleta sequencial ──────────────────────────────
-  const collected = {};
-
-  for (let i = 0; i < questions.length; i++) {
-    const q        = questions[i];
-    const progress = `(${i + 1}/${questions.length})`;
-
-    await DiscordRequest(`/channels/${channelId}/messages`, {
-      method: 'POST',
-      body: {
-        embeds: [{
-          title:       `❓ ${progress} ${q.label}`,
-          description: q.description,
-          color:       COLORS.library,
-          footer:      { text: `Para: ${q.actionLabel}` }
-        }]
-      }
-    });
-
-    let msg;
-    try {
-      msg = await client.NextMessageCollector.wait({ channelId, userId, time: 120_000 });
-    } catch {
-      await DiscordRequest(`/channels/${channelId}/messages`, {
-        method: 'POST',
-        body: {
-          embeds: [{
-            title:       '⏰ Tempo esgotado',
-            description: 'A instalação foi cancelada por inatividade.',
-            color:       COLORS.danger
-          }]
-        }
-      });
-      return;
-    }
-
-    const content = msg.content?.trim();
-
-    if (!content || content.toLowerCase() === 'cancelar') {
-      await DiscordRequest(`/channels/${channelId}/messages`, {
-        method: 'POST',
-        body: {
-          embeds: [{
-            title:       '↩️ Instalação cancelada',
-            description: 'Você cancelou a instalação.',
-            color:       COLORS.default
-          }]
-        }
-      });
-      return;
-    }
-
-    // Aceita menção #canal, @cargo ou ID puro
-    const rawId = content.replace(/[<#@&!>]/g, '').trim();
-    collected[q.storeKey] = rawId || content;
-  }
-
-  // ── 5. Instala ────────────────────────────────────────
-  return _executeInstall(interaction, client, lib, entry, userId, guildId, collected, channelId);
+  return _startInstallWizard(interaction, client, lib, entry, userId, guildId, e);
 }
 
-async function _executeInstall(interaction, client, lib, entry, userId, guildId, varValues, channelId = null) {
-  try {
-    const flowIds = await lib.install({ libId: entry.libId, guildId, userId, varValues });
-
-    const configLines = Object.keys(varValues).length
-      ? Object.entries(varValues).map(([k, v]) => `• \`${k}\` → ${v}`).join('\n')
-      : '_Nenhuma configuração necessária_';
-
-    const embed = {
-      title:       `✅ ${entry.name} instalado!`,
-      description: `**${flowIds.length}** fluxo(s) criado(s) neste servidor.\n\n**Configurações aplicadas:**\n${configLines}`,
-      color:       COLORS.success,
-      footer:      { text: 'Logic Builder • Biblioteca de Fluxos' }
-    };
-
-    if (channelId) {
-      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: { embeds: [embed] } });
-    }
-    return _edit(interaction, client, { embeds: [embed] });
-  } catch (err) {
-    const embed = { title: '❌ Erro na instalação', description: err.message, color: COLORS.danger };
-
-    if (channelId) {
-      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: { embeds: [embed] } });
-    }
-    return _edit(interaction, client, { embeds: [embed] });
-  }
-}
-
-/**
- * Ações/condições que EXIGEM channelId informado para funcionar.
- * Ações como reply_message, variable/add, show_ranking usam o contexto
- * da execução — não precisam de canal externo.
- */
-const REQUIRES_CHANNEL_ID = new Set([
-  'message:send_message',       // enviar mensagem num canal específico
-  'message:delete_bot_message', // apagar msg do bot num canal específico
-  'channel:delete_channel',     // apagar canal específico
-  'channel:rename_channel',     // renomear canal específico
-  'channel:lock_channel',       // trancar canal específico
-  'channel:unlock_channel',     // destrancar canal específico
-  'channel:is_channel',         // condição: é canal específico
-  'channel:not_channel',        // condição: não é canal específico
-]);
-
-/**
- * Ações/condições que EXIGEM roleId informado para funcionar.
- */
-const REQUIRES_ROLE_ID = new Set([
-  'user:give_role',
-  'user:remove_role',
-  'user:give_temp_role',
-  'user:toggle_role',
-  'user:has_role',
-  'user:not_has_role',
-  'channel:lock_channel',   // precisa de roleId para saber qual cargo bloquear
-  'channel:unlock_channel',
-]);
-
-/**
- * Varre ações E condições dos fluxos da entry.
- * Só gera pergunta se a ação/condição estiver no whitelist E
- * o valor ainda não tiver sido preenchido no template.
- * Sistemas sem essas dependências retornam array vazio → instala direto.
- */
-function _buildInstallQuestions(entry) {
-  const questions = [];
-  const seen      = new Set();
-  const flows     = entry.flows || [];
-
-  for (const flow of flows) {
-    for (const action of (flow.actions || [])) {
-      _checkParamsForQuestion(action, questions, seen);
-    }
-    for (const cond of (flow.conditions || [])) {
-      _checkParamsForQuestion(cond, questions, seen);
-    }
-  }
-
-  return questions;
-}
-
-/**
- * Só adiciona pergunta se:
- * 1. O tipo de ação/condição está no whitelist (realmente precisa do ID)
- * 2. O valor ainda não foi preenchido no template (está vazio/ausente)
- */
-function _checkParamsForQuestion(item, questions, seen) {
-  const params   = item.params || {};
-  const category = item.category || '';
-  const type     = item.type     || '';
-  const key      = `${category}:${type}`;
-
-  // channelId — só pergunta se a ação realmente precisa de um canal explícito
-  if (REQUIRES_CHANNEL_ID.has(key)) {
-    const val = params.channelId;
-    if (!val || val === '') {
-      const dedupKey = `${key}:channelId`;
-      if (!seen.has(dedupKey)) {
-        seen.add(dedupKey);
-        questions.push({
-          storeKey:    'channelId',
-          actionLabel: _actionLabel(category, type),
-          label:       '📌 Canal',
-          description: `Mencione ou envie o ID do canal para **${_actionLabel(category, type)}**.\nExemplo: \`#geral\` ou \`123456789012345678\``
-        });
-      }
-    }
-  }
-
-  // roleId — só pergunta se a ação realmente precisa de um cargo explícito
-  if (REQUIRES_ROLE_ID.has(key)) {
-    const val = params.roleId;
-    if (!val || val === '') {
-      const dedupKey = `${key}:roleId`;
-      if (!seen.has(dedupKey)) {
-        seen.add(dedupKey);
-        questions.push({
-          storeKey:    'roleId',
-          actionLabel: _actionLabel(category, type),
-          label:       '🏷️ Cargo',
-          description: `Mencione ou envie o ID do cargo para **${_actionLabel(category, type)}**.\nExemplo: \`@Membro\` ou \`123456789012345678\``
-        });
-      }
-    }
-  }
-}
-
-function _actionLabel(category, type) {
-  const map = {
-    'message:send_message':       '💬 Enviar mensagem',
-    'message:send_dm':            '📩 Enviar DM',
-    'message:reply_message':      '↩️ Responder mensagem',
-    'message:delete_message':     '🗑️ Apagar mensagem',
-    'message:delete_bot_message': '🗑️ Apagar mensagem do bot',
-    'user:give_role':             '🏷️ Dar cargo',
-    'user:remove_role':           '🏷️ Remover cargo',
-    'user:give_temp_role':        '⏱️ Cargo temporário',
-    'user:toggle_role':           '🔄 Alternar cargo',
-    'channel:lock_channel':       '🔒 Trancar canal',
-    'channel:unlock_channel':     '🔓 Destrancar canal',
-    'channel:delete_channel':     '❌ Apagar canal',
-    'channel:rename_channel':     '✏️ Renomear canal',
-    'user:has_role':              '👤 Possui cargo',
-    'user:not_has_role':          '👤 Não possui cargo',
-    'channel:is_channel':         '📌 Canal específico',
-    'channel:not_channel':        '📌 Não é canal',
-  };
-  return map[`${category}:${type}`] || `${category}/${type}`;
-}
-
-/* ── /biblioteca publicar — PAINEL INTERATIVO ──────────── */
-
-async function _publicar(interaction, client, lib, userId, guildId) {
+async function _publicar(interaction, client, lib, userId, guildId, e) {
   const { FlowModel } = require('../../Mongodb/flow.js');
   const flows = await FlowModel.find({ guildId }).lean();
 
   if (!flows.length) {
     return _reply(interaction, {
-      embeds: [{ title: '❌ Sem fluxos', description: 'Crie pelo menos um fluxo antes de publicar.', color: COLORS.danger }]
+      embeds: [{
+        title:       `${e.emburrada} Sem fluxos`,
+        description: 'Crie pelo menos um fluxo antes de publicar na biblioteca~',
+        color:       COLORS.danger
+      }]
     });
   }
 
@@ -727,10 +850,10 @@ async function _publicar(interaction, client, lib, userId, guildId) {
   } catch {}
 
   const state = { selectedFlowIds: [] };
-  return _renderPublishPanel(interaction, client, lib, flows, userId, guildId, authorName, state);
+  return _renderPublishPanel(interaction, client, lib, flows, userId, guildId, authorName, state, true, e);
 }
 
-async function _renderPublishPanel(interaction, client, lib, flows, userId, guildId, authorName, state, isReply = true) {
+async function _renderPublishPanel(interaction, client, lib, flows, userId, guildId, authorName, state, isReply = true, e) {
   const selectedNames = state.selectedFlowIds
     .map(id => flows.find(f => f.flowId === id)?.name || id)
     .map((n, i) => `${i + 1}. **${n}**`)
@@ -748,12 +871,12 @@ async function _renderPublishPanel(interaction, client, lib, flows, userId, guil
 
     const sel = client.interactions.createSelect({
       user: userId,
-      data: { placeholder: '➕ Adicionar fluxo ao sistema...', options },
+      data: { placeholder: '✨ Adicionar fluxo ao sistema~', options },
       funcao: async (i) => {
         await _deferUpdate(i);
         const newId = i.data.values[0];
         if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
-        return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false);
+        return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
       }
     });
     selectRows.push({ type: 1, components: [sel] });
@@ -765,7 +888,7 @@ async function _renderPublishPanel(interaction, client, lib, flows, userId, guil
     funcao: async (i) => {
       await _deferUpdate(i);
       state.selectedFlowIds.pop();
-      return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false);
+      return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
     }
   });
 
@@ -774,25 +897,25 @@ async function _renderPublishPanel(interaction, client, lib, flows, userId, guil
     data: { label: '📤 Publicar', style: 3, disabled: state.selectedFlowIds.length === 0 },
     funcao: async (i) => {
       if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
-      return _publicarModal(i, client, lib, userId, guildId, authorName, state.selectedFlowIds);
+      return _publicarModal(i, client, lib, userId, guildId, authorName, state.selectedFlowIds, e);
     }
   });
 
   const embed = {
-    title:       '📤 Publicar na Biblioteca',
-    description: `**Autor:** ${authorName}\n\n**Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}\n\nAdicione os fluxos que farão parte deste sistema e clique em **Publicar** quando estiver pronto.`,
+    title:       `${e.animada} Publicar na Biblioteca`,
+    description: `**Autor:** ${authorName}\n\n**Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}\n\nAdicione os fluxos que farão parte deste sistema e clique em **Publicar** quando estiver pronto!`,
     color:       COLORS.library,
-    footer:      { text: 'Você pode adicionar até 25 fluxos por publicação' }
+    footer:      { text: 'Você pode adicionar até 25 fluxos por publicação • Ayami Hoshiori' }
   };
 
-  const actionRow = { type: 1, components: [btnRemove, btnPublish] };
+  const actionRow  = { type: 1, components: [btnRemove, btnPublish] };
   const components = [...selectRows, actionRow];
 
   if (isReply) return _reply(interaction, { embeds: [embed], components });
   return _edit(interaction, client, { embeds: [embed], components });
 }
 
-async function _publicarModal(interaction, client, lib, userId, guildId, authorName, flowIds) {
+async function _publicarModal(interaction, client, lib, userId, guildId, authorName, flowIds, e) {
   const modal = client.interactions.createModal({
     user:  userId,
     title: 'Publicar na Biblioteca',
@@ -814,8 +937,8 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
       if (!category) {
         return _followUp(modalInteraction, client, {
           embeds: [{
-            title:       '❌ Categoria inválida',
-            description: `Categorias disponíveis:\n${CATEGORIES.join(', ')}`,
+            title:       `${e.emduvida} Categoria inválida`,
+            description: `As categorias disponíveis são:\n${CATEGORIES.join(', ')}`,
             color:       COLORS.danger
           }]
         });
@@ -834,25 +957,28 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
           guildId
         });
 
-        // Notifica no canal público do servidor de suporte
-        _announcePublicLibrary(client, entry, authorName, flowIds.length).catch(() => {});
+        _announcePublicLibrary(client, entry, authorName, flowIds.length, e).catch(() => {});
 
         return _followUp(modalInteraction, client, {
           embeds: [{
-            title:       '✅ Publicado com sucesso!',
+            title:       `${e.festa} Publicado com sucesso!`,
             description: (
-              `**${entry.name}** está disponível na biblioteca!\n\n` +
+              `**${entry.name}** já está disponível na biblioteca!\n\n` +
               `🆔 ID: \`${entry.libId}\`\n` +
               `📦 Fluxos: **${flowIds.length}**\n` +
-              `🔧 Variáveis detectadas: ${entry.templateVars?.length ? entry.templateVars.map(v => `\`{${v}}\``).join(', ') : '_Nenhuma_'}`
+              `🔧 Campos de configuração: **${_buildInstallQuestions(entry).length}**`
             ),
             color:  COLORS.success,
-            footer: { text: 'Logic Builder • Biblioteca de Fluxos' }
+            footer: { text: 'Logic Builder • Ayami Hoshiori' }
           }]
         });
       } catch (err) {
         return _followUp(modalInteraction, client, {
-          embeds: [{ title: '❌ Erro ao publicar', description: err.message, color: COLORS.danger }]
+          embeds: [{
+            title:       `${e.assustada} Erro ao publicar`,
+            description: err.message,
+            color:       COLORS.danger
+          }]
         });
       }
     }
@@ -861,56 +987,63 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
   return client.interactions.showModal(interaction, modal);
 }
 
-/**
- * Anuncia a nova publicação no canal público do servidor de suporte.
- */
-async function _announcePublicLibrary(client, entry, authorName, flowCount) {
-  const emoji    = CATEGORY_EMOJI[entry.category] || '📦';
-  const tags     = entry.tags?.length ? entry.tags.map(t => `\`${t}\``).join(' ') : '_Sem tags_';
-  const vars     = entry.templateVars?.length
-    ? entry.templateVars.map(v => `\`{${v}}\``).join(', ')
-    : '_Nenhuma_';
+async function _announcePublicLibrary(client, entry, authorName, flowCount, e) {
+  const emoji = CATEGORY_EMOJI[entry.category] || '📦';
+  const tags  = entry.tags?.length ? entry.tags.map(t => `\`${t}\``).join(' ') : '_Sem tags_';
 
   await DiscordRequest(`/channels/${SUPPORT_ANNOUNCE_CHANNEL}/messages`, {
     method: 'POST',
     body: {
       embeds: [{
         title:       `${emoji} Nova publicação na Biblioteca!`,
-        description: (
-          `**${entry.name}** foi publicado por **${authorName}**.\n\n` +
-          `${entry.shortDesc || ''}`
-        ),
-        color:  COLORS.library,
+        description: `**${entry.name}** foi publicado por **${authorName}**.\n\n${entry.shortDesc || ''}`,
+        color:       COLORS.library,
         fields: [
-          { name: '📂 Categoria',   value: entry.category,         inline: true  },
-          { name: '🔗 Fluxos',      value: String(flowCount),      inline: true  },
-          { name: '🏷️ Tags',        value: tags,                   inline: false },
-          { name: '🔧 Variáveis',   value: vars,                   inline: false },
-          { name: '🆔 ID',          value: `\`${entry.libId}\``,  inline: false }
+          { name: '📂 Categoria',      value: entry.category,                                    inline: true  },
+          { name: '🔗 Fluxos',         value: String(flowCount),                                 inline: true  },
+          { name: '🔧 Configurações',  value: String(_buildInstallQuestions(entry).length),      inline: true  },
+          { name: '🏷️ Tags',           value: tags,                                              inline: false },
+          { name: '🆔 ID',             value: `\`${entry.libId}\``,                             inline: false }
         ],
-        footer:    { text: 'Logic Builder • Biblioteca de Fluxos' },
+        footer:    { text: 'Logic Builder • Ayami Hoshiori' },
         timestamp: new Date().toISOString()
       }]
     }
   });
 }
 
-/* ── /biblioteca atualizar ─────────────────────────────── */
-
-async function _atualizar(interaction, client, lib, opts, userId, guildId) {
+async function _atualizar(interaction, client, lib, opts, userId, guildId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _reply(interaction, { embeds: [{ title: '❌ Não encontrado', color: COLORS.danger }] });
+    return _reply(interaction, {
+      embeds: [{
+        title:       `${e.emduvida} Entrada não encontrada`,
+        description: 'Não encontrei nada com esse ID~',
+        color:       COLORS.danger
+      }]
+    });
   }
   if (entry.authorId !== userId) {
-    return _reply(interaction, { embeds: [{ title: '❌ Sem permissão', description: 'Você não é o autor desta entrada.', color: COLORS.danger }] });
+    return _reply(interaction, {
+      embeds: [{
+        title:       `${e.brava} Sem permissão`,
+        description: 'Você não é o autor desta entrada.',
+        color:       COLORS.danger
+      }]
+    });
   }
 
   const { FlowModel } = require('../../Mongodb/flow.js');
   const flows = await FlowModel.find({ guildId }).lean();
 
   if (!flows.length) {
-    return _reply(interaction, { embeds: [{ title: '❌ Sem fluxos', color: COLORS.danger }] });
+    return _reply(interaction, {
+      embeds: [{
+        title:       `${e.emburrada} Sem fluxos`,
+        description: 'Crie pelo menos um fluxo antes de atualizar~',
+        color:       COLORS.danger
+      }]
+    });
   }
 
   let authorName = entry.authorName || 'Anônimo';
@@ -920,10 +1053,10 @@ async function _atualizar(interaction, client, lib, opts, userId, guildId) {
   } catch {}
 
   const state = { selectedFlowIds: [] };
-  return _renderUpdatePanel(interaction, client, lib, flows, userId, guildId, authorName, opts.id, entry, state, true);
+  return _renderUpdatePanel(interaction, client, lib, flows, userId, guildId, authorName, opts.id, entry, state, true, e);
 }
 
-async function _renderUpdatePanel(interaction, client, lib, flows, userId, guildId, authorName, libId, entry, state, isReply = false) {
+async function _renderUpdatePanel(interaction, client, lib, flows, userId, guildId, authorName, libId, entry, state, isReply = false, e) {
   const selectedNames = state.selectedFlowIds
     .map(id => flows.find(f => f.flowId === id)?.name || id)
     .map((n, i) => `${i + 1}. **${n}**`)
@@ -941,12 +1074,12 @@ async function _renderUpdatePanel(interaction, client, lib, flows, userId, guild
 
     const sel = client.interactions.createSelect({
       user: userId,
-      data: { placeholder: '➕ Adicionar fluxo à nova versão...', options },
+      data: { placeholder: '✨ Adicionar fluxo à nova versão~', options },
       funcao: async (i) => {
         await _deferUpdate(i);
         const newId = i.data.values[0];
         if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
-        return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false);
+        return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
       }
     });
     selectRows.push({ type: 1, components: [sel] });
@@ -958,7 +1091,7 @@ async function _renderUpdatePanel(interaction, client, lib, flows, userId, guild
     funcao: async (i) => {
       await _deferUpdate(i);
       state.selectedFlowIds.pop();
-      return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false);
+      return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
     }
   });
 
@@ -967,24 +1100,24 @@ async function _renderUpdatePanel(interaction, client, lib, flows, userId, guild
     data: { label: '🔄 Confirmar atualização', style: 3, disabled: state.selectedFlowIds.length === 0 },
     funcao: async (i) => {
       if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
-      return _atualizarModal(i, client, lib, libId, userId, guildId, authorName, state.selectedFlowIds, entry.version);
+      return _atualizarModal(i, client, lib, libId, userId, guildId, authorName, state.selectedFlowIds, entry.version, e);
     }
   });
 
   const embed = {
-    title:       `🔄 Atualizar — ${entry.name}`,
-    description: `Versão atual: \`${entry.version}\`\n\n**Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}\n\nSelecione os fluxos da nova versão e clique em **Confirmar atualização**.`,
+    title:       `${e.pensando} Atualizar — ${entry.name}`,
+    description: `Versão atual: \`${entry.version}\`\n\n**Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}\n\nSelecione os fluxos da nova versão e clique em **Confirmar atualização**~`,
     color:       COLORS.library
   };
 
-  const actionRow = { type: 1, components: [btnRemove, btnConfirm] };
+  const actionRow  = { type: 1, components: [btnRemove, btnConfirm] };
   const components = [...selectRows, actionRow];
 
   if (isReply) return _reply(interaction, { embeds: [embed], components });
   return _edit(interaction, client, { embeds: [embed], components });
 }
 
-async function _atualizarModal(interaction, client, lib, libId, userId, guildId, authorName, flowIds, currentVersion) {
+async function _atualizarModal(interaction, client, lib, libId, userId, guildId, authorName, flowIds, currentVersion, e) {
   const modal = client.interactions.createModal({
     user:  userId,
     title: 'Nova Versão',
@@ -1007,14 +1140,18 @@ async function _atualizarModal(interaction, client, lib, libId, userId, guildId,
 
         return _followUp(modalInteraction, client, {
           embeds: [{
-            title:       `✅ Atualizado para v${updated.version}`,
-            description: `**${updated.name}** foi atualizado com **${flowIds.length}** fluxo(s).\nInstaladores serão notificados via DM.`,
+            title:       `${e.festa} Atualizado para v${updated.version}!`,
+            description: `**${updated.name}** foi atualizado com **${flowIds.length}** fluxo(s).\nOs instaladores serão notificados via DM~`,
             color:       COLORS.success
           }]
         });
       } catch (err) {
         return _followUp(modalInteraction, client, {
-          embeds: [{ title: '❌ Erro', description: err.message, color: COLORS.danger }]
+          embeds: [{
+            title:       `${e.assustada} Erro ao atualizar`,
+            description: err.message,
+            color:       COLORS.danger
+          }]
         });
       }
     }
@@ -1023,15 +1160,25 @@ async function _atualizarModal(interaction, client, lib, libId, userId, guildId,
   return client.interactions.showModal(interaction, modal);
 }
 
-/* ── /biblioteca editar ────────────────────────────────── */
-
-async function _editar(interaction, client, lib, opts, userId) {
+async function _editar(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _reply(interaction, { embeds: [{ title: '❌ Não encontrado', color: COLORS.danger }] });
+    return _reply(interaction, {
+      embeds: [{
+        title:       `${e.emduvida} Entrada não encontrada`,
+        description: 'Não encontrei nada com esse ID~',
+        color:       COLORS.danger
+      }]
+    });
   }
   if (entry.authorId !== userId) {
-    return _reply(interaction, { embeds: [{ title: '❌ Sem permissão', description: 'Você não é o autor desta entrada.', color: COLORS.danger }] });
+    return _reply(interaction, {
+      embeds: [{
+        title:       `${e.brava} Sem permissão`,
+        description: 'Você não é o autor desta entrada.',
+        color:       COLORS.danger
+      }]
+    });
   }
 
   const modal = client.interactions.createModal({
@@ -1064,11 +1211,19 @@ async function _editar(interaction, client, lib, opts, userId) {
         });
 
         return _followUp(modalInteraction, client, {
-          embeds: [{ title: '✅ Entrada atualizada!', color: COLORS.success }]
+          embeds: [{
+            title:       `${e.feliz} Entrada atualizada!`,
+            description: 'As informações foram salvas com sucesso~',
+            color:       COLORS.success
+          }]
         });
       } catch (err) {
         return _followUp(modalInteraction, client, {
-          embeds: [{ title: '❌ Erro', description: err.message, color: COLORS.danger }]
+          embeds: [{
+            title:       `${e.assustada} Erro ao editar`,
+            description: err.message,
+            color:       COLORS.danger
+          }]
         });
       }
     }
@@ -1077,15 +1232,25 @@ async function _editar(interaction, client, lib, opts, userId) {
   return client.interactions.showModal(interaction, modal);
 }
 
-/* ── /biblioteca apagar ────────────────────────────────── */
-
-async function _apagar(interaction, client, lib, opts, userId) {
+async function _apagar(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _edit(interaction, client, { embeds: [{ title: '❌ Não encontrado', color: COLORS.danger }] });
+    return _edit(interaction, client, {
+      embeds: [{
+        title:       `${e.emduvida} Entrada não encontrada`,
+        description: 'Não encontrei nada com esse ID~',
+        color:       COLORS.danger
+      }]
+    });
   }
   if (entry.authorId !== userId) {
-    return _edit(interaction, client, { embeds: [{ title: '❌ Sem permissão', description: 'Você não é o autor desta entrada.', color: COLORS.danger }] });
+    return _edit(interaction, client, {
+      embeds: [{
+        title:       `${e.brava} Sem permissão`,
+        description: 'Você não é o autor desta entrada.',
+        color:       COLORS.danger
+      }]
+    });
   }
 
   const btnConfirm = client.interactions.createButton({
@@ -1096,12 +1261,20 @@ async function _apagar(interaction, client, lib, opts, userId) {
       try {
         await lib.delete(opts.id, userId);
         return _edit(i, client, {
-          embeds: [{ title: '🗑️ Entrada removida', description: `**${entry.name}** foi removida da biblioteca.`, color: COLORS.danger }],
+          embeds: [{
+            title:       `${e.emburrada} Entrada removida`,
+            description: `**${entry.name}** foi removida da biblioteca.`,
+            color:       COLORS.danger
+          }],
           components: []
         });
       } catch (err) {
         return _edit(i, client, {
-          embeds: [{ title: '❌ Erro', description: err.message, color: COLORS.danger }],
+          embeds: [{
+            title:       `${e.assustada} Erro ao apagar`,
+            description: err.message,
+            color:       COLORS.danger
+          }],
           components: []
         });
       }
@@ -1114,7 +1287,11 @@ async function _apagar(interaction, client, lib, opts, userId) {
     funcao: async (i) => {
       await _deferUpdate(i);
       return _edit(i, client, {
-        embeds: [{ title: '↩️ Cancelado', description: 'A entrada não foi removida.', color: COLORS.default }],
+        embeds: [{
+          title:       `${e.feliz} Cancelado!`,
+          description: 'A entrada continua na biblioteca~',
+          color:       COLORS.default
+        }],
         components: []
       });
     }
@@ -1122,66 +1299,64 @@ async function _apagar(interaction, client, lib, opts, userId) {
 
   return _edit(interaction, client, {
     embeds: [{
-      title:       '⚠️ Confirmar exclusão',
-      description: `Tem certeza que deseja remover **${entry.name}** da biblioteca?\n\nEsta ação **não pode ser desfeita**.\nInstalações existentes nos servidores não serão afetadas.`,
+      title:       `${e.assustada} Confirmar exclusão`,
+      description: `Tem certeza que quer remover **${entry.name}** da biblioteca?\n\nEssa ação **não pode ser desfeita**.\nInstalações existentes nos servidores não serão afetadas.`,
       color:       COLORS.danger
     }],
     components: [{ type: 1, components: [btnConfirm, btnCancel] }]
   });
 }
 
-/* ── /biblioteca minhas ────────────────────────────────── */
-
-async function _minhas(interaction, client, lib, userId) {
+async function _minhas(interaction, client, lib, userId, e) {
   const entries = await lib.getMyPublications(userId);
 
   if (!entries.length) {
     return _edit(interaction, client, {
       embeds: [{
-        title:       '📤 Minhas Publicações',
-        description: 'Você ainda não publicou nada na biblioteca.\nUse `/biblioteca publicar` para começar!',
+        title:       `${e.pensando} Minhas Publicações`,
+        description: 'Você ainda não publicou nada na biblioteca.\nUse `/biblioteca publicar` para começar~!',
         color:       COLORS.library
       }]
     });
   }
 
-  const lines = entries.map((e, i) => {
-    const statusIcon = e.status === 'approved' ? '🟢' : e.status === 'pending' ? '🟡' : '🔴';
-    const emoji      = CATEGORY_EMOJI[e.category] || '📦';
+  const lines = entries.map((entry, i) => {
+    const statusIcon = entry.status === 'approved' ? '🟢' : entry.status === 'pending' ? '🟡' : '🔴';
+    const emoji      = CATEGORY_EMOJI[entry.category] || '📦';
     return (
-      `**${i + 1}.** ${statusIcon} ${emoji} **${e.name}** \`v${e.version}\`\n` +
-      `📥 ${e.stats.installs} instalações  •  ${_stars(e.stats.avgRating, 0)}`
+      `**${i + 1}.** ${statusIcon} ${emoji} **${entry.name}** \`v${entry.version}\`\n` +
+      `📥 ${entry.stats.installs} instalações  •  ${_stars(entry.stats.avgRating, 0)}`
     );
   }).join('\n\n');
 
-  const selectOptions = entries.slice(0, 25).map(e => ({
-    label:       e.name.slice(0, 100),
-    value:       e.libId,
-    description: (`v${e.version} • ${e.stats.installs} instalações`).slice(0, 100)
+  const selectOptions = entries.slice(0, 25).map(entry => ({
+    label:       entry.name.slice(0, 100),
+    value:       entry.libId,
+    description: (`v${entry.version} • ${entry.stats.installs} instalações`).slice(0, 100)
   }));
 
   const sel = client.interactions.createSelect({
     user: userId,
-    data: { placeholder: 'Selecione para gerenciar...', options: selectOptions },
+    data: { placeholder: '✨ Selecione para gerenciar~', options: selectOptions },
     funcao: async (i) => {
       await _deferUpdate(i);
-      const selected = entries.find(e => e.libId === i.data.values[0]);
-      return _renderManageEntry(i, client, lib, selected, userId);
+      const selected = entries.find(entry => entry.libId === i.data.values[0]);
+      return _renderManageEntry(i, client, lib, selected, userId, e);
     }
   });
 
   return _edit(interaction, client, {
     embeds: [{
-      title:       `📤 Minhas Publicações (${entries.length})`,
+      title:       `${e.curtida} Minhas Publicações (${entries.length})`,
       description: lines,
       color:       COLORS.library,
-      footer:      { text: 'Selecione uma entrada para gerenciá-la' }
+      footer:      { text: 'Selecione uma entrada para gerenciá-la • Ayami Hoshiori' }
     }],
     components: [{ type: 1, components: [sel] }]
   });
 }
 
-async function _renderManageEntry(interaction, client, lib, entry, userId) {
+async function _renderManageEntry(interaction, client, lib, entry, userId, e) {
   const changelog = entry.lastChangelog ? `\n**Último changelog:** ${entry.lastChangelog}` : '';
 
   const history = entry.versionHistory?.length
@@ -1193,13 +1368,13 @@ async function _renderManageEntry(interaction, client, lib, entry, userId) {
   const btnEditar = client.interactions.createButton({
     user: userId,
     data: { label: '✏️ Editar', style: 2 },
-    funcao: async (i) => _editar(i, client, lib, { id: entry.libId }, userId)
+    funcao: async (i) => _editar(i, client, lib, { id: entry.libId }, userId, e)
   });
 
   const btnAtualizar = client.interactions.createButton({
     user: userId,
     data: { label: '🔄 Atualizar versão', style: 1 },
-    funcao: async (i) => _atualizar(i, client, lib, { id: entry.libId }, userId, i.guild_id)
+    funcao: async (i) => _atualizar(i, client, lib, { id: entry.libId }, userId, i.guild_id, e)
   });
 
   const btnApagar = client.interactions.createButton({
@@ -1207,7 +1382,7 @@ async function _renderManageEntry(interaction, client, lib, entry, userId) {
     data: { label: '🗑️ Apagar', style: 4 },
     funcao: async (i) => {
       await _deferUpdate(i);
-      return _apagar(i, client, lib, { id: entry.libId }, userId);
+      return _apagar(i, client, lib, { id: entry.libId }, userId, e);
     }
   });
 
@@ -1216,7 +1391,7 @@ async function _renderManageEntry(interaction, client, lib, entry, userId) {
     data: { label: '⬅️ Voltar', style: 2 },
     funcao: async (i) => {
       await _deferUpdate(i);
-      return _minhas(i, client, lib, userId);
+      return _minhas(i, client, lib, userId, e);
     }
   });
 
@@ -1235,17 +1410,14 @@ async function _renderManageEntry(interaction, client, lib, entry, userId) {
   });
 }
 
-/* ── /biblioteca perfil ────────────────────────────────── */
-
-async function _perfil(interaction, client, lib, opts, userId) {
+async function _perfil(interaction, client, lib, opts, userId, e) {
   const targetId = opts.usuario || userId;
-  return _renderProfile(interaction, client, lib, targetId, userId);
+  return _renderProfile(interaction, client, lib, targetId, userId, e);
 }
 
-async function _renderProfile(interaction, client, lib, targetId, userId) {
+async function _renderProfile(interaction, client, lib, targetId, userId, e) {
   const profile = await lib.getCreatorProfile(targetId);
 
-  // Resolve nome via Discord API se o perfil não tiver
   let displayName = profile.username;
   if (!displayName || displayName === targetId) {
     try {
@@ -1259,7 +1431,7 @@ async function _renderProfile(interaction, client, lib, targetId, userId) {
   const topEntries = profile.entries
     .sort((a, b) => b.installs - a.installs)
     .slice(0, 5)
-    .map((e, i) => `${i + 1}. **${e.name}** \`v${e.version}\` — 📥 ${e.installs}`)
+    .map((entry, i) => `${i + 1}. **${entry.name}** \`v${entry.version}\` — 📥 ${entry.installs}`)
     .join('\n') || '_Nenhuma publicação_';
 
   const isFollowing = (await lib.getFollowers(targetId)).includes(userId);
@@ -1273,7 +1445,7 @@ async function _renderProfile(interaction, client, lib, targetId, userId) {
       funcao: async (i) => {
         await _deferUpdate(i);
         await lib.toggleFollow(userId, targetId);
-        return _renderProfile(i, client, lib, targetId, userId);
+        return _renderProfile(i, client, lib, targetId, userId, e);
       }
     });
     components.push({ type: 1, components: [btnFollow] });
@@ -1281,7 +1453,7 @@ async function _renderProfile(interaction, client, lib, targetId, userId) {
 
   return _edit(interaction, client, {
     embeds: [{
-      title:       `👤 ${displayName}`,
+      title:       `${e.carinho} ${displayName}`,
       description: profile.bio || '_Sem bio_',
       color:       COLORS.library,
       fields: [
@@ -1292,23 +1464,20 @@ async function _renderProfile(interaction, client, lib, targetId, userId) {
         { name: '👥 Seguidores',  value: String(profile.followers),                           inline: true },
         { name: '🏆 Top Fluxos',  value: topEntries,                                          inline: false }
       ],
-      footer: { text: `ID: ${targetId}` }
+      footer: { text: `ID: ${targetId} • Ayami Hoshiori` }
     }],
     components
   });
 }
 
-/* ── /biblioteca destaques ─────────────────────────────── */
-
-async function _destaques(interaction, client, lib) {
+async function _destaques(interaction, client, lib, e) {
   const { trending, topInstalls, topRated, recent } = await lib.getHighlights();
 
-  // Resolve nomes de autores para os destaques
   const fmt = async (list) => {
     if (!list.length) return '_Nenhum_';
-    const names = await Promise.all(list.map(e => _resolveAuthorName(lib, e.authorId, e.authorName)));
-    return list.map((e, i) =>
-      `${i + 1}. **${e.name}** por ${names[i]} — 📥 ${e.stats.installs} • ⭐ ${e.stats.avgRating}`
+    const names = await Promise.all(list.map(entry => _resolveAuthorName(lib, entry.authorId, entry.authorName)));
+    return list.map((entry, i) =>
+      `${i + 1}. **${entry.name}** por ${names[i]} — 📥 ${entry.stats.installs} • ⭐ ${entry.stats.avgRating}`
     ).join('\n');
   };
 
@@ -1318,23 +1487,21 @@ async function _destaques(interaction, client, lib) {
 
   return _edit(interaction, client, {
     embeds: [{
-      title:     '🔥 Destaques da Semana',
-      color:     COLORS.library,
+      title:  `${e.festa} Destaques da Semana`,
+      color:  COLORS.library,
       fields: [
-        { name: '📈 Tendência',        value: fTrending,  inline: false },
-        { name: '📥 Mais instalados',  value: fInstalls,  inline: false },
-        { name: '⭐ Melhor avaliados', value: fRated,     inline: false },
-        { name: '🕐 Mais recentes',    value: fRecent,    inline: false }
+        { name: '📈 Tendência',        value: fTrending, inline: false },
+        { name: '📥 Mais instalados',  value: fInstalls, inline: false },
+        { name: '⭐ Melhor avaliados', value: fRated,    inline: false },
+        { name: '🕐 Mais recentes',    value: fRecent,   inline: false }
       ],
-      footer:    { text: 'Logic Builder • Biblioteca de Fluxos' },
+      footer:    { text: 'Logic Builder • Ayami Hoshiori' },
       timestamp: new Date().toISOString()
     }]
   });
 }
 
-/* ── Modal de avaliação ────────────────────────────────── */
-
-async function _openRateModal(interaction, client, lib, libId, userId) {
+async function _openRateModal(interaction, client, lib, libId, userId, e) {
   const modal = client.interactions.createModal({
     user:  userId,
     title: 'Avaliar fluxo',
@@ -1360,14 +1527,18 @@ async function _openRateModal(interaction, client, lib, libId, userId) {
 
       if (!rating || rating < 1 || rating > 5) {
         return _followUp(modalInteraction, client, {
-          embeds: [{ title: '❌ Nota inválida', description: 'Informe um número entre 1 e 5.', color: COLORS.danger }]
+          embeds: [{
+            title:       `${e.emduvida} Nota inválida`,
+            description: 'Informe um número entre 1 e 5~',
+            color:       COLORS.danger
+          }]
         });
       }
 
       const result = await lib.rate(libId, userId, rating);
       return _followUp(modalInteraction, client, {
         embeds: [{
-          title:       '✅ Avaliação registrada',
+          title:       `${e.corao} Avaliação registrada!`,
           description: `Você deu **${rating} ⭐** para este fluxo.\nNova média: **${result.avg} ⭐** (${result.count} avaliações)`,
           color:       COLORS.success
         }]
@@ -1405,8 +1576,6 @@ function _triggerLabel(trigger) {
   };
   return labels[`${trigger.category}:${trigger.type}`] || `${trigger.category}/${trigger.type}`;
 }
-
-// ── Discord helpers ──────────────────────────────────────
 
 async function _defer(interaction) {
   return DiscordRequest(

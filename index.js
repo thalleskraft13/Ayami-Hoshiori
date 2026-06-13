@@ -9,7 +9,7 @@ if (isMainThread) {
     const manager = new ClusterManager({
         totalShards:   4,
         shardsPerCluster: 2,
-        clientOptions: { intents: 53608447 },
+        clientOptions: { intents: 53608191 },
     });
 
     // Expõe globalmente para o IPC funcionar via require

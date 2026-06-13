@@ -3,7 +3,6 @@ const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const GuildDb = require("../../Mongodb/guild.js");
-const os = require("os");
 
 module.exports = {
   data: {
@@ -14,6 +13,9 @@ module.exports = {
   async execute(interaction, client) {
 
     const userId = interaction.member.user.id;
+    const e = client.emoji;
+    const COR = 0x7C8FFF;
+
     const botData = await DiscordRequest("/users/@me", { method: "GET" });
 
     const formatTempo = (ms) => {
@@ -24,7 +26,6 @@ module.exports = {
       return `${d}d ${h}h ${m}m ${s}s`;
     };
 
-    // ✅ Apenas 1 request leve
     const guilds = await DiscordRequest("/users/@me/guilds", { method: "GET" });
     const totalGuilds = guilds.length;
 
@@ -37,42 +38,23 @@ module.exports = {
       const uptime = formatTempo(process.uptime() * 1000);
       const mem = process.memoryUsage();
       const premium = await PremiumManager.getUserPremium(userId);
-      const totalUsersDB = await UserGlobalDb.countDocuments();
-
-      const baseDescription =
-        `🤖 ${botData.username}\n\n` +
-        `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)\n`;
 
       if (page === "geral") {
-        return new MessageEmbed()
-          .setTitle("Bot Info - Geral")
-          .setThumbnail(botAvatar)
-          .setDescription(
-            baseDescription +
-            `\n🌐 Servidores: ${totalGuilds}\n` +
-            `📦 Usuários globais (DB): ${totalUsersDB}\n\n` +
-            `⏳ Uptime: ${uptime}\n` +
-            `🟢 Node: ${process.version}`
-          )
-          .randomColor()
-          .build();
-      }
 
-      if (page === "sistema") {
+        const totalUsersDB = await UserGlobalDb.countDocuments();
+
         return new MessageEmbed()
-          .setTitle("Bot Info - Sistema")
+          .setTitle(`${e.default} Ayami Hoshiori — Informações`)
           .setThumbnail(botAvatar)
           .setDescription(
-            baseDescription +
-            `\nSistema: ${os.type()} ${os.release()}\n` +
-            `Plataforma: ${os.platform()}\n` +
-            `Arquitetura: ${os.arch()}\n\n` +
-            `CPU: ${os.cpus()[0].model}\n` +
-            `Cores: ${os.cpus().length}\n\n` +
-            `RAM total: ${(os.totalmem() / 1024 / 1024).toFixed(2)} MB\n` +
-            `RAM livre: ${(os.freemem() / 1024 / 1024).toFixed(2)} MB`
+            `${e.feliz} **${botData.username}**\n\n` +
+            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)\n\n` +
+            `🌐 Servidores(Na Shard): \`${totalGuilds}\`\n` +
+            `👥 Usuários (DB): \`${totalUsersDB}\`\n\n` +
+            `⏳ Uptime: \`${uptime}\`\n` +
+            `🟢 Node: \`${process.version}\``
           )
-          .randomColor()
+          .setColor(COR)
           .build();
       }
 
@@ -89,93 +71,98 @@ module.exports = {
         }
 
         return new MessageEmbed()
-          .setTitle("Bot Info - Performance")
+          .setTitle(`${e.pensando} Ayami Hoshiori — Performance`)
           .setThumbnail(botAvatar)
           .setDescription(
-            baseDescription +
-            `\nLatência API: ${ping} ms\n` +
-            `PID: ${process.pid}\n\n` +
-            `Heap usado: ${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB\n` +
-            `Heap total: ${(mem.heapTotal / 1024 / 1024).toFixed(2)} MB\n` +
-            `RSS: ${(mem.rss / 1024 / 1024).toFixed(2)} MB`
+            `${e.feliz} **${botData.username}**\n\n` +
+            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)\n\n` +
+            `🏓 Latência API: \`${ping}ms\`\n\n` +
+            `🧠 Heap usado: \`${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB\`\n` +
+            `📦 Heap total: \`${(mem.heapTotal / 1024 / 1024).toFixed(2)} MB\``
           )
-          .randomColor()
-          .build();
-      }
-
-      if (page === "database") {
-
-        const start = Date.now();
-        await UserGlobalDb.countDocuments();
-        const tempo = Date.now() - start;
-
-        return new MessageEmbed()
-          .setTitle("Bot Info - Banco de Dados")
-          .setThumbnail(botAvatar)
-          .setDescription(
-            baseDescription +
-            `\nStatus: conectado\n` +
-            `Tempo de resposta: ${tempo} ms`
-          )
-          .randomColor()
+          .setColor(COR)
           .build();
       }
 
       if (page === "premium") {
 
         const agora = Date.now();
-        const premiumUsers = await UserGlobalDb.find({ premium: { $gt: agora } });
-        const totalPremium = premiumUsers.length;
-
-        const guildsPremium = await GuildDb.countDocuments({
-          premiumUser: { $ne: null }
-        });
+        const totalPremium = await UserGlobalDb.countDocuments({ premium: { $gt: agora } });
+        const guildsPremium = await GuildDb.countDocuments({ premiumUser: { $ne: null } });
 
         return new MessageEmbed()
-          .setTitle("Bot Info - Premium")
+          .setTitle(`${e.carinho} Ayami Hoshiori — Premium`)
           .setThumbnail(botAvatar)
           .setDescription(
-            baseDescription +
-            `\nPremium ativo (você): ${premium.status ? "sim" : "nao"}\n\n` +
-            `Usuários premium: ${totalPremium}\n` +
-            `Servidores premium: ${guildsPremium}`
+            `${e.feliz} **${botData.username}**\n\n` +
+            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)\n\n` +
+            `⭐ Seu premium: \`${premium.status ? "Ativo ✅" : "Inativo ❌"}\`\n\n` +
+            `👥 Usuários premium: \`${totalPremium}\`\n` +
+            `🌐 Servidores premium: \`${guildsPremium}\``
           )
-          .randomColor()
+          .setColor(COR)
           .build();
       }
 
-      if (page === "stats") {
+      if (page === "clusters") {
+
+        let allStats;
+
+        try {
+          allStats = await client.requestAllStats();
+        } catch {
+          return new MessageEmbed()
+            .setTitle(`${e.assustada} Ayami Hoshiori — Clusters`)
+            .setDescription("Não foi possível obter os dados dos clusters agora. Tente novamente!")
+            .setColor(COR)
+            .build();
+        }
+
+        const CLUSTERS_NAME = client.CLUSTERS_NAME;
+        const totalShards = allStats.reduce((acc, c) => acc + (c.shards?.length ?? 0), 0);
+        const avgPing = (() => {
+          const pings = allStats
+            .flatMap(c => c.shards ?? [])
+            .map(s => s.ping)
+            .filter(p => p >= 0);
+          if (!pings.length) return "?";
+          return Math.round(pings.reduce((a, b) => a + b, 0) / pings.length);
+        })();
+
+        const linhasClusters = allStats.map(c => {
+          if (c.error) return `**Cluster ${CLUSTERS_NAME[c.clusterId]}:** ⚠️ ${c.error}`;
+          const shards = c.shards.map(s => `\`#${s.shardId}\` ${s.ping}ms`).join("  ");
+          return `**Cluster ${CLUSTERS_NAME[c.clusterId]}:** ${shards || "Sem shards"}`;
+        }).join("\n");
+
         return new MessageEmbed()
-          .setTitle("Bot Info - Estatísticas")
+          .setTitle(`📡 Ayami Hoshiori — Clusters & Shards`)
           .setThumbnail(botAvatar)
           .setDescription(
-            baseDescription +
-            `\n🌐 Total de Servidores: ${totalGuilds}\n` +
-            `⚙️ Comandos: ${client.commands.size}\n` +
-            `🧠 Memória: ${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB\n` +
-            `🆔 PID: ${process.pid}`
+            `${e.feliz} **${botData.username}**\n\n` +
+            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)\n\n` +
+            `📊 Clusters: \`${allStats.length}\`\n` +
+            `📡 Shards: \`${totalShards}\`\n` +
+            `🏓 Ping médio: \`${avgPing}ms\`\n\n` +
+            linhasClusters
           )
-          .randomColor()
+          .setColor(COR)
           .build();
       }
-
     };
 
     const select = client.interactions.createSelect({
       user: userId,
       data: {
-        placeholder: "Escolha uma categoria",
+        placeholder: "✨ Escolha uma categoria~",
         options: [
-          { label: "Geral", value: "geral" },
-          { label: "Sistema", value: "sistema" },
-          { label: "Performance", value: "performance" },
-          { label: "Banco de Dados", value: "database" },
-          { label: "Premium", value: "premium" },
-          { label: "Estatísticas", value: "stats" }
+          { label: "Geral",             value: "geral",        emoji: { name: "📖" } },
+          { label: "Performance",       value: "performance",  emoji: { name: "⚡" } },
+          { label: "Premium",           value: "premium",      emoji: { name: "⭐" } },
+          { label: "Clusters & Shards", value: "clusters",     emoji: { name: "📡" } }
         ]
       },
       funcao: async (btn) => {
-
         const value = btn.data.values[0];
         const embed = await buildEmbed(value);
 
@@ -194,15 +181,8 @@ module.exports = {
     const btnAdd = {
       type: 2,
       style: 5,
-      label: "Adicionar Arlecchino",
+      label: "Adicionar Ayami",
       url: "https://discord.com/oauth2/authorize?client_id=1441027871069048902&permissions=6755522653448304&integration_type=0&scope=bot+applications.commands"
-    };
-
-    const btnGithub = {
-      type: 2,
-      style: 5,
-      label: "GitHub Oficial",
-      url: "https://github.com/thalleskraft13/Arlecchino"
     };
 
     const btnServer = {
@@ -220,11 +200,10 @@ module.exports = {
           embeds: [embedInicial],
           components: [
             { type: 1, components: [select] },
-            { type: 1, components: [btnAdd, btnGithub, btnServer] }
+            { type: 1, components: [btnAdd, btnServer] }
           ]
         }
       }
     });
-
   }
 };

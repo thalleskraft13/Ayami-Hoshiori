@@ -26,4 +26,4 @@ UserGuild.index({ guildId: 1, userId: 1 }, { unique: true });
 /* Índice para a varredura diária de aniversariantes */
 UserGuild.index({ "birthday.day": 1, "birthday.month": 1 });
 
-module.exports = model("UserGuild-Canary", UserGuild);
+module.exports = model("UserGuild", UserGuild);

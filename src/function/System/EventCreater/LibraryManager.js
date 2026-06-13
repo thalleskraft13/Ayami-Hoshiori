@@ -752,6 +752,38 @@ class LibraryManager {
       this._decayInterval = setInterval(decay, MS_IN_WEEK);
     }, 60_000);
   }
+  
+  
+  async installPrepared({ libId, guildId, userId, flows, version }) {
+  const entry = await LibraryFlowModel.findOne({ libId, status: 'approved' });
+  if (!entry) throw new Error('Entrada não encontrada na biblioteca.');
+
+  const createdIds = [];
+
+  for (const flowData of flows) {
+    const flow = await this.client.logicEngine.createFlow({
+      ...flowData,
+      guildId,
+      description: flowData.description
+        ? `${flowData.description}\n\n_Instalado da biblioteca: ${entry.name} v${entry.version}_`
+        : `_Instalado da biblioteca: ${entry.name} v${entry.version}_`,
+      createdBy: userId
+    });
+    createdIds.push(flow.flowId);
+  }
+
+  await LibraryInstallModel.findOneAndUpdate(
+    { libId, guildId },
+    { libId, guildId, installedBy: userId, flowIds: createdIds, version: entry.version, installedAt: new Date() },
+    { upsert: true }
+  );
+
+  await LibraryFlowModel.updateOne({ libId }, {
+    $inc: { 'stats.installs': 1, 'stats.weeklyScore': 5 }
+  });
+
+  return createdIds;
+}
 }
 
 /* ═══════════════════════════════════════════════════════════

@@ -144,10 +144,16 @@ class InteractionManager {
       //console.log(interaction)
         const customId = interaction.data?.custom_id;
         if (!customId) return;
+        
 
         try {
 
             const parsed = this._tryParseJson(customId);
+           
+console.log(parsed)
+if (parsed?.t === 'giveaway_join')  return this.client.giveaway.join(interaction);
+if (parsed?.t === 'auth_approve')   return this.client.giveaway.handleAuthResponse(interaction, true);
+if (parsed?.t === 'auth_deny')      return this.client.giveaway.handleAuthResponse(interaction, false);
 
             if (parsed?.t === 'create_ticket') {
                 interaction.data.panelId = parsed.p;
@@ -381,52 +387,49 @@ if (interaction.data?.custom_id === "birthday_register_btn") {
 
 
     _replyUnavailable(interaction) {
-        return this._reply(
-            interaction,
-            'Essa interação expirou ou não está mais disponível. Execute o comando novamente.'
-        );
+    const emoji = this.client.emoji;
+    return this._reply(
+        interaction,
+        `${emoji.chorando} Essa interação expirou ou não está mais disponível... Execute o comando novamente!`
+    );
+}
+
+_replyExpired(interaction) {
+    const emoji = this.client.emoji;
+    return this._reply(
+        interaction,
+        `${emoji.emburrada} Esse formulário expirou! Execute novamente, por favor~`
+    );
+}
+
+_replyUnauthorized(interaction) {
+    const emoji = this.client.emoji;
+    return this._reply(interaction, `${emoji.brava} Ei! Você não pode usar este componente!`);
+}
+
+_replyUnauthorizedModal(interaction) {
+    const emoji = this.client.emoji;
+    return this._reply(interaction, `${emoji.brava} Ei! Você não pode responder este formulário!`);
+}
+
+async _replyError(interaction, err, context = 'Erro interno') {
+    const emoji = this.client.emoji;
+    const errorId = this._errorId();
+
+    console.error(`[InteractionManager] [${errorId}] ${context}`, err);
+
+    const message =
+        `${emoji.assustada} Ops, algo deu errado ao processar essa interação...\n\n` +
+        `Contexto: **\`${context}\`**\n` +
+        `ID do erro: **\`${errorId}\`**\n` +
+        `Detalhe: \`\`\`\n${err?.message ?? 'Desconhecido'}\n\`\`\``;
+
+    try {
+        await this._reply(interaction, message);
+    } catch (replyErr) {
+        console.error(`[InteractionManager] [${errorId}] Failed to send error reply:`, replyErr);
     }
-
-    _replyExpired(interaction) {
-        return this._reply(
-            interaction,
-            'Este formulário expirou. Execute novamente.'
-        );
-    }
-
-    _replyUnauthorized(interaction) {
-        return this._reply(interaction, 'Você não pode usar este componente.');
-    }
-
-    _replyUnauthorizedModal(interaction) {
-        return this._reply(interaction, 'Você não pode responder este formulário.');
-    }
-
-    /**
-     * Log an error with a unique ID and send an ephemeral error message.
-     *
-     * @param {object} interaction
-     * @param {Error}  err
-     * @param {string} [context]
-     */
-    async _replyError(interaction, err, context = 'Erro interno') {
-        const errorId = this._errorId();
-
-        console.error(`[InteractionManager] [${errorId}] ${context}`, err);
-
-        const message =
-            `Ocorreu um erro ao processar a interação.\n\n` +
-            `Contexto: **\`${context}\`**\n` +
-            `ID do erro: **\`${errorId}\`**\n` +
-            `Detalhe: \`\`\`\n${err?.message ?? 'Desconhecido'}\n\`\`\``;
-
-        try {
-            await this._reply(interaction, message);
-        } catch (replyErr) {
-            
-            console.error(`[InteractionManager] [${errorId}] Failed to send error reply:`, replyErr);
-        }
-    }
+}
 
 
     _isExpired(entry) {

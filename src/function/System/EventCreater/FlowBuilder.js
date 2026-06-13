@@ -112,6 +112,7 @@ const ACTION_CATALOG = [
   { category: 'message', type: 'delete_message',label: '🗑️ Apagar mensagem',      params: [] },
   { category: 'message', type: 'edit_message',  label: '✏️ Editar mensagem',      params: ['content'] },
   { category: 'message', type: 'delete_bot_message', label: '🗑️ Apagar mensagem do bot', params: ['messageId', 'channelId'] },
+  { category: 'system', type: 'ask_confirm', label: '❓ Pedir confirmação', params: ['content', 'targetUserId', 'timeout', 'cancelMessage'] },
   // Usuário
   { category: 'user', type: 'give_role',        label: '🏷️ Dar cargo',            params: ['roleId'] },
   { category: 'user', type: 'remove_role',      label: '🏷️ Remover cargo',        params: ['roleId'] },
@@ -124,6 +125,7 @@ const ACTION_CATALOG = [
   { category: 'user', type: 'change_nickname',  label: '📝 Alterar nickname',     params: ['nickname'] },
   // Variável
   { category: 'variable', type: 'set',    label: '📦 Definir variável',         params: ['name', 'value'] },
+  { category: 'variable', type: 'set_user_var', label: '📦 Definir var de usuário', params: ['name', 'value', 'targetUserId'] },
   { category: 'variable', type: 'add',    label: '➕ Somar variável',           params: ['name', 'value'] },
   { category: 'variable', type: 'sub',    label: '➖ Subtrair variável',        params: ['name', 'value'] },
   { category: 'variable', type: 'mul',    label: '✖️ Multiplicar variável',     params: ['name', 'value'] },
@@ -608,7 +610,7 @@ for (let i = 0; i < ACTION_CATALOG.length; i += 25) {
     }
 
     // Com params — modal de preenchimento
-    const OPTIONAL_PARAMS = ['reason', 'description', 'channelId', 'userId', 'ephemeral', 'saveAs', 'messageId', "embed"];
+    const OPTIONAL_PARAMS = ['reason', 'description', 'channelId', 'userId', 'ephemeral', 'saveAs', 'messageId', 'embed', 'targetUserId', 'timeout', 'cancelMessage'];
 
 const components = meta.params.slice(0, 5).map(p => ({
   type: 1,
@@ -1054,7 +1056,10 @@ const components = meta.params.slice(0, 5).map(p => ({
       ephemeral: 'Ephemeral? (true/false)',
       varName:   'Nome da variável',
       title:     'Título do ranking',
-      embed: 'Embed (JSON opcional)'
+      embed: 'Embed (JSON opcional)' ,
+      targetUserId:  'ID do usuário que deve confirmar',
+     cancelMessage: 'Mensagem se cancelado',
+     timeout:       'Tempo limite em segundos'
     };
     return labels[p] || p;
   }
@@ -1090,7 +1095,10 @@ const components = meta.params.slice(0, 5).map(p => ({
       ephemeral: 'false',
       varName:   'money',
       title:     '🏆 Ranking de Moedas',
-      embed: '{"title":"Título","description":"Texto","color":5765120}'
+      embed: '{"title":"Título","description":"Texto","color":5765120}',
+      targetUserId:  '{arg0} ou ID fixo',
+      cancelMessage: '❌ Operação cancelada.',
+      timeout:       '30'
     };
     return ph[p] || '';
   }

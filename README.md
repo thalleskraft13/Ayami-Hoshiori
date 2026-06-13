@@ -1,78 +1,116 @@
-# 🌙 Arlecchino Bot
+🌸 Ah! Então você encontrou o meu cantinho. ✨
 
-> Nem todos nasceram para o comum.  
-> Alguns escolhem o poder.
+Fico feliz que esteja aqui!
 
-Arlecchino Bot é um bot avançado para Discord inspirado no universo de Genshin Impact, focado em sistemas de rank, economia, progressão e recursos exclusivos para servidores que desejam algo além do básico.
+«Existem muitas coisas para descobrir, criar e explorar por aqui... espero que esteja pronto para essa aventura.»
 
----
-
-## 🔥 Recursos Principais
-
-- ⚔️ Sistema de Rank de Aventureiro
-- 💰 Economia dinâmica com Daily
-- 🎲 Sorteios automatizados
-- 🏅 Sistema de Emblemas
-- 🕯️ Recursos personalizados por servidor
-- 🛒 Loja interna estratégica
-- 🌙 Sistema de Assinatura Premium (Lua Carmesim)
+Eu sou a Ayami Hoshiori ⭐
+Uma garota apaixonada por estrelas, sonhos e novas possibilidades.
 
 ---
 
-## 🌙 Assinatura Oficial — Lua Carmesim
+🌐 Website Oficial
 
-A Lua Carmesim não é sobre preço.  
-É sobre posição.
+Acesse meu website para conhecer mais sobre mim, acompanhar novidades e explorar meus sistemas:
 
-### Benefícios:
-
-🔥 Daily Aprimorado  
-⚔️ XP Aumentado  
-🕯️ Sistemas Exclusivos  
-🏅 Emblema Oficial de Assinante  
-🎲 Mais chances em sorteios  
-🌟 1 Personagem T5 grátis ao ativar  
-🩸 Desconto especial na loja  
-
-### Planos:
-
-🗓 **Mensal** — R$ 8,99  
-📆 **Trimestral** — R$ 24,99  
-📅 **Semestral** — R$ 44,99  
+https://ayami-hoshiori.vercel.app/
 
 ---
 
-## ⚙️ Tecnologias Utilizadas
+⭐ Logic Builder
 
-- Node.js
-- WebSocket Gateway próprio
-- MongoDB
-- Sistema de cache otimizado
-- API própria para gerenciamento
+Crie sistemas completos para Discord sem precisar programar.
 
----
+- Gatilhos personalizados
+- Variáveis dinâmicas
+- Mensagens automáticas
+- Gerenciamento de cargos
+- Fluxos inteligentes
+- Instalação simplificada
 
-
-
-## 📊 Diferenciais
-
-- Estrutura modular escalável  
-- Sistema próprio sem depender totalmente de bibliotecas prontas  
-- Foco em performance  
-- Logs organizados por tipo de request  
-- Arquitetura preparada para múltiplos bots  
+Tudo de forma visual, prática e poderosa.
 
 ---
 
-## 👑 Criador
+🎴 Sistema de Invocação
 
-Desenvolvido por **Thalles**  
-Desenvolvedor Node.js  
-Criador de sistemas personalizados para Discord  
+Inspirado nos sistemas gacha mais populares.
+
+- Sistema 50/50
+- Pity persistente
+- Banners rotativos
+- Personagens exclusivos
+- Histórico de invocações
+
+Cada desejo pode mudar sua coleção.
 
 ---
 
-## 💎 Objetivo
+💎 Economia & Progressão
 
-Criar algo que não seja apenas "mais um bot".  
-Mas sim uma experiência.
+Participe da comunidade e evolua constantemente.
+
+- Rank de Aventureiro
+- Sistema de XP
+- Economia integrada
+- Recompensas diárias
+- Loja exclusiva
+
+Quanto mais você participa, mais recompensas conquista.
+
+---
+
+🛠️ Embed & Components Builder V2
+
+Crie sistemas visuais diretamente pelo Discord.
+
+- Embeds personalizadas
+- Botões interativos
+- Menus de seleção
+- Modais
+- Painéis completos
+
+Sem complicação.
+
+---
+
+🌌 Exploração
+
+Sempre existe algo novo esperando por você.
+
+- Eventos especiais
+- Novos sistemas
+- Atualizações frequentes
+- Recursos experimentais
+
+A aventura nunca termina.
+
+---
+
+✨ Constellation
+
+Para aqueles que desejam ir além.
+
+Membros recebem benefícios exclusivos, recompensas aprimoradas e acesso antecipado a novidades.
+
+«Uma estrela sozinha brilha...
+Mas juntas, formam algo maior.»
+
+---
+
+🔗 Links Oficiais
+
+🗳️ Servidor de Suporte
+https://discord.gg/UbyMBuaGt
+
+✨ Top.gg
+https://top.gg/bot/1441027871069048902
+
+🤝 Adicionar Ayami ao seu servidor
+https://discord.com/oauth2/authorize?client_id=1441027871069048902
+
+---
+
+⭐ Obrigada por visitar meu cantinho.
+
+Espero que possamos criar algo incrível juntos.
