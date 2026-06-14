@@ -87,6 +87,50 @@ class InteractionManager {
     }
 
     /**
+     * Build a Role Select component (type 6) and register its handler in cache.
+     * Options are populated automatically by Discord based on server roles.
+     *
+     * @param {{ user?: string, tempo?: number, funcao: Function, data?: object }} opts
+     * @returns {object} Discord role select component object
+     */
+    createRoleSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
+        const id = this._register({ user, funcao }, tempo);
+
+        return {
+            type:        6,
+            custom_id:   id,
+            placeholder: data.placeholder ?? 'Selecione um cargo',
+            min_values:  data.min_values  ?? 1,
+            max_values:  data.max_values  ?? 1,
+        };
+    }
+
+    /**
+     * Build a Channel Select component (type 8) and register its handler in cache.
+     * Options are populated automatically by Discord based on server channels.
+     *
+     * @param {{ user?: string, tempo?: number, funcao: Function, data?: object }} opts
+     * @returns {object} Discord channel select component object
+     */
+    createChannelSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
+        const id = this._register({ user, funcao }, tempo);
+
+        const component = {
+            type:        8,
+            custom_id:   id,
+            placeholder: data.placeholder ?? 'Selecione um canal',
+            min_values:  data.min_values  ?? 1,
+            max_values:  data.max_values  ?? 1,
+        };
+
+        if (data.channel_types?.length) {
+            component.channel_types = data.channel_types;
+        }
+
+        return component;
+    }
+
+    /**
      * Build a modal data object and register its handler in cache.
      *
      * @param {{ user?: string, tempo?: number, title: string, components: object[], funcao: Function }} opts

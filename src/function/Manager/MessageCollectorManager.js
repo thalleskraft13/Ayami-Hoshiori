@@ -258,21 +258,47 @@ Eu estarei observando.`
 
 
     _handleMentionReply(message) {
-        const clientId = process.env.CLIENT_ID;
-        const isMentioned =
-            message.content?.includes(`<@${clientId}>`) ||
-            message.content?.includes(`<@!${clientId}>`);
+    const clientId = process.env.CLIENT_ID;
+    const isMentioned =
+        message.content?.includes(`<@${clientId}>`) ||
+        message.content?.includes(`<@!${clientId}>`);
 
-        if (!isMentioned) return;
+    if (!isMentioned) return;
 
-        return DiscordRequest(`/channels/${message.channel_id}/messages`, {
-            method: 'POST',
-            body: {
-                content:
-                    `${this.client.emoji.default} **Oi, <@${message.author.id}>! Você me chamou?**\nSe precisar de ajuda, use /ajuda para ver todos os meus comandos e sistemas disponíveis! ✨\n\nVou estar aqui esperando~ 💙`,
-            },
-        });
-    }
+    const e = this.client.emoji;
+
+    return DiscordRequest(`/channels/${message.channel_id}/messages`, {
+        method: 'POST',
+        body: {
+            content: `${e.default} **Oi, <@${message.author.id}>~!**`,
+            embeds: [
+                {
+                    title: `${e.feliz} Central de Ajuda — Ayami Hoshiori`,
+                    description: [
+                        `Oi, oi~! Eu sou a **Ayami** ${e.default} — que bom que você me chamou! ${e.animada}`,
+                        ``,
+                        `Aqui estão todas as formas de me encontrar e ver o que eu faço:`,
+                        ``,
+                        `${e.corao} **Site Principal**`,
+                        `> 🌐 [ayami-hoshiori.vercel.app](https://ayami-hoshiori.vercel.app/)`,
+                        ``,
+                        `${e.curtida} **Página de Comandos**`,
+                        `> 📋 [ayami-hoshiori.vercel.app/commands](https://ayami-hoshiori.vercel.app/commands)`,
+                        ``,
+                        `${e.pensando} **Logic Builder**`,
+                        `> 🧩 [ayami-hoshiori.vercel.app/logic-builder](https://ayami-hoshiori.vercel.app/logic-builder)`,
+                        ``,
+                        `> *Explora o site com calma — tem muita coisa legal por lá~!* ${e.rindo}`,
+                    ].join('\n'),
+                    color: 0x7C8FFF,
+                    footer: {
+                        text: 'Ayami Hoshiori • Sempre aqui pra você ✨'
+                    }
+                }
+            ],
+        },
+    });
+}
 
 
 
