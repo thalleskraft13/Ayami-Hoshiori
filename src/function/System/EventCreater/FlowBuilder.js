@@ -128,12 +128,14 @@ const CONDITION_CATALOG = [
   { category: 'time',        type: 'between',            label: '⏰ Entre horários',            params: ['from', 'to'] },
   { category: 'permission',  type: 'is_admin',           label: '🛡️ É administrador',           params: [] },
   { category: 'permission',  type: 'has_permission',     label: '🛡️ Tem permissão',             params: ['permission'] },
+  // ── Args ────────────────────────────────────────────────────
+  { category: 'args', type: 'args_has_content', label: '📝 Args tem conteúdo',          params: ['errorMsg'] },
 ];
 
 const ACTION_CATALOG = [
-  { category: 'message',  type: 'send_message',        label: '💬 Enviar mensagem',               params: ['content', 'channelId', 'embed'] },
-  { category: 'message',  type: 'send_dm',             label: '📩 Enviar DM',                     params: ['content', 'embed'] },
-  { category: 'message',  type: 'reply_message',       label: '↩️ Responder mensagem',            params: ['content', 'ephemeral', 'embed'] },
+  { category: 'message',  type: 'send_message',        label: '💬 Enviar mensagem',               params: ['content', 'channelId', 'embedObj'] },
+  { category: 'message',  type: 'send_dm',             label: '📩 Enviar DM',                     params: ['content', 'embedObj'] },
+  { category: 'message',  type: 'reply_message',       label: '↩️ Responder mensagem',            params: ['content', 'ephemeral', 'embedObj'] },
   { category: 'message',  type: 'delete_message',      label: '🗑️ Apagar mensagem',               params: [] },
   { category: 'message',  type: 'edit_message',        label: '✏️ Editar mensagem',               params: ['content'] },
   { category: 'message',  type: 'delete_bot_message',  label: '🗑️ Apagar mensagem do bot',        params: ['messageId', 'channelId'] },
@@ -188,14 +190,15 @@ const NEEDS_ROLE_SELECT    = ['roleId'];
    ───────────────────────────────────────────── */
 const OPTIONAL_PARAMS = [
   'reason', 'description', 'channelId', 'userId',
-  'ephemeral', 'saveAs', 'messageId', 'embed',
+  'ephemeral', 'saveAs', 'messageId', 'embed', 'embedObj',
   'targetUserId', 'timeout', 'cancelMessage'
 ];
 
 /* ─────────────────────────────────────────────
    Params que NÃO entram no modal (resolvidos via select)
    ───────────────────────────────────────────── */
-const SKIP_IN_MODAL = [...NEEDS_CHANNEL_SELECT, ...NEEDS_ROLE_SELECT];
+const NEEDS_ARG_SELECT  = ['argSelect'];
+const SKIP_IN_MODAL = [...NEEDS_CHANNEL_SELECT, ...NEEDS_ROLE_SELECT, ...NEEDS_ARG_SELECT];
 
 /* ─────────────────────────────────────────────
    FLOW BUILDER
@@ -453,7 +456,7 @@ class FlowBuilder {
         }),
         '✏️ Editar condição existente',
         async (i) => {
-          await this.ui.deferUpdate(i);
+          // SEM deferUpdate — _editConditionSelect abre modal via showModal
           const condId = i.data.values[0];
           return this._editConditionSelect(i, user, flowId, condId);
         }
@@ -748,7 +751,8 @@ class FlowBuilder {
         }),
         '✏️ Editar ação existente',
         async (i) => {
-          await this.ui.deferUpdate(i);
+          // NÃO deferUpdate aqui — _editActionSelect abre modal via showModal
+          // e modal não pode ser aberto após a interação já ter sido acknowledged
           return this._editActionSelect(i, user, flowId, i.data.values[0]);
         }
       );
@@ -807,14 +811,19 @@ class FlowBuilder {
       return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Ação **${meta?.label}** adicionada!` });
     }
 
-    // Params que vão no modal (sem canal/cargo)
-    const modalParams = meta.params.filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed');
-    const hasEmbed    = meta.params.includes('embed');
+    // Params que vão no modal (sem canal/cargo/embed)
+    const modalParams = meta.params.filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed' && p !== 'embedObj');
+    const hasEmbedObj = meta.params.includes('embedObj');
     const needsSelect = meta.params.some(p => SKIP_IN_MODAL.includes(p));
 
-    // Modal com os params de texto
-    if (modalParams.length > 0 || hasEmbed) {
-      return this._openActionModal(interaction, user, flowId, meta, null, modalParams, hasEmbed, needsSelect);
+    // Modal com os params de texto (embed é tratado depois pelo builder)
+    if (modalParams.length > 0) {
+      return this._openActionModal(interaction, user, flowId, meta, null, modalParams, false, needsSelect, hasEmbedObj);
+    }
+
+    // Sem params de texto mas tem embedObj — vai direto pro ask
+    if (hasEmbedObj) {
+      return this._askEmbedOrSave(interaction, user, flowId, meta, {}, false, null, needsSelect);
     }
 
     // Só precisa de canal/cargo — vai direto pro select
@@ -822,12 +831,12 @@ class FlowBuilder {
     return this._resolveSelectParams(interaction, user, flowId, meta, {}, 'action');
   }
 
-  async _openActionModal(interaction, user, flowId, meta, existingAction, modalParams, hasEmbed, needsSelect) {
+  async _openActionModal(interaction, user, flowId, meta, existingAction, modalParams, _unused, needsSelect, hasEmbedObj = false) {
     const isEdit     = !!existingAction;
     const components = [];
 
     // Params textuais
-    for (const p of modalParams.slice(0, hasEmbed ? 3 : 4)) {
+    for (const p of modalParams.slice(0, 4)) {
       components.push({
         type: 1,
         components: [{
@@ -843,22 +852,7 @@ class FlowBuilder {
       });
     }
 
-    // Campo de embed separado (JSON completo)
-    if (hasEmbed) {
-      components.push({
-        type: 1,
-        components: [{
-          type:        4,
-          custom_id:   'embed',
-          label:       '📋 Embed (JSON — opcional)',
-          style:       2,
-          required:    false,
-          max_length:  4000,
-          placeholder: '{"title":"Título","description":"Texto","color":5765120,"fields":[{"name":"Campo","value":"Valor"}]}',
-          value:       isEdit ? (existingAction.params?.embed || '') : undefined
-        }]
-      });
-    }
+    // embedObj é tratado pelo builder visual, não por campo no modal
 
     const modal = this.client.interactions.createModal({
       user,
@@ -867,30 +861,22 @@ class FlowBuilder {
       funcao: async (modalInteraction, client, fields) => {
         const params = isEdit ? { ...existingAction.params } : {};
 
-        for (const p of [...modalParams, ...(hasEmbed ? ['embed'] : [])]) {
+        for (const p of modalParams) {
           const val = fields[p];
           if (val === undefined) continue;
-          if (p === 'embed') {
-            if (val.trim()) {
-              // Valida JSON do embed
-              try { JSON.parse(val.trim()); params.embed = val.trim(); }
-              catch {
-                return DiscordRequest(
-                  `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-                  { method: 'POST', body: { type: 4, data: { content: `❌ JSON do embed inválido! ${this._e('brava')}\nVerifique a estrutura e tente novamente.`, flags: 64 } } }
-                );
-              }
-            }
-          } else {
-            if (isEdit && val.trim() === '' && OPTIONAL_PARAMS.includes(p)) continue;
-            params[p] = val;
-          }
+          if (isEdit && val.trim() === '' && OPTIONAL_PARAMS.includes(p)) continue;
+          params[p] = val;
         }
 
         await DiscordRequest(
           `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
           { method: 'POST', body: { type: 6 } }
         );
+
+        // Se precisa de embed builder
+        if (hasEmbedObj) {
+          return this._askEmbedOrSave(modalInteraction, user, flowId, meta, params, isEdit, existingAction, needsSelect);
+        }
 
         // Se precisa de canal/cargo, vai pro select
         if (needsSelect && !isEdit) {
@@ -912,6 +898,276 @@ class FlowBuilder {
     });
 
     return this.client.interactions.showModal(interaction, modal);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // EMBED BUILDER integrado ao FlowBuilder
+  // Pergunta se quer embed, abre o builder e salva no params.embedObj
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _askEmbedOrSave(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
+    const existingEmbed = params.embedObj ?? existingAction?.params?.embedObj ?? null;
+    const hasEmbed      = !!existingEmbed;
+
+    const btnSim = this.client.interactions.createButton({
+      user,
+      data: { label: hasEmbed ? '✏️ Editar embed' : '✨ Criar embed', style: 1 },
+      funcao: async (i) => {
+        await this.ui.deferUpdate(i);
+        return this._openFlowEmbedBuilder(i, user, flowId, meta, params, isEdit, existingAction, needsSelect, existingEmbed);
+      }
+    });
+
+    const btnNao = this.client.interactions.createButton({
+      user,
+      data: { label: hasEmbed ? '🗑️ Remover embed' : '⏭️ Sem embed', style: hasEmbed ? 4 : 2 },
+      funcao: async (i) => {
+        await this.ui.deferUpdate(i);
+        delete params.embedObj;
+        return this._afterEmbedDecision(i, user, flowId, meta, params, isEdit, existingAction, needsSelect);
+      }
+    });
+
+    const buttons = hasEmbed ? [btnSim, btnNao] : [btnSim, btnNao];
+
+    // Também mostra botão "manter" se já tem embed e é edição
+    const rows = [this.ui.row(...buttons)];
+    if (hasEmbed && isEdit) {
+      const btnManter = this.client.interactions.createButton({
+        user,
+        data: { label: '✅ Manter embed atual', style: 3 },
+        funcao: async (i) => {
+          await this.ui.deferUpdate(i);
+          params.embedObj = existingEmbed;
+          return this._afterEmbedDecision(i, user, flowId, meta, params, isEdit, existingAction, needsSelect);
+        }
+      });
+      rows[0] = this.ui.row(btnSim, btnNao, btnManter);
+    }
+
+    return this.ui.editOriginal(interaction, {
+      embeds: [{
+        title:       `${this._e('emduvida')} Adicionar embed à mensagem?`,
+        description:
+          hasEmbed
+            ? `${this._e('animada')} Essa ação já tem uma embed configurada!\n\n> **Você quer editar, remover ou manter a embed atual?**`
+            : `${this._e('pensando')} Você quer adicionar uma **embed** à mensagem?\n\n` +
+              `Embeds deixam a mensagem bem mais bonita — têm título, descrição, cor, imagem, fields e muito mais! ${this._e('feliz')}`,
+        color:  COLOR.main
+      }],
+      components: rows
+    });
+  }
+
+  async _afterEmbedDecision(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
+    if (needsSelect && !isEdit) {
+      return this._resolveSelectParams(interaction, user, flowId, meta, params, 'action');
+    }
+    if (needsSelect && isEdit) {
+      params._actionId = existingAction.id;
+      return this._resolveSelectParams(interaction, user, flowId, meta, params, 'action_edit');
+    }
+    if (isEdit) {
+      return this._applyActionEdit(interaction, user, flowId, existingAction.id, params);
+    }
+    return this._saveAction(interaction, user, flowId, meta.category, meta.type, params);
+  }
+
+  async _openFlowEmbedBuilder(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect, existingEmbed) {
+    // Estado do builder — apenas embed (sem content/botões, pois esses já estão em params)
+    const embed = existingEmbed ? JSON.parse(JSON.stringify(existingEmbed)) : {
+      title: '', description: '', color: 0x7C8FFF,
+      url: '', author: { name: '', icon_url: '', url: '' },
+      footer: { text: '', icon_url: '' },
+      thumbnail: { url: '' }, image: { url: '' }, fields: []
+    };
+
+    const PRESET_COLORS = [
+      { label: '🩵 Azul Ayami',       value: 'A9D6FF' },
+      { label: '💙 Azul Secundário',  value: '7C8FFF' },
+      { label: '🌙 Azul Escuro',      value: '243B7A' },
+      { label: '⭐ Dourado',           value: 'FFD966' },
+      { label: '🔵 Azul Discord',     value: '5865F2' },
+      { label: '🟢 Verde',            value: '2ECC71' },
+      { label: '🔴 Vermelho',         value: 'E74C3C' },
+      { label: '🟣 Roxo',             value: '9B59B6' },
+      { label: '🎨 HEX Personalizado',value: 'custom'  },
+    ];
+
+    function cleanEmbed(e) {
+      const out = {};
+      if (e.title)            out.title       = e.title;
+      if (e.description)      out.description = e.description;
+      if (e.color != null)    out.color       = e.color;
+      if (e.url)              out.url         = e.url;
+      if (e.author?.name)     out.author      = { name: e.author.name, ...(e.author.icon_url ? { icon_url: e.author.icon_url } : {}), ...(e.author.url ? { url: e.author.url } : {}) };
+      if (e.footer?.text)     out.footer      = { text: e.footer.text, ...(e.footer.icon_url ? { icon_url: e.footer.icon_url } : {}) };
+      if (e.thumbnail?.url)   out.thumbnail   = { url: e.thumbnail.url };
+      if (e.image?.url)       out.image       = { url: e.image.url };
+      if (e.fields?.length)   out.fields      = e.fields;
+      return out;
+    }
+
+    function buildPreviewLine() {
+      const parts = [];
+      if (embed.title)           parts.push(`📌 **${embed.title.slice(0, 40)}**`);
+      if (embed.description)     parts.push(`📝 Descrição: ${embed.description.slice(0, 60)}…`);
+      if (embed.author?.name)    parts.push(`👤 Author: ${embed.author.name}`);
+      if (embed.footer?.text)    parts.push(`📋 Footer: ${embed.footer.text.slice(0, 40)}`);
+      if (embed.thumbnail?.url)  parts.push(`🖼️ Thumbnail: ✅`);
+      if (embed.image?.url)      parts.push(`🖼️ Image: ✅`);
+      if (embed.fields?.length)  parts.push(`📊 Fields: ${embed.fields.length}`);
+      const colorHex = embed.color ? `#${embed.color.toString(16).padStart(6, '0').toUpperCase()}` : 'nenhuma';
+      parts.push(`🎨 Cor: ${colorHex}`);
+      return parts.length ? parts.join('\n') : '_Embed em branco_';
+    }
+
+    const renderBuilder = async (i) => {
+      const editSel = this.client.interactions.createSelect({
+        user,
+        data: {
+          placeholder: '✏️ Editar campo da embed…',
+          options: [
+            { label: 'Título',           value: 'title'       },
+            { label: 'Descrição',        value: 'description' },
+            { label: 'URL do Título',    value: 'url'         },
+            { label: 'Author Nome',      value: 'author_name' },
+            { label: 'Author Icon URL',  value: 'author_icon' },
+            { label: 'Author URL',       value: 'author_url'  },
+            { label: 'Footer Texto',     value: 'footer_text' },
+            { label: 'Footer Icon URL',  value: 'footer_icon' },
+            { label: 'Thumbnail URL',    value: 'thumbnail'   },
+            { label: 'Image URL',        value: 'image'       },
+          ]
+        },
+        funcao: async (si) => {
+          const MAP = {
+            title      : ['Editar Título',           () => embed.title,           v => { embed.title           = v; }, false],
+            description: ['Editar Descrição',        () => embed.description,     v => { embed.description     = v; }, true ],
+            url        : ['Editar URL do Título',     () => embed.url,             v => { embed.url             = v; }, false],
+            author_name: ['Editar Author Nome',       () => embed.author.name,     v => { embed.author.name     = v; }, false],
+            author_icon: ['Editar Author Icon URL',   () => embed.author.icon_url, v => { embed.author.icon_url = v; }, false],
+            author_url : ['Editar Author URL',        () => embed.author.url,      v => { embed.author.url      = v; }, false],
+            footer_text: ['Editar Footer Texto',      () => embed.footer.text,     v => { embed.footer.text     = v; }, false],
+            footer_icon: ['Editar Footer Icon URL',   () => embed.footer.icon_url, v => { embed.footer.icon_url = v; }, false],
+            thumbnail  : ['Editar Thumbnail URL',     () => embed.thumbnail.url,   v => { embed.thumbnail.url   = v; }, false],
+            image      : ['Editar Image URL',         () => embed.image.url,       v => { embed.image.url       = v; }, false],
+          };
+          const [title, getter, setter, multi] = MAP[si.data.values[0]] || [];
+          if (!title) return;
+          const modal = this.client.interactions.createModal({
+            user, title,
+            components: [{ type: 1, components: [{ type: 4, custom_id: 'val', label: title, style: multi ? 2 : 1, required: false, value: getter() || '', max_length: multi ? 4000 : 256 }] }],
+            funcao: async (mi, _, fields) => {
+              setter(fields.val ?? '');
+              await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } });
+              return renderBuilder(mi);
+            }
+          });
+          return this.client.interactions.showModal(si, modal);
+        }
+      });
+
+      const fieldSel = this.client.interactions.createSelect({
+        user,
+        data: {
+          placeholder: '📊 Gerenciar Fields…',
+          options: [
+            { label: '➕ Adicionar Field', value: 'add',    description: `Atual: ${embed.fields.length}/25` },
+            { label: '🗑️ Remover Última',  value: 'remove'  },
+          ]
+        },
+        funcao: async (si) => {
+          if (si.data.values[0] === 'remove') {
+            if (!embed.fields.length) return;
+            embed.fields.pop();
+            await this.ui.deferUpdate(si);
+            return renderBuilder(si);
+          }
+          if (embed.fields.length >= 25) return;
+          const modal = this.client.interactions.createModal({
+            user, title: 'Adicionar Field',
+            components: [
+              { type: 1, components: [{ type: 4, custom_id: 'name',   label: 'Nome do field',   style: 1, required: true,  max_length: 256 }] },
+              { type: 1, components: [{ type: 4, custom_id: 'value',  label: 'Valor do field',  style: 2, required: true,  max_length: 1024 }] },
+              { type: 1, components: [{ type: 4, custom_id: 'inline', label: 'Inline? sim/nao', style: 1, required: false }] },
+            ],
+            funcao: async (mi, _, fields) => {
+              embed.fields.push({ name: fields.name, value: fields.value, inline: fields.inline?.toLowerCase() === 'sim' });
+              await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } });
+              return renderBuilder(mi);
+            }
+          });
+          return this.client.interactions.showModal(si, modal);
+        }
+      });
+
+      const colorSel = this.client.interactions.createSelect({
+        user,
+        data: { placeholder: '🎨 Escolher cor…', options: PRESET_COLORS.map(c => ({ label: c.label, value: c.value })) },
+        funcao: async (si) => {
+          const val = si.data.values[0];
+          if (val === 'custom') {
+            const modal = this.client.interactions.createModal({
+              user, title: 'Cor HEX Personalizada',
+              components: [{ type: 1, components: [{ type: 4, custom_id: 'hex', label: 'HEX (ex: FF5733)', style: 1, required: true, max_length: 7, placeholder: 'FF5733' }] }],
+              funcao: async (mi, _, fields) => {
+                const hex = (fields.hex || '').replace('#', '').trim();
+                if (!/^[0-9A-Fa-f]{6}$/.test(hex)) return;
+                embed.color = parseInt(hex, 16);
+                await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } });
+                return renderBuilder(mi);
+              }
+            });
+            return this.client.interactions.showModal(si, modal);
+          }
+          embed.color = parseInt(val, 16);
+          await this.ui.deferUpdate(si);
+          return renderBuilder(si);
+        }
+      });
+
+      const btnConfirm = this.client.interactions.createButton({
+        user, data: { label: '✅ Confirmar embed', style: 3 },
+        funcao: async (i) => {
+          await this.ui.deferUpdate(i);
+          params.embedObj = cleanEmbed(embed);
+          return this._afterEmbedDecision(i, user, flowId, meta, params, isEdit, existingAction, needsSelect);
+        }
+      });
+
+      const btnRemove = this.client.interactions.createButton({
+        user, data: { label: '🗑️ Remover embed', style: 4 },
+        funcao: async (i) => {
+          await this.ui.deferUpdate(i);
+          delete params.embedObj;
+          return this._afterEmbedDecision(i, user, flowId, meta, params, isEdit, existingAction, needsSelect);
+        }
+      });
+
+      // A embed renderizada É o preview em tempo real — cada edição re-renderiza
+      return this.ui.editOriginal(i, {
+        embeds: [{
+          title:       embed.title       || `🎨 Editor de Embed ${this._e('animada')}`,
+          description: embed.description || `${this._e('pensando')} Edite os campos usando os menus abaixo!\nO preview atualiza a cada mudança. ${this._e('feliz')}`,
+          color:       embed.color ?? 0x7C8FFF,
+          url:         embed.url         || undefined,
+          thumbnail:   embed.thumbnail?.url ? { url: embed.thumbnail.url } : undefined,
+          image:       embed.image?.url     ? { url: embed.image.url }     : undefined,
+          author:      embed.author?.name   ? { name: embed.author.name, icon_url: embed.author.icon_url || undefined, url: embed.author.url || undefined } : undefined,
+          footer:      embed.footer?.text   ? { text: embed.footer.text, icon_url: embed.footer.icon_url || undefined } : undefined,
+          fields:      embed.fields?.length ? embed.fields                 : undefined,
+        }],
+        components: [
+          this.ui.row(editSel),
+          this.ui.row(fieldSel),
+          this.ui.row(colorSel),
+          this.ui.row(btnConfirm, btnRemove),
+        ]
+      });
+    };
+
+    return renderBuilder(interaction);
   }
 
   async _saveAction(interaction, user, flowId, category, type, params) {
@@ -970,7 +1226,9 @@ class FlowBuilder {
 
     const flow    = await this._getFlow(guildId, flowId);
     const actions = flow.actions || [];
-    actions.push({ id: this._uid(), category, type, params, order: actions.length });
+    // JSON roundtrip garante que objetos aninhados (embedObj) são detectados pelo Mongoose
+    const safeParams = JSON.parse(JSON.stringify(params));
+    actions.push({ id: this._uid(), category, type, params: safeParams, order: actions.length });
     await this.client.logicEngine.updateFlow(flowId, guildId, { actions });
 
     const msg = warnings.length
@@ -995,27 +1253,27 @@ class FlowBuilder {
 
     // Apenas abre o modal direto, sem followUp extra
 
-    const modalParams = (meta?.params || []).filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed');
-    const hasEmbed    = meta?.params?.includes('embed');
+    const modalParams = (meta?.params || []).filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed' && p !== 'embedObj');
+    const hasEmbedObj = meta?.params?.includes('embedObj');
     const needsSelect = meta?.params?.some(p => SKIP_IN_MODAL.includes(p));
 
-    if (!modalParams.length && !hasEmbed && !needsSelect) {
+    if (!modalParams.length && !hasEmbedObj && !needsSelect) {
       return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('emduvida')} Esta ação não tem parâmetros para editar!` });
     }
 
-    if (!modalParams.length && !hasEmbed && needsSelect) {
-      action._actionId = action.id;
+    if (!modalParams.length && !hasEmbedObj && needsSelect) {
       return this._resolveSelectParams(interaction, user, flowId, meta, { ...action.params, _actionId: action.id }, 'action_edit');
     }
 
-    return this._openActionModal(interaction, user, flowId, meta, action, modalParams, hasEmbed, needsSelect);
+    return this._openActionModal(interaction, user, flowId, meta, action, modalParams, false, needsSelect, hasEmbedObj);
   }
 
   async _applyActionEdit(interaction, user, flowId, actionId, params) {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
     const actions = (flow?.actions || []).map(a => {
       if (a.id !== actionId) return a;
-      return { ...a, params };
+      // JSON roundtrip garante que objetos aninhados (embedObj) são detectados pelo Mongoose
+      return { ...a, params: JSON.parse(JSON.stringify(params)) };
     });
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { actions });
     return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('feliz')} Ação atualizada!` });
@@ -1061,7 +1319,12 @@ class FlowBuilder {
           return this._showRoleSelect(i, user, flowId, meta, params, mode);
         }
 
-        return this._finalizeSave(i, user, flowId, meta, params, mode);
+        // Se ainda precisa de argSelect
+    if (meta.params.includes('argSelect') && params.argIndex === undefined) {
+      return this._showArgSelect(i, user, flowId, meta, params, mode);
+    }
+
+    return this._finalizeSave(i, user, flowId, meta, params, mode);
       }
     });
 
@@ -1100,6 +1363,71 @@ class FlowBuilder {
         color: COLOR.main
       }],
       components: [this.ui.row(roleSel)]
+    });
+  }
+
+  /* ── Arg Select — escolhe índice e tipo do arg ── */
+  async _showArgSelect(interaction, user, flowId, meta, params, mode) {
+    // Step 1: seleciona o índice do arg (0-4, exibidos como 1-5)
+    const argIndexSel = this.client.interactions.createSelect({
+      user,
+      data: {
+        placeholder: '🔢 Qual argumento? (1 = primeiro)',
+        options: [0,1,2,3,4].map(n => ({
+          label:       `Argumento ${n + 1}`,
+          value:       String(n),
+          description: `{arg${n}} — ${n === 0 ? 'primeiro' : n === 1 ? 'segundo' : n === 2 ? 'terceiro' : n === 3 ? 'quarto' : 'quinto'} argumento`
+        }))
+      },
+      funcao: async (i) => {
+        await this.ui.deferUpdate(i);
+        params.argIndex = Number(i.data.values[0]);
+        return this._showArgTypeSel(i, user, flowId, meta, params, mode);
+      }
+    });
+
+    return this.ui.editOriginal(interaction, {
+      embeds: [{
+        title:       `🔍 Condição: ${meta.label} ${this._e('emduvida')}`,
+        description:
+          `${this._e('pensando')} **Qual argumento você quer verificar?**\n\n` +
+          `Os argumentos são as palavras que o usuário digita após o comando.\n` +
+          `Ex: \`!ban @Usuario motivo\` → arg1 = \`@Usuario\`, arg2 = \`motivo\``,
+        color: COLOR.main
+      }],
+      components: [this.ui.row(argIndexSel)]
+    });
+  }
+
+  async _showArgTypeSel(interaction, user, flowId, meta, params, mode) {
+    const argNum = (params.argIndex ?? 0) + 1;
+
+    const argTypeSel = this.client.interactions.createSelect({
+      user,
+      data: {
+        placeholder: `🔍 O Argumento ${argNum} é…`,
+        options: [
+          { label: '👤 Menção de usuário',  value: 'user_mention',  description: `{arg${argNum - 1}} é uma menção @usuário` },
+          { label: '📌 Menção de canal',    value: 'channel_mention', description: `{arg${argNum - 1}} é uma menção #canal` },
+          { label: '🔢 Número',            value: 'number',          description: `{arg${argNum - 1}} é um número válido` },
+          { label: '✏️ Texto não-vazio',   value: 'text',            description: `{arg${argNum - 1}} tem qualquer conteúdo` },
+        ]
+      },
+      funcao: async (i) => {
+        await this.ui.deferUpdate(i);
+        params.argType = i.data.values[0];
+        return this._finalizeSave(i, user, flowId, meta, params, mode);
+      }
+    });
+
+    return this.ui.editOriginal(interaction, {
+      embeds: [{
+        title:       `🔍 Tipo do Argumento ${argNum} ${this._e('emduvida')}`,
+        description:
+          `${this._e('pensando')} **O Argumento ${argNum} deve ser do tipo:**`,
+        color: COLOR.main
+      }],
+      components: [this.ui.row(argTypeSel)]
     });
   }
 

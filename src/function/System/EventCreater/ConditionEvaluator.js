@@ -81,7 +81,8 @@ class ConditionEvaluator {
       case 'permission':  return this._permission(cond.type, p, ctx);
       case 'inventory':   return this._inventory(cond.type, p, ctx);
       case 'command':     return this._command(cond.type, p, ctx);
-      case 'reaction': return this._reaction(cond.type, p, ctx);
+      case 'reaction':    return this._reaction(cond.type, p, ctx);
+      case 'args':        return this._args(cond.type, p, ctx);
       default:
         console.warn(`[ConditionEvaluator] Categoria desconhecida: ${cond.category}`);
         return true;
@@ -411,6 +412,97 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
         const expires = cmd.cooldownMap?.get(ctx.discord.userId) || 0;
         return Date.now() >= expires;
       }
+      default: return true;
+    }
+  }
+
+  /* ═══════════════════════════════════════════
+     ARGS CONDITIONS
+     ═══════════════════════════════════════════ */
+
+  async _args(type, p, ctx) {
+    const args    = ctx.discord.customData?.args || [];
+    const discord = ctx.discord;
+
+    switch (type) {
+
+      // ── args_has_content ──────────────────────────────────────
+      // Verifica se há pelo menos um argumento.
+      // Se não, envia errorMsg e cancela o fluxo.
+      case 'args_has_content': {
+        const hasContent = args.length > 0 && args.some(a => a.trim() !== '');
+        if (!hasContent && p.errorMsg?.trim()) {
+          // envia mensagem de erro e cancela
+          const channelId = discord.channelId;
+          if (channelId) {
+            await DiscordRequest(`/channels/${channelId}/messages`, {
+              method: 'POST',
+              body:   { content: p.errorMsg }
+            });
+          }
+          ctx.cancel();
+        }
+        return hasContent;
+      }
+
+      // ── arg_is_type ──────────────────────────────────────────
+      // Verifica se o arg na posição argIndex é do tipo argType.
+      // Sempre valida se o arg existe antes de checar o tipo.
+      // Se falhar e houver errorMsg, envia e cancela.
+      case 'arg_is_type': {
+        const idx = Number(p.argIndex ?? 0);
+        const arg = args[idx]?.trim() || '';
+
+        // 1. O arg precisa existir
+        if (!arg) {
+          if (p.errorMsg?.trim()) {
+            const channelId = discord.channelId;
+            if (channelId) {
+              await DiscordRequest(`/channels/${channelId}/messages`, {
+                method: 'POST',
+                body:   { content: p.errorMsg.replace('{argN}', String(idx + 1)) }
+              });
+            }
+            ctx.cancel();
+          }
+          return false;
+        }
+
+        // 2. Verifica o tipo
+        let valid = false;
+        switch (p.argType) {
+          case 'user_mention':    valid = /^<@!?\d{17,20}>$/.test(arg);        break;
+          case 'channel_mention': valid = /^<#\d{17,20}>$/.test(arg);          break;
+          case 'number':          valid = !isNaN(Number(arg)) && arg !== '';    break;
+          case 'text':            valid = arg.length > 0;                       break;
+          default:                valid = true;
+        }
+
+        if (!valid && p.errorMsg?.trim()) {
+          const typeLabel = {
+            user_mention:    'uma menção de usuário (@Alguém)',
+            channel_mention: 'uma menção de canal (#canal)',
+            number:          'um número',
+            text:            'um texto'
+          }[p.argType] || p.argType;
+
+          const msg = p.errorMsg
+            .replace('{argN}',     String(idx + 1))
+            .replace('{argType}',  typeLabel);
+
+          const channelId = discord.channelId;
+          if (channelId) {
+            await DiscordRequest(`/channels/${channelId}/messages`, {
+              method: 'POST',
+              body:   { content: msg }
+            });
+          }
+          ctx.cancel();
+        }
+
+        return valid;
+      }
+
       default: return true;
     }
   }

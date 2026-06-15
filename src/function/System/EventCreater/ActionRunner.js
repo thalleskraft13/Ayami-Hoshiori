@@ -201,7 +201,11 @@ class ActionRunner {
     const body = {};
     if (p.content) body.content = p.content;
 
-    if (p.embed) {
+    // embedObj = objeto estruturado do Embed Builder visual (preferencial)
+    if (p.embedObj && typeof p.embedObj === 'object') {
+      body.embeds = [this._buildEmbed(p.embedObj)];
+    } else if (p.embed) {
+      // embed = fallback legado (JSON string ou objeto plano)
       try {
         const raw = typeof p.embed === 'string' ? JSON.parse(p.embed) : p.embed;
         body.embeds = [this._buildEmbed(raw)];
@@ -213,18 +217,67 @@ class ActionRunner {
     return body;
   }
 
+  /**
+   * Normaliza um objeto de embed para o formato da Discord API.
+   * Suporta tanto o formato do Embed Builder (objetos aninhados completos)
+   * quanto o formato legado simplificado (strings planas).
+   */
   _buildEmbed(e) {
+    if (!e || typeof e !== 'object') return {};
     const embed = {};
+
     if (e.title)       embed.title       = e.title;
     if (e.description) embed.description = e.description;
-    if (e.color)       embed.color       = typeof e.color === 'string'
-                                             ? parseInt(e.color.replace('#', ''), 16)
-                                             : e.color;
-    if (e.footer)      embed.footer      = { text: e.footer };
-    if (e.image)       embed.image       = { url: e.image };
-    if (e.thumbnail)   embed.thumbnail   = { url: e.thumbnail };
-    if (e.fields)      embed.fields      = e.fields;
-    if (e.author)      embed.author      = { name: e.author };
+    if (e.url)         embed.url         = e.url;
+
+    // color: aceita número ou string hex
+    if (e.color != null) {
+      embed.color = typeof e.color === 'string'
+        ? parseInt(e.color.replace('#', ''), 16)
+        : e.color;
+    }
+
+    // footer: aceita { text, icon_url } (builder) ou string (legado)
+    if (e.footer) {
+      embed.footer = typeof e.footer === 'string'
+        ? { text: e.footer }
+        : { text: e.footer.text, ...(e.footer.icon_url ? { icon_url: e.footer.icon_url } : {}) };
+    }
+
+    // image: aceita { url } (builder) ou string (legado)
+    if (e.image) {
+      embed.image = typeof e.image === 'string'
+        ? { url: e.image }
+        : (e.image.url ? { url: e.image.url } : undefined);
+    }
+
+    // thumbnail: aceita { url } (builder) ou string (legado)
+    if (e.thumbnail) {
+      embed.thumbnail = typeof e.thumbnail === 'string'
+        ? { url: e.thumbnail }
+        : (e.thumbnail.url ? { url: e.thumbnail.url } : undefined);
+    }
+
+    // author: aceita { name, icon_url, url } (builder) ou string (legado)
+    if (e.author) {
+      if (typeof e.author === 'string') {
+        embed.author = { name: e.author };
+      } else if (e.author.name) {
+        embed.author = { name: e.author.name };
+        if (e.author.icon_url) embed.author.icon_url = e.author.icon_url;
+        if (e.author.url)      embed.author.url      = e.author.url;
+      }
+    }
+
+    // fields: array de { name, value, inline }
+    if (Array.isArray(e.fields) && e.fields.length) {
+      embed.fields = e.fields.map(f => ({
+        name:   f.name  || '​',
+        value:  f.value || '​',
+        inline: !!f.inline
+      }));
+    }
+
     return embed;
   }
 
