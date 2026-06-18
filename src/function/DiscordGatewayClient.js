@@ -29,6 +29,8 @@ const SecuritySystem = require("./System/SecuritySystem.js")
 const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
 const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js');
 const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
+const { LanguageManager } = require('./Manager/LanguageManager');
+
 
 const EventEmitter = require('events');
 
@@ -95,6 +97,16 @@ class DiscordGatewayClient extends EventEmitter {
         this.giveaway   = new GiveawaySystem(this);
         this.gScheduler = new GiveawayScheduler(this);
         this.giveaway.messageTracker = new GiveawayMessageTracker();
+        
+        this.languageManager = new LanguageManager({
+            systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
+            fallbackLocale: 'pt-BR',
+            shardId:        process.env.CLUSTER_ID ?? '0',
+        });
+
+        
+        this.t        = (key, ctx) => this.languageManager.translate(key, ctx);
+        this.language = this.t;
 
 
         
@@ -200,8 +212,6 @@ class DiscordGatewayClient extends EventEmitter {
             afk:    opts.afk    ?? false,
         },
     };
-
-    // Envia para todos os shards deste cluster
     
    if (shardId === "all"){
    const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];

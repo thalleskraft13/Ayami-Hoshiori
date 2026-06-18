@@ -520,12 +520,42 @@ async _replyError(interaction, err, context = 'Erro interno') {
      * @param {object} interaction
      * @returns {Record<string, string>}
      */
+    /**
+     * Extrai os valores enviados em um modal submit.
+     * Suporta dois formatos de wrapper:
+     *   - Action Row (type 1)  — formato legado, usado para Text Input
+     *   - Label (type 18)      — formato novo, usado para Text Input OU Select dentro de modal
+     * E dois tipos de componente:
+     *   - Text Input (type 4)   → retorna `.value` (string)
+     *   - String/Role/Channel/User Select (type 3/5/6/7/8) → retorna `.values` (array),
+     *     normalizado aqui para string (primeiro valor) já que modais não suportam multi-select
+     */
     _parseModalFields(interaction) {
         const fields = {};
 
-        for (const row of interaction.data?.components ?? []) {
-            for (const comp of row.components ?? []) {
-                fields[comp.custom_id] = comp.value;
+        const readComponent = (comp) => {
+            if (!comp?.custom_id) return;
+
+            if (Array.isArray(comp.values)) {
+                // Select Menu dentro de modal (type 18 → component type 3/5/6/7/8)
+                fields[comp.custom_id] = comp.values[0] ?? '';
+                fields[comp.custom_id + '_all'] = comp.values; // valores completos, se precisar de multi-select
+            } else {
+                // Text Input (type 4) — legado (Action Row) ou novo (Label)
+                fields[comp.custom_id] = comp.value ?? '';
+            }
+        };
+
+        for (const item of interaction.data?.components ?? []) {
+            if (item.type === 18 && item.component) {
+                // Label wrapper — o componente real está em item.component
+                readComponent(item.component);
+            } else if (Array.isArray(item.components)) {
+                // Action Row legado — itera os componentes filhos
+                for (const comp of item.components) readComponent(comp);
+            } else {
+                // Componente direto sem wrapper (raro, mas defensivo)
+                readComponent(item);
             }
         }
 
