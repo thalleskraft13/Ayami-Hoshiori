@@ -4,8 +4,18 @@ const DiscordRequest = require('../../DiscordRequest.js');
 const { CustomCommandModel, FlowModel } = require('../../../Mongodb/flow.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
+/* ─────────────────────────────────────────────
+   CORES DA AYAMI (mesma paleta do Logic Builder)
+   ───────────────────────────────────────────── */
+const COLOR = {
+  main:    0x7C8FFF,
+  dark:    0x243B7A,
+  danger:  0xED4245,
+  success: 0x57F287,
+};
+
 /**
- * CommandBuilder
+ * CommandBuilder — Components V2
  *
  * Gerencia criação e edição de comandos de prefixo personalizados.
  * Cada comando aponta para um fluxo existente.
@@ -15,6 +25,15 @@ class CommandBuilder {
   constructor(client, ui) {
     this.client = client;
     this.ui     = ui;
+  }
+
+  _e(name) {
+    return this.client?.emoji?.[name] ?? '';
+  }
+
+  /** Helper de payload CV2 não-ephemeral (mensagem original visível). */
+  _cv2(blocks, opts = {}) {
+    return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
   }
 
   /* ═══════════════════════════════════════════
@@ -30,9 +49,9 @@ class CommandBuilder {
     }).lean();
 
     if (!flows.length) {
-      return this.ui.followUpEphemeral(interaction, {
-        content: '❌ Crie pelo menos um fluxo com trigger **🔧 Comando executado** antes de criar um comando personalizado.'
-      });
+      return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
+        this.ui.cv2Text(`# ${this._e('emduvida')} Nenhum fluxo disponível\nCrie pelo menos um fluxo com trigger **🔧 Comando executado** antes de criar um comando personalizado.`)
+      ]));
     }
 
     // Passo 1: seleciona o fluxo que o comando vai executar
@@ -42,8 +61,10 @@ class CommandBuilder {
       description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger)}`
     }));
 
-    const sel = this.ui.select(user, options, 'Selecione o fluxo do comando', async (i) => {
-     // await this.ui.deferUpdate(i);
+    // NÃO faz deferUpdate aqui — _createStep2 abre um modal em
+    // seguida, e showModal precisa de uma interação ainda não
+    // confirmada (deferUpdate antes causaria erro 40060).
+    const sel = this.ui.select(user, options, '🔗 Selecione o fluxo do comando', async (i) => {
       return this._createStep2(i, user, i.data.values[0]);
     });
 
@@ -52,14 +73,19 @@ class CommandBuilder {
       return this.ui.commandList(i, user);
     });
 
-    return this.ui.editOriginal(interaction, {
-      embeds: [{
-        title:       '🔧 Novo Comando — Passo 1',
-        description: 'Selecione o fluxo que será executado quando o comando for usado:',
-        color:       0x5865F2
-      }],
-      components: [this.ui.row(sel), this.ui.row(btnBack)]
-    });
+    const blocks = [
+      this.ui.cv2Text(
+        `# 🔧 Novo Comando — Passo 1 de 2 ${this._e('animada')}\n` +
+        `${this._e('pensando')} Selecione o fluxo que será executado quando o comando for usado!\n\n` +
+        `*Só aparecem fluxos com trigger* **🔧 Comando executado**.`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.row(sel),
+      this.ui.cv2Divider(),
+      this.ui.row(btnBack),
+    ];
+
+    return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _createStep2(interaction, user, flowId) {
@@ -133,7 +159,7 @@ class CommandBuilder {
         if (!name) {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Nome inválido.', flags: 64 } } }
+            { method: 'POST', body: { type: 4, data: { content: `❌ Nome inválido! ${this._e('assustada')}`, flags: 64 } } }
           );
         }
 
@@ -146,7 +172,7 @@ class CommandBuilder {
         if (existing) {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: `❌ Comando **${name}** já existe.`, flags: 64 } } }
+            { method: 'POST', body: { type: 4, data: { content: `${this._e('emburrada')} Comando **${name}** já existe.`, flags: 64 } } }
           );
         }
 
@@ -161,7 +187,7 @@ class CommandBuilder {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
             { method: 'POST', body: { type: 4, data: {
-              content: `❌ Não entendi essa duração de cooldown! Use algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\`.`,
+              content: `${this._e('emduvida')} Não entendi essa duração de cooldown! Use algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\`.`,
               flags: 64
             } } }
           );
@@ -182,11 +208,9 @@ class CommandBuilder {
           { method: 'POST', body: { type: 6 } }
         );
 
-        await this.ui.followUpEphemeral(modalInteraction, {
-          content: `✅ Comando **${cmd.prefix}${name}** criado!`
+        return this.commandMenu(modalInteraction, user, cmd.commandId, {
+          successMsg: `${this._e('festa')} Comando **${cmd.prefix}${name}** criado!`
         });
-
-        return this.commandMenu(modalInteraction, user, cmd.commandId);
       }
     });
 
@@ -197,16 +221,18 @@ class CommandBuilder {
      MENU DO COMANDO
      ═══════════════════════════════════════════ */
 
-  async commandMenu(interaction, user, commandId) {
+  async commandMenu(interaction, user, commandId, { successMsg } = {}) {
     const guildId = interaction.guild_id;
     const cmd = await CustomCommandModel.findOne({ commandId, guildId }).lean();
 
     if (!cmd) {
-      return this.ui.followUpEphemeral(interaction, { content: '❌ Comando não encontrado.' });
+      return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
+        this.ui.cv2Text(`❌ Comando não encontrado. ${this._e('assustada')}`)
+      ]));
     }
 
     const flow = await FlowModel.findOne({ flowId: cmd.flowId }).lean();
-    const flowLabel = flow ? flow.name : '⚠️ Fluxo não encontrado';
+    const flowLabel = flow ? flow.name : `⚠️ Fluxo não encontrado`;
 
     const btnToggle = this.ui.btn(
       user,
@@ -245,27 +271,36 @@ class CommandBuilder {
     const aliasStr = cmd.aliases?.length ? cmd.aliases.join(', ') : '_Nenhum_';
     const rolesStr = cmd.requiredRoles?.length ? cmd.requiredRoles.map(r => `<@&${r}>`).join(', ') : '_Qualquer um_';
     const coolStr  = cmd.cooldown > 0 ? formatDuration(cmd.cooldown) : 'Nenhum';
+    const ayami    = this._e(cmd.enabled ? 'feliz' : 'sonolenta');
 
-    return this.ui.editOriginal(interaction, {
-      embeds: [{
-        title:       `🔧 ${cmd.prefix}${cmd.name}`,
-        description: cmd.description || '_Sem descrição_',
-        color:       cmd.enabled ? 0x57F287 : 0xED4245,
-        fields: [
-          { name: 'Status',    value: cmd.enabled ? '🟢 Ativo' : '🔴 Desativado', inline: true },
-          { name: 'Prefixo',   value: cmd.prefix,   inline: true },
-          { name: 'Cooldown',  value: coolStr,       inline: true },
-          { name: 'Aliases',   value: aliasStr,      inline: false },
-          { name: 'Fluxo',     value: flowLabel,     inline: false },
-          { name: 'Cargos',    value: rolesStr,      inline: false }
-        ],
-        footer: { text: `ID: ${cmd.commandId}` }
-      }],
-      components: [
-        this.ui.row(btnToggle, btnEdit, btnChangeFlow),
-        this.ui.row(btnRoles, btnDelete, btnBack)
-      ]
-    });
+    const blocks = [
+      this.ui.cv2Text(
+        `# 🔧 ${cmd.prefix}${cmd.name} ${ayami}\n` +
+        (successMsg ? `${successMsg}\n\n` : '') +
+        `${cmd.description || '_Sem descrição_'}`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.cv2Text(
+        `> 📌 **Status:** ${cmd.enabled ? '🟢 Ativo' : '🔴 Desativado'}\n` +
+        `> 🔣 **Prefixo:** \`${cmd.prefix}\`\n` +
+        `> ⏱️ **Cooldown:** ${coolStr}`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.cv2Text(
+        `> 🏷️ **Aliases:** ${aliasStr}\n` +
+        `> ⚡ **Fluxo:** ${flowLabel}\n` +
+        `> 🛡️ **Cargos necessários:** ${rolesStr}`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.row(btnToggle, btnEdit, btnChangeFlow),
+      this.ui.row(btnRoles, btnDelete, btnBack),
+      this.ui.cv2Divider(),
+      this.ui.cv2Text(`-# ID: ${cmd.commandId}`),
+    ];
+
+    return this.ui.editOriginal(interaction, this._cv2(blocks, {
+      accentColor: cmd.enabled ? COLOR.success : COLOR.danger
+    }));
   }
 
   async _editCommand(interaction, user, commandId) {
@@ -289,7 +324,7 @@ class CommandBuilder {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
             { method: 'POST', body: { type: 4, data: {
-              content: `❌ Não entendi essa duração de cooldown! Use algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\`.`,
+              content: `${this._e('emduvida')} Não entendi essa duração de cooldown! Use algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\`.`,
               flags: 64
             } } }
           );
@@ -311,7 +346,9 @@ class CommandBuilder {
           { method: 'POST', body: { type: 6 } }
         );
 
-        return this.commandMenu(modalInteraction, user, commandId);
+        return this.commandMenu(modalInteraction, user, commandId, {
+          successMsg: `${this._e('feliz')} Comando atualizado!`
+        });
       }
     });
 
@@ -326,7 +363,9 @@ class CommandBuilder {
     }).lean();
 
     if (!flows.length) {
-      return this.ui.followUpEphemeral(interaction, { content: '❌ Nenhum fluxo com trigger **🔧 Comando executado** disponível.' });
+      return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
+        this.ui.cv2Text(`${this._e('emduvida')} Nenhum fluxo com trigger **🔧 Comando executado** disponível.`)
+      ]));
     }
 
     const options = flows.slice(0, 25).map(f => ({
@@ -335,12 +374,13 @@ class CommandBuilder {
       description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger)}`
     }));
 
-    const sel = this.ui.select(user, options, 'Selecione o novo fluxo', async (i) => {
+    const sel = this.ui.select(user, options, '🔀 Selecione o novo fluxo', async (i) => {
       await this.ui.deferUpdate(i);
       await CustomCommandModel.updateOne({ commandId }, { flowId: i.data.values[0] });
       this.client.logicEngine._flowCache?.delete(`cmd:${i.guild_id}`);
-      await this.ui.followUpEphemeral(i, { content: '✅ Fluxo do comando atualizado!' });
-      return this.commandMenu(i, user, commandId);
+      return this.commandMenu(i, user, commandId, {
+        successMsg: `${this._e('curtida')} Fluxo do comando atualizado!`
+      });
     });
 
     const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
@@ -348,21 +388,31 @@ class CommandBuilder {
       return this.commandMenu(i, user, commandId);
     });
 
-    return this.ui.editOriginal(interaction, {
-      embeds: [{ title: '🔀 Trocar Fluxo do Comando', color: 0x5865F2 }],
-      components: [this.ui.row(sel), this.ui.row(btnBack)]
-    });
+    const blocks = [
+      this.ui.cv2Text(
+        `# 🔀 Trocar Fluxo do Comando ${this._e('pensando')}\n` +
+        `Selecione qual fluxo este comando vai executar agora:`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.row(sel),
+      this.ui.cv2Divider(),
+      this.ui.row(btnBack),
+    ];
+
+    return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _manageRoles(interaction, user, commandId) {
     const cmd = await CustomCommandModel.findOne({ commandId }).lean();
     const rolesStr = cmd.requiredRoles?.length
       ? cmd.requiredRoles.map(r => `<@&${r}>`).join('\n')
-      : '_Nenhum — qualquer usuário pode usar_';
+      : `_Nenhum — qualquer usuário pode usar ${this._e('feliz')}_`;
 
     const btnAdd = this.ui.btn(user, '➕ Adicionar Cargo', 1, async (i) => {
       await this.ui.deferUpdate(i);
-      await this.ui.followUpEphemeral(i, { content: 'Envie o cargo (menção ou ID):' });
+      await this.ui.followUpEphemeral(i, this.ui.cv2Payload([
+        this.ui.cv2Text(`${this._e('pensando')} Envie o cargo (menção ou ID) no canal:`)
+      ]));
 
       let msg;
       try {
@@ -373,7 +423,11 @@ class CommandBuilder {
       } catch { return; }
 
       const id = msg.content?.match(/\d{17,19}/)?.[0];
-      if (!id) return this.ui.followUpEphemeral(i, { content: '❌ Cargo inválido.' });
+      if (!id) {
+        return this.ui.followUpEphemeral(i, this.ui.cv2Payload([
+          this.ui.cv2Text(`${this._e('assustada')} Cargo inválido.`)
+        ]));
+      }
 
       const roles = cmd.requiredRoles || [];
       if (!roles.includes(id)) roles.push(id);
@@ -395,22 +449,26 @@ class CommandBuilder {
       return this.commandMenu(i, user, commandId);
     });
 
-    return this.ui.editOriginal(interaction, {
-      embeds: [{
-        title:       '🛡️ Cargos Necessários',
-        description: `Apenas usuários com estes cargos podem usar o comando:\n\n${rolesStr}`,
-        color:       0x5865F2
-      }],
-      components: [this.ui.row(btnAdd, btnClear, btnBack)]
-    });
+    const blocks = [
+      this.ui.cv2Text(
+        `# 🛡️ Cargos Necessários ${this._e('emduvida')}\n` +
+        `Apenas usuários com estes cargos podem usar o comando:\n\n${rolesStr}`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.row(btnAdd, btnClear, btnBack),
+    ];
+
+    return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _confirmDeleteCommand(interaction, user, commandId, name) {
     const btnConfirm = this.ui.btn(user, '✅ Confirmar', 4, async (i) => {
       await this.ui.deferUpdate(i);
       await this.client.logicEngine.deleteCommand(commandId, i.guild_id);
-      await this.ui.followUpEphemeral(i, { content: `✅ Comando **${name}** excluído.` });
-      return this.ui.commandList(i, user);
+      await this.ui.followUpEphemeral(i, this.ui.cv2Payload([
+        this.ui.cv2Text(`${this._e('chorando')} Comando **${name}** excluído.`)
+      ]));
+      return this.ui.commandList(i, user, 0);
     });
 
     const btnCancel = this.ui.btn(user, '❌ Cancelar', 2, async (i) => {
@@ -418,14 +476,17 @@ class CommandBuilder {
       return this.commandMenu(i, user, commandId);
     });
 
-    return this.ui.editOriginal(interaction, {
-      embeds: [{
-        title:       '⚠️ Excluir Comando',
-        description: `Excluir **${name}**? Esta ação não pode ser desfeita.`,
-        color:       0xED4245
-      }],
-      components: [this.ui.row(btnConfirm, btnCancel)]
-    });
+    const blocks = [
+      this.ui.cv2Text(
+        `# ⚠️ Excluir Comando ${this._e('assustada')}\n` +
+        `Tem certeza que quer excluir **${name}**?\n\n` +
+        `**Esta ação não pode ser desfeita!** ${this._e('brava')}`
+      ),
+      this.ui.cv2Divider(),
+      this.ui.row(btnConfirm, btnCancel),
+    ];
+
+    return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.danger }));
   }
 }
 

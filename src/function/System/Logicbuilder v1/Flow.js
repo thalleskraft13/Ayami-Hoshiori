@@ -77,7 +77,10 @@ class FlowUI {
   }
 
   async followUpEphemeral(interaction, data) {
-    return this.followUp(interaction, { ...data, flags: 64 });
+    // OR em vez de sobrescrever — preserva flags já presentes em `data`
+    // (ex: IS_COMPONENTS_V2 = 32768, montada por cv2Payload) e garante
+    // o bit de ephemeral (64) por cima.
+    return this.followUp(interaction, { ...data, flags: (data.flags ?? 0) | 64 });
   }
 
   /* ═══════════════════════════════════════════
@@ -102,6 +105,88 @@ class FlowUI {
 
   row(...components) {
     return { type: 1, components };
+  }
+
+
+
+  /** Texto em markdown (Text Display, type 10). */
+  cv2Text(content) {
+    return { type: 10, content };
+  }
+
+  /** Linha divisória entre blocos (Separator, type 14). */
+  cv2Divider(spacing = 1) {
+    return { type: 14, divider: true, spacing };
+  }
+
+  /**
+   * Bloco de texto com um botão ao lado (Section + Accessory, type 9).
+   * Use para cada seção do painel (Trigger, Condições, Ações, etc.)
+   * que precisa de um atalho de edição contextual.
+   *
+   * @param {string} content    Markdown do texto principal
+   * @param {object} button     Componente de botão já criado (this.btn(...) ou this.client.interactions.createButton(...))
+   */
+  cv2Section(content, button) {
+    return {
+      type: 9,
+      accessory: button,
+      components: [this.cv2Text(content)]
+    };
+  }
+
+  /**
+   * Galeria de mídia (type 12) — usada para a imagem decorativa da Ayami
+   * no rodapé do painel, por exemplo.
+   * @param {string|string[]} urls
+   */
+  cv2Gallery(urls) {
+    const list = Array.isArray(urls) ? urls : [urls];
+    return {
+      type: 12,
+      items: list.map(url => ({ media: { url }, description: null, spoiler: false }))
+    };
+  }
+
+  /**
+   * Monta o Container raiz (type 17) a partir de uma lista de blocos
+   * já construídos com os helpers acima (cv2Text, cv2Divider, cv2Section, row).
+   *
+   * @param {object[]} blocks
+   * @param {{ accentColor?: number, spoiler?: boolean }} opts
+   * @returns {object} payload pronto para `components: [container]`
+   */
+  cv2Container(blocks, opts = {}) {
+    return {
+      type:          17,
+      accent_color:  opts.accentColor ?? COLOR.main,
+      spoiler:       opts.spoiler ?? false,
+      components:    blocks
+    };
+  }
+
+  /**
+   * Flags corretas para uma resposta CV2.
+   * IS_COMPONENTS_V2 = 1 << 15 = 32768
+   * EPHEMERAL        = 1 << 6  = 64
+   */
+  cv2Flags(ephemeral = true) {
+    return ephemeral ? 32768 | 64 : 32768;
+  }
+
+  /**
+   * Monta o payload completo { flags, components: [container] } pronto
+   * para passar em editOriginal/followUpEphemeral/createButton callback.
+   * Açúcar sintático para não repetir cv2Flags + cv2Container em toda tela.
+   *
+   * @param {object[]} blocks    Blocos construídos com cv2Text/cv2Divider/cv2Section/row
+   * @param {{ accentColor?: number, ephemeral?: boolean }} opts
+   */
+  cv2Payload(blocks, opts = {}) {
+    return {
+      flags:      this.cv2Flags(opts.ephemeral ?? true),
+      components: [this.cv2Container(blocks, opts)]
+    };
   }
 
   /**

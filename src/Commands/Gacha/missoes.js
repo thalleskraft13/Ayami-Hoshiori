@@ -13,6 +13,43 @@ const COLORS = {
 };
 
 /* ═══════════════════════════════════════════════════════════
+   HELPERS COMPONENTS V2
+   (mesmo padrão usado no Logic Builder / Biblioteca)
+   ═══════════════════════════════════════════════════════════ */
+
+function cv2Text(content) {
+  return { type: 10, content };
+}
+
+function cv2Divider(spacing = 1) {
+  return { type: 14, divider: true, spacing };
+}
+
+function cv2Container(blocks, opts = {}) {
+  return {
+    type:         17,
+    accent_color: opts.accentColor ?? COLORS.default,
+    spoiler:      opts.spoiler ?? false,
+    components:   blocks
+  };
+}
+
+function cv2Flags(ephemeral = false) {
+  return ephemeral ? 32768 | 64 : 32768;
+}
+
+function cv2Payload(blocks, opts = {}) {
+  return {
+    flags:      cv2Flags(opts.ephemeral ?? false),
+    components: [cv2Container(blocks, opts)]
+  };
+}
+
+function row(...components) {
+  return { type: 1, components };
+}
+
+/* ═══════════════════════════════════════════════════════════
    COMANDO /missoes
    ═══════════════════════════════════════════════════════════ */
 
@@ -96,14 +133,12 @@ module.exports = {
       }
     } catch (err) {
       console.error('[missoes]', err);
-      return _edit(interaction, client, {
-        embeds: [{
-          title:       `${e.brava} Eita, deu ruim...`,
-          description: `Algo deu errado por aqui! ${e.chorando}\n\`${err.message || 'Erro inesperado.'}\``,
-          color:       COLORS.danger,
-          footer:      { text: 'Ayami Hoshiori • tenta de novo, tá? 🌸' }
-        }]
-      });
+      return _edit(interaction, client, cv2Payload([
+        cv2Text(
+          `# ${e.brava} Eita, deu ruim...\n` +
+          `Algo deu errado por aqui! ${e.chorando}\n\`${err.message || 'Erro inesperado.'}\``
+        ),
+      ], { accentColor: COLORS.danger }));
     }
   }
 };
@@ -158,21 +193,23 @@ async function _renderPersonal(interaction, client, userId, period) {
     funcao: async (i) => { await _deferUpdate(i); return _renderPersonal(i, client, userId, period); }
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${period === 'daily' ? `${e.feliz} Missões do Dia!` : `${e.pensando} Missões da Semana!`}`,
-      description: lines || `_Hmm, parece que não tem nenhuma missão por aqui... ${e.emduvida}_`,
-      color:       COLORS.personal,
-      fields: [
-        { name: `${e.animada} Progresso`,        value: `${doneCount}/${list.length} concluídas`, inline: true },
-        { name: '🔮 Recompensa total',            value: `${totalReward} Primogemas`,              inline: true },
-        { name: '⏰ Reinicia em',                  value: timeLeft,                                 inline: true }
-      ],
-      footer:    { text: 'Ayami Hoshiori • o progresso atualiza conforme você age no servidor ⭐' },
-      timestamp: new Date().toISOString()
-    }],
-    components: [{ type: 1, components: [btnDaily, btnWeekly, btnGroup, btnGuild, btnRefresh] }]
-  });
+  const title = period === 'daily' ? `${e.feliz} Missões do Dia!` : `${e.pensando} Missões da Semana!`;
+
+  const blocks = [
+    cv2Text(`# ${title}\n${lines || `_Hmm, parece que não tem nenhuma missão por aqui... ${e.emduvida}_`}`),
+    cv2Divider(),
+    cv2Text(
+      `> ${e.animada} **Progresso:** ${doneCount}/${list.length} concluídas\n` +
+      `> 🔮 **Recompensa total:** ${totalReward} Primogemas\n` +
+      `> ⏰ **Reinicia em:** ${timeLeft}`
+    ),
+    cv2Divider(),
+    row(btnDaily, btnWeekly, btnGroup, btnGuild, btnRefresh),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • o progresso atualiza conforme você age no servidor ⭐'),
+  ];
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLORS.personal }));
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -182,52 +219,59 @@ async function _renderPersonal(interaction, client, userId, period) {
 async function _grupoCriar(interaction, client, userId) {
   const e     = client.emoji;
   const group = await client.missionManager.createGroup(userId);
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.festa} Grupo criado, vamos nessa!`,
-      description: `Seu grupo de aventureiros foi criado! ${e.animada}\n\n⭐ **ID do Grupo:** \`${group.groupId}\`\n\nAgora é só usar \`/missoes grupo convidar\` e chamar até 3 amigos pra aventura!`,
-      color:       COLORS.group,
-      footer:      { text: 'Ayami Hoshiori • quanto mais, melhor! 🌸' }
-    }]
-  });
+
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(
+      `# ${e.festa} Grupo criado, vamos nessa!\n` +
+      `Seu grupo de aventureiros foi criado! ${e.animada}\n\n` +
+      `⭐ **ID do Grupo:** \`${group.groupId}\`\n\n` +
+      `Agora é só usar \`/missoes grupo convidar\` e chamar até 3 amigos pra aventura!`
+    ),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • quanto mais, melhor! 🌸'),
+  ], { accentColor: COLORS.group }));
 }
 
 async function _grupoConvidar(interaction, client, userId, targetId) {
   const e = client.emoji;
   if (!targetId) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emduvida} Ei, quem você quer convidar?`,
-        description: 'Você esqueceu de informar o usuário! Tenta de novo~',
-        color:       COLORS.danger
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(
+        `# ${e.emduvida} Ei, quem você quer convidar?\n` +
+        `Você esqueceu de informar o usuário! Tenta de novo~`
+      ),
+    ], { accentColor: COLORS.danger }));
   }
 
   const group = await client.missionManager.inviteToGroup(userId, targetId);
   _notifyInvite(client, targetId, userId, group.groupId).catch(() => {});
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.corao} Convite enviado!`,
-      description: `<@${targetId}> recebeu um convite para o grupo **${group.groupId}**! ${e.feliz}\nO convite expira em **10 minutos**.\n\nEle(a) pode aceitar com \`/missoes grupo aceitar\` ⭐`,
-      color:       COLORS.group,
-      footer:      { text: 'Ayami Hoshiori • torço pra eles toparem! 🌸' }
-    }]
-  });
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(
+      `# ${e.corao} Convite enviado!\n` +
+      `<@${targetId}> recebeu um convite para o grupo **${group.groupId}**! ${e.feliz}\n` +
+      `O convite expira em **10 minutos**.\n\n` +
+      `Ele(a) pode aceitar com \`/missoes grupo aceitar\` ⭐`
+    ),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • torço pra eles toparem! 🌸'),
+  ], { accentColor: COLORS.group }));
 }
 
 async function _grupoAceitar(interaction, client, userId) {
   const e     = client.emoji;
   const group = await client.missionManager.acceptInvite(userId);
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.festa} Bem-vindo(a) ao grupo!`,
-      description: `Você entrou no grupo **${group.groupId}**! ${e.animada}\n👥 Membros: ${group.members.length}/4\n\nAs missões foram atualizadas para **${group.members.length}** membro(s). Bora conquistar tudo! ⭐`,
-      color:       COLORS.group,
-      footer:      { text: 'Ayami Hoshiori • aventura em equipe é muito mais divertido! 🌸' }
-    }]
-  });
+
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(
+      `# ${e.festa} Bem-vindo(a) ao grupo!\n` +
+      `Você entrou no grupo **${group.groupId}**! ${e.animada}\n` +
+      `👥 Membros: ${group.members.length}/4\n\n` +
+      `As missões foram atualizadas para **${group.members.length}** membro(s). Bora conquistar tudo! ⭐`
+    ),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • aventura em equipe é muito mais divertido! 🌸'),
+  ], { accentColor: COLORS.group }));
 }
 
 async function _grupoSair(interaction, client, userId) {
@@ -239,19 +283,16 @@ async function _grupoSair(interaction, client, userId) {
     funcao: async (i) => {
       await _deferUpdate(i);
       const result = await client.missionManager.leaveGroup(userId);
-      const msg = result.dissolved
+      const title = result.dissolved
         ? `${e.chorando} Você era o líder... o grupo foi dissolvido.`
         : `${e.sonolenta} Você saiu do grupo **${result.group.groupId}**.`;
-      return _edit(i, client, {
-        embeds: [{
-          title:       msg,
-          description: result.dissolved
-            ? 'Poxa, que pena... mas novas aventuras esperam por você! ⭐'
-            : 'Até mais! Se quiser, é só criar ou entrar em outro grupo~ 🌸',
-          color:       COLORS.danger
-        }],
-        components: []
-      });
+      const desc = result.dissolved
+        ? 'Poxa, que pena... mas novas aventuras esperam por você! ⭐'
+        : 'Até mais! Se quiser, é só criar ou entrar em outro grupo~ 🌸';
+
+      return _edit(i, client, cv2Payload([
+        cv2Text(`# ${title}\n${desc}`),
+      ], { accentColor: COLORS.danger }));
     }
   });
 
@@ -260,26 +301,23 @@ async function _grupoSair(interaction, client, userId) {
     data: { label: '❌ Cancelar', style: 2 },
     funcao: async (i) => {
       await _deferUpdate(i);
-      return _edit(i, client, {
-        embeds: [{
-          title:       `${e.feliz} Ufa, cancelado!`,
-          description: 'Que bom que você ficou! A aventura continua~ ⭐',
-          color:       COLORS.default
-        }],
-        components: []
-      });
+      return _edit(i, client, cv2Payload([
+        cv2Text(`# ${e.feliz} Ufa, cancelado!\nQue bom que você ficou! A aventura continua~ ⭐`),
+      ], { accentColor: COLORS.default }));
     }
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.assustada} Tem certeza que quer sair?`,
-      description: `Se você for o **líder**, o grupo será **dissolvido** para todo mundo... ${e.chorando2}\nPensa bem antes de confirmar!`,
-      color:       COLORS.danger,
-      footer:      { text: 'Ayami Hoshiori • eu não quero que você vá embora... 🌸' }
-    }],
-    components: [{ type: 1, components: [btnConfirm, btnCancel] }]
-  });
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(
+      `# ${e.assustada} Tem certeza que quer sair?\n` +
+      `Se você for o **líder**, o grupo será **dissolvido** para todo mundo... ${e.chorando2}\n` +
+      `Pensa bem antes de confirmar!`
+    ),
+    cv2Divider(),
+    row(btnConfirm, btnCancel),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • eu não quero que você vá embora... 🌸'),
+  ], { accentColor: COLORS.danger }));
 }
 
 async function _grupoVer(interaction, client, userId) {
@@ -297,15 +335,19 @@ async function _grupoVer(interaction, client, userId) {
       data: { label: '🌸 Pessoais', style: 2 },
       funcao: async (i) => { await _deferUpdate(i); return _renderPersonal(i, client, userId, 'daily'); }
     });
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emduvida} Você não está em nenhum grupo!`,
-        description: `Que tal criar um e chamar até **3 amigos** pra aventura? ${e.animada}\n\n✨ **Bônus de grupo:** recompensa base × número de membros!\nQuanto mais amigos, mais Primogemas pra todo mundo~ 🔮`,
-        color:       COLORS.group,
-        footer:      { text: 'Ayami Hoshiori • aventura em equipe é a melhor! 🌸' }
-      }],
-      components: [{ type: 1, components: [btnCriar, btnPersonal] }]
-    });
+
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(
+        `# ${e.emduvida} Você não está em nenhum grupo!\n` +
+        `Que tal criar um e chamar até **3 amigos** pra aventura? ${e.animada}\n\n` +
+        `✨ **Bônus de grupo:** recompensa base × número de membros!\n` +
+        `Quanto mais amigos, mais Primogemas pra todo mundo~ 🔮`
+      ),
+      cv2Divider(),
+      row(btnCriar, btnPersonal),
+      cv2Divider(),
+      cv2Text('-# Ayami Hoshiori • aventura em equipe é a melhor! 🌸'),
+    ], { accentColor: COLORS.group }));
   }
 
   const { group, missions } = result;
@@ -373,23 +415,28 @@ async function _renderGroupMissions(interaction, client, userId, group, missions
     }
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${period === 'daily' ? `${e.feliz} Diárias` : `${e.pensando} Semanais`} — Grupo ${group.groupId}`,
-      description: lines || `_Nenhuma missão de grupo disponível por enquanto... ${e.emduvida}_`,
-      color:       COLORS.group,
-      fields: [
-        { name: `👥 Membros (${members}/4)`, value: memberMentions,                                 inline: true },
-        { name: `${e.animada} Progresso`,    value: `${doneCount}/${list.length} concluídas`,       inline: true },
-        { name: '🔮 Recompensa (cada)',       value: `${totalReward} Primogemas`,                    inline: true },
-        { name: '⭐ Bônus de grupo',          value: `**${members}×** recompensa base`,              inline: true },
-        { name: '⏰ Reinicia em',              value: timeLeft,                                       inline: true }
-      ],
-      footer:    { text: `Ayami Hoshiori • ID do grupo: ${group.groupId} 🌸` },
-      timestamp: new Date().toISOString()
-    }],
-    components: [{ type: 1, components: [btnDaily, btnWeekly, btnPersonal, btnRefresh] }]
-  });
+  const title = period === 'daily' ? `${e.feliz} Diárias` : `${e.pensando} Semanais`;
+
+  const blocks = [
+    cv2Text(`# ${title} — Grupo ${group.groupId}\n${lines || `_Nenhuma missão de grupo disponível por enquanto... ${e.emduvida}_`}`),
+    cv2Divider(),
+    cv2Text(
+      `> 👥 **Membros (${members}/4):**\n${memberMentions}`
+    ),
+    cv2Divider(),
+    cv2Text(
+      `> ${e.animada} **Progresso:** ${doneCount}/${list.length} concluídas\n` +
+      `> 🔮 **Recompensa (cada):** ${totalReward} Primogemas\n` +
+      `> ⭐ **Bônus de grupo:** **${members}×** recompensa base\n` +
+      `> ⏰ **Reinicia em:** ${timeLeft}`
+    ),
+    cv2Divider(),
+    row(btnDaily, btnWeekly, btnPersonal, btnRefresh),
+    cv2Divider(),
+    cv2Text(`-# Ayami Hoshiori • ID do grupo: ${group.groupId} 🌸`),
+  ];
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLORS.group }));
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -424,7 +471,8 @@ async function _renderWeeklyMissions(interaction, client, userId, guildId, doc) 
 
   const btnWeekly = client.interactions.createButton({
     user: userId,
-    data: { label: '🗓️ Semanais', style: 1 }
+    data: { label: '🗓️ Semanais', style: 1 },
+    funcao: async (i) => { await _deferUpdate(i); return _renderGuildMissions(i, client, userId, guildId, 'weekly'); }
   });
 
   const btnEvent = client.interactions.createButton({
@@ -445,15 +493,14 @@ async function _renderWeeklyMissions(interaction, client, userId, guildId, doc) 
     funcao: async (i) => {
       await _deferUpdate(i);
       const collected = await client.missionManager.collectGuildRewards(guildId, userId);
-      return _edit(i, client, {
-        embeds: [{
-          title:       `${e.festa} Recompensas coletadas!`,
-          description: `Você recebeu **${collected} 🔮 Primogemas** das missões de guilda! ${e.feliz}\nBem merecido~ ⭐`,
-          color:       COLORS.success,
-          footer:      { text: 'Ayami Hoshiori • continue contribuindo! 🌸' }
-        }],
-        components: []
-      });
+      return _edit(i, client, cv2Payload([
+        cv2Text(
+          `# ${e.festa} Recompensas coletadas!\n` +
+          `Você recebeu **${collected} 🔮 Primogemas** das missões de guilda! ${e.feliz}\nBem merecido~ ⭐`
+        ),
+        cv2Divider(),
+        cv2Text('-# Ayami Hoshiori • continue contribuindo! 🌸'),
+      ], { accentColor: COLORS.success }));
     }
   });
 
@@ -463,24 +510,22 @@ async function _renderWeeklyMissions(interaction, client, userId, guildId, doc) 
     funcao: async (i) => { await _deferUpdate(i); return _renderGuildMissions(i, client, userId, guildId, 'weekly'); }
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.sria} Missões de Guilda — Semanais`,
-      description: lines || `_Sem missões de guilda por agora... ${e.emduvida}_`,
-      color:       COLORS.guild,
-      fields: [
-        { name: `${e.animada} Progresso`, value: `${doneCount}/${list.length} concluídas`, inline: true },
-        { name: '⏰ Reinicia em',          value: timeLeft,                                 inline: true },
-        { name: '🎁 Suas recompensas',     value: `${pendingTotal} 🔮 pendentes`,           inline: true }
-      ],
-      footer:    { text: 'Ayami Hoshiori • todo mundo do servidor contribui junto! ⭐' },
-      timestamp: new Date().toISOString()
-    }],
-    components: [
-      { type: 1, components: [btnWeekly, btnEvent, btnPersonal] },
-      { type: 1, components: [btnCollect, btnRefresh] }
-    ]
-  });
+  const blocks = [
+    cv2Text(`# ${e.sria} Missões de Guilda — Semanais\n${lines || `_Sem missões de guilda por agora... ${e.emduvida}_`}`),
+    cv2Divider(),
+    cv2Text(
+      `> ${e.animada} **Progresso:** ${doneCount}/${list.length} concluídas\n` +
+      `> ⏰ **Reinicia em:** ${timeLeft}\n` +
+      `> 🎁 **Suas recompensas:** ${pendingTotal} 🔮 pendentes`
+    ),
+    cv2Divider(),
+    row(btnWeekly, btnEvent, btnPersonal),
+    row(btnCollect, btnRefresh),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • todo mundo do servidor contribui junto! ⭐'),
+  ];
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLORS.guild }));
 }
 
 async function _renderEventMission(interaction, client, userId, guildId, doc) {
@@ -494,15 +539,17 @@ async function _renderEventMission(interaction, client, userId, guildId, doc) {
   });
 
   if (!ev?.active || !ev.mission) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emburrada} Nenhum evento ativo...`,
-        description: `Poxa, não tem nenhum evento rolando agora. ${e.chorando}\nMas não se preocupa — eventos especiais aparecem toda semana com recompensas incríveis! ⭐`,
-        color:       COLORS.event,
-        footer:      { text: 'Ayami Hoshiori • fica de olho! 🌸' }
-      }],
-      components: [{ type: 1, components: [btnBack] }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(
+        `# ${e.emburrada} Nenhum evento ativo...\n` +
+        `Poxa, não tem nenhum evento rolando agora. ${e.chorando}\n` +
+        `Mas não se preocupa — eventos especiais aparecem toda semana com recompensas incríveis! ⭐`
+      ),
+      cv2Divider(),
+      row(btnBack),
+      cv2Divider(),
+      cv2Text('-# Ayami Hoshiori • fica de olho! 🌸'),
+    ], { accentColor: COLORS.event }));
   }
 
   const m            = ev.mission;
@@ -521,15 +568,14 @@ async function _renderEventMission(interaction, client, userId, guildId, doc) {
     funcao: async (i) => {
       await _deferUpdate(i);
       const collected = await client.missionManager.collectGuildRewards(guildId, userId);
-      return _edit(i, client, {
-        embeds: [{
-          title:       `${e.festa} Recompensas do evento coletadas!`,
-          description: `Você recebeu **${collected} 🔮 Primogemas** do evento! ${e.feliz}\nIncrível, parabéns! ⭐`,
-          color:       COLORS.success,
-          footer:      { text: 'Ayami Hoshiori • você arrasou! 🌸' }
-        }],
-        components: []
-      });
+      return _edit(i, client, cv2Payload([
+        cv2Text(
+          `# ${e.festa} Recompensas do evento coletadas!\n` +
+          `Você recebeu **${collected} 🔮 Primogemas** do evento! ${e.feliz}\nIncrível, parabéns! ⭐`
+        ),
+        cv2Divider(),
+        cv2Text('-# Ayami Hoshiori • você arrasou! 🌸'),
+      ], { accentColor: COLORS.success }));
     }
   });
 
@@ -539,26 +585,30 @@ async function _renderEventMission(interaction, client, userId, guildId, doc) {
     funcao: async (i) => { await _deferUpdate(i); return _renderGuildMissions(i, client, userId, guildId, 'event'); }
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.festa} Evento — ${m.label}`,
-      description: `${status}\n\n${bar} \`${m.progress || 0}/${m.goal}\` (${pct}%)`,
-      color:       m.done ? COLORS.success : COLORS.event,
-      fields: [
-        { name: '🔮 Recompensa',       value: `${m.reward} Primogemas por contribuidor`, inline: true },
-        { name: '👥 Contribuidores',   value: String(contribs),                           inline: true },
-        { name: '⏰ Expira em',         value: timeLeft,                                  inline: true },
-        { name: '🎁 Suas recompensas', value: `${pendingTotal} 🔮 pendentes`,             inline: true }
-      ],
-      footer:    { text: 'Ayami Hoshiori • eventos duram 48h, não perca! ⭐' },
-      timestamp: new Date().toISOString()
-    }],
-    components: [{ type: 1, components: [btnBack, btnCollect, btnRefresh] }]
-  });
+  const blocks = [
+    cv2Text(
+      `# ${e.festa} Evento — ${m.label}\n` +
+      `${status}\n\n${bar} \`${m.progress || 0}/${m.goal}\` (${pct}%)`
+    ),
+    cv2Divider(),
+    cv2Text(
+      `> 🔮 **Recompensa:** ${m.reward} Primogemas por contribuidor\n` +
+      `> 👥 **Contribuidores:** ${contribs}\n` +
+      `> ⏰ **Expira em:** ${timeLeft}\n` +
+      `> 🎁 **Suas recompensas:** ${pendingTotal} 🔮 pendentes`
+    ),
+    cv2Divider(),
+    row(btnBack, btnCollect, btnRefresh),
+    cv2Divider(),
+    cv2Text('-# Ayami Hoshiori • eventos duram 48h, não perca! ⭐'),
+  ];
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: m.done ? COLORS.success : COLORS.event }));
 }
 
 /* ═══════════════════════════════════════════════════════════
    NOTIFICAÇÃO DE CONVITE VIA DM
+   (mensagem normal — não é o painel principal, mantém embed)
    ═══════════════════════════════════════════════════════════ */
 
 async function _notifyInvite(client, targetId, leaderId, groupId) {
@@ -572,15 +622,16 @@ async function _notifyInvite(client, targetId, leaderId, groupId) {
 
     await DiscordRequest(`/channels/${dm.id}/messages`, {
       method: 'POST',
-      body: {
-        embeds: [{
-          title:       `${e.corao} Convite para Grupo de Aventureiros!`,
-          description: `<@${leaderId}> te convidou para o grupo **${groupId}**! ${e.animada}\n\nUse \`/missoes grupo aceitar\` para entrar na aventura~\n> O convite expira em **10 minutos**. ⭐`,
-          color:       COLORS.group,
-          footer:      { text: 'Ayami Hoshiori • espero que você aceite! 🌸' },
-          timestamp:   new Date().toISOString()
-        }]
-      }
+      body: cv2Payload([
+        cv2Text(
+          `# ${e.corao} Convite para Grupo de Aventureiros!\n` +
+          `<@${leaderId}> te convidou para o grupo **${groupId}**! ${e.animada}\n\n` +
+          `Use \`/missoes grupo aceitar\` para entrar na aventura~\n` +
+          `> O convite expira em **10 minutos**. ⭐`
+        ),
+        cv2Divider(),
+        cv2Text('-# Ayami Hoshiori • espero que você aceite! 🌸'),
+      ], { accentColor: COLORS.group })
     });
   } catch {}
 }

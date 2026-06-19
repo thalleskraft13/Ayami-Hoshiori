@@ -9,10 +9,10 @@ const CommandBuilder  = require('./CommandBuilder.js');
    CORES DA AYAMI
    ───────────────────────────────────────────── */
 const COLOR = {
-  main:    0x7C8FFF,
-  gold:    0xFFD966,
-  dark:    0x243B7A,
-  hair:    0xA9D6FF,
+  main:    0x7C8FFF,   // azul principal
+  gold:    0xFFD966,   // dourado
+  dark:    0x243B7A,   // azul escuro
+  hair:    0xA9D6FF,   // azul cabelo
   danger:  0xED4245,
   success: 0x57F287,
 };
@@ -20,10 +20,11 @@ const COLOR = {
 const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
 
 /**
- * FlowUI
+ * FlowUI — Components V2
  *
- * Painel de configuração do Logic Builder no Discord.
- * Ponto de entrada: client.logicUI.open(interaction)
+ * Todos os painéis principais usam Container (type 17) com blocos cv2*.
+ * IS_COMPONENTS_V2 flag = 1 << 15 = 32768
+ * EPHEMERAL flag        = 1 << 6  = 64
  */
 class FlowUI {
 
@@ -39,9 +40,9 @@ class FlowUI {
     return this.client?.emoji?.[name] ?? '';
   }
 
-  /* ── botão de link para o guia ── */
+  /* ── botão de link para o guia (estilo 5 = link) ── */
   _guideButton() {
-    return { type: 2, style: 5, label: '📖 Guia Logic Builder', url: GUIDE_URL };
+    return { type: 2, style: 5, label: '📖 Guia', url: GUIDE_URL };
   }
 
   /* ═══════════════════════════════════════════
@@ -63,11 +64,22 @@ class FlowUI {
   }
 
   async editOriginal(interaction, data) {
-    return DiscordRequest(
-      `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
-      { method: 'PATCH', body: data }
-    );
+  if (interaction.__rootOverride) {
+    const { channelId, messageId } = interaction.__rootOverride;
+    return this.editMessageById(channelId, messageId, data);
   }
+  return DiscordRequest(
+    `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
+    { method: 'PATCH', body: data }
+  );
+}
+
+async editMessageById(channelId, messageId, data) {
+  return DiscordRequest(
+    `/channels/${channelId}/messages/${messageId}`,
+    { method: 'PATCH', body: data }
+  );
+}
 
   async followUp(interaction, data) {
     return DiscordRequest(
@@ -77,14 +89,22 @@ class FlowUI {
   }
 
   async followUpEphemeral(interaction, data) {
-    // OR em vez de sobrescrever — preserva flags já presentes em `data`
-    // (ex: IS_COMPONENTS_V2 = 32768, montada por cv2Payload) e garante
-    // o bit de ephemeral (64) por cima.
     return this.followUp(interaction, { ...data, flags: (data.flags ?? 0) | 64 });
   }
 
+  /**
+   * Apaga uma mensagem de followUp (pelo messageId retornado no POST).
+   * Usado pelo embed builder para fechar o painel temporário.
+   */
+  async deleteFollowUp(interaction, messageId) {
+    return DiscordRequest(
+      `/webhooks/${this.client.clientId}/${interaction.token}/messages/${messageId}`,
+      { method: 'DELETE' }
+    );
+  }
+
   /* ═══════════════════════════════════════════
-     HELPERS DE COMPONENTES
+     HELPERS DE COMPONENTES (ActionRows legados)
      ═══════════════════════════════════════════ */
 
   btn(user, label, style, func, opts = {}) {
@@ -107,79 +127,72 @@ class FlowUI {
     return { type: 1, components };
   }
 
+  /* ═══════════════════════════════════════════
+     HELPERS COMPONENTS V2
+     ═══════════════════════════════════════════ */
 
-
-  /** Texto em markdown (Text Display, type 10). */
+  /** Text Display (type 10) */
   cv2Text(content) {
     return { type: 10, content };
   }
 
-  /** Linha divisória entre blocos (Separator, type 14). */
+  /** Separator (type 14) */
   cv2Divider(spacing = 1) {
     return { type: 14, divider: true, spacing };
   }
 
   /**
-   * Bloco de texto com um botão ao lado (Section + Accessory, type 9).
-   * Use para cada seção do painel (Trigger, Condições, Ações, etc.)
-   * que precisa de um atalho de edição contextual.
-   *
-   * @param {string} content    Markdown do texto principal
-   * @param {object} button     Componente de botão já criado (this.btn(...) ou this.client.interactions.createButton(...))
+   * Section (type 9) — texto + botão acessório ao lado.
+   * @param {string} content   Markdown do texto
+   * @param {object} button    Botão já criado com this.btn(...)
    */
   cv2Section(content, button) {
     return {
-      type: 9,
+      type:      9,
       accessory: button,
       components: [this.cv2Text(content)]
     };
   }
 
   /**
-   * Galeria de mídia (type 12) — usada para a imagem decorativa da Ayami
-   * no rodapé do painel, por exemplo.
+   * Media Gallery (type 12) — imagem decorativa da Ayami.
    * @param {string|string[]} urls
    */
   cv2Gallery(urls) {
     const list = Array.isArray(urls) ? urls : [urls];
     return {
-      type: 12,
+      type:  12,
       items: list.map(url => ({ media: { url }, description: null, spoiler: false }))
     };
   }
 
   /**
-   * Monta o Container raiz (type 17) a partir de uma lista de blocos
-   * já construídos com os helpers acima (cv2Text, cv2Divider, cv2Section, row).
-   *
-   * @param {object[]} blocks
+   * Container raiz (type 17).
+   * @param {object[]} blocks   Blocos internos (cv2Text, cv2Divider, cv2Section, row...)
    * @param {{ accentColor?: number, spoiler?: boolean }} opts
-   * @returns {object} payload pronto para `components: [container]`
    */
   cv2Container(blocks, opts = {}) {
     return {
-      type:          17,
-      accent_color:  opts.accentColor ?? COLOR.main,
-      spoiler:       opts.spoiler ?? false,
-      components:    blocks
+      type:         17,
+      accent_color: opts.accentColor ?? COLOR.main,
+      spoiler:      opts.spoiler ?? false,
+      components:   blocks
     };
   }
 
   /**
-   * Flags corretas para uma resposta CV2.
-   * IS_COMPONENTS_V2 = 1 << 15 = 32768
-   * EPHEMERAL        = 1 << 6  = 64
+   * Flags para respostas CV2.
+   * IS_COMPONENTS_V2 = 1 << 15 = 32768   EPHEMERAL = 1 << 6 = 64
    */
   cv2Flags(ephemeral = true) {
     return ephemeral ? 32768 | 64 : 32768;
   }
 
   /**
-   * Monta o payload completo { flags, components: [container] } pronto
-   * para passar em editOriginal/followUpEphemeral/createButton callback.
-   * Açúcar sintático para não repetir cv2Flags + cv2Container em toda tela.
+   * Payload completo { flags, components: [container] } pronto para
+   * editOriginal / followUp / reply.
    *
-   * @param {object[]} blocks    Blocos construídos com cv2Text/cv2Divider/cv2Section/row
+   * @param {object[]} blocks
    * @param {{ accentColor?: number, ephemeral?: boolean }} opts
    */
   cv2Payload(blocks, opts = {}) {
@@ -189,15 +202,8 @@ class FlowUI {
     };
   }
 
-  /**
-   * Componente de Select Menu dentro de um Modal (formato novo, type 18 = Label).
-   * Use isso no lugar de pedir "sim/não" por texto em modais.
-   *
-   * @param {string} customId
-   * @param {string} label        Texto exibido acima do select
-   * @param {{label,value,description?,emoji?,default?}[]} options
-   * @param {{description?, required?, placeholder?}} opts
-   */
+  /* ── Modal helpers (type 18) ── */
+
   modalSelect(customId, label, options, opts = {}) {
     return {
       type:        18,
@@ -214,12 +220,6 @@ class FlowUI {
     };
   }
 
-  /**
-   * Atalho para um select de Sim/Não dentro de modal.
-   * @param {string} customId
-   * @param {string} label
-   * @param {{ yesLabel?, noLabel?, defaultValue?: 'true'|'false' }} opts
-   */
   modalYesNo(customId, label, opts = {}) {
     return this.modalSelect(customId, label, [
       { label: opts.yesLabel || '✅ Sim', value: 'true',  default: opts.defaultValue === 'true' },
@@ -227,10 +227,6 @@ class FlowUI {
     ], { placeholder: opts.placeholder || 'Sim ou não?' });
   }
 
-  /**
-   * Componente de Text Input dentro de um Modal (formato novo, type 18 = Label).
-   * Equivalente ao Action Row antigo, mas no padrão atual do Discord.
-   */
   modalText(customId, label, opts = {}) {
     return {
       type:        18,
@@ -272,12 +268,10 @@ class FlowUI {
       await this.deferUpdate(i);
       return onPrev(i, page - 1);
     });
-
     const btnNext = this.btn(user, '➡️ Próximo', page >= maxPage ? 2 : 1, async (i) => {
       await this.deferUpdate(i);
       return onNext(i, page + 1);
     });
-
     return this.row(btnPrev, btnNext);
   }
 
@@ -308,7 +302,7 @@ class FlowUI {
   }
 
   /* ═══════════════════════════════════════════
-     TELA: HOME
+     TELA: HOME  ─ Components V2
      ═══════════════════════════════════════════ */
 
   async open(interaction) {
@@ -319,7 +313,7 @@ class FlowUI {
     const flows  = await engine.getFlows(guildId);
     this._setCache(guildId, 'flows', flows);
 
-    const { FlowModel, CustomCommandModel } = require('../../../Mongodb/flow.js');
+    const { CustomCommandModel } = require('../../../Mongodb/flow.js');
     const cmdCount = await CustomCommandModel.countDocuments({ guildId });
 
     return this.editOriginal(interaction, this._homePayload(user, flows, cmdCount));
@@ -344,41 +338,41 @@ class FlowUI {
       return this.flowBuilder.startCreate(i, user);
     });
 
-    return {
-      embeds: [{
-        title:       `⚡ Logic Builder ${ayami}`,
-        description:
-          `Oii! Eu sou a **Ayami** ${this._e('corao')} e vou te ajudar a criar automações incríveis!\n\n` +
-          `Com o **Logic Builder** você pode criar regras automáticas para o seu servidor — sem precisar saber programação!\n\n` +
-          `**Como funciona?**\n` +
-          `🎯 **Trigger** → o que começa tudo (ex: alguém entra no servidor)\n` +
-          `🔍 **Condições** → verificações opcionais (ex: só se tiver o cargo X)\n` +
-          `⚡ **Ações** → o que acontece (ex: enviar mensagem, dar cargo)\n\n` +
-          `Ficou com dúvida? Clica no botão **📖 Guia** aqui embaixo! ${this._e('feliz')}`,
-        color:  COLOR.main,
-        fields: [
-          {
-            name:   '📊 Seus Fluxos',
-            value:  `Total: **${flows.length}** • ✅ Ativos: **${enabled}** • ⏸️ Pausados: **${disabled}**`,
-            inline: false
-          },
-          {
-            name:   '🔧 Comandos',
-            value:  `Total: **${cmdCount}** comando${cmdCount !== 1 ? 's' : ''} personalizado${cmdCount !== 1 ? 's' : ''}`,
-            inline: false
-          }
-        ],
-        footer:    { text: 'Logic Builder by Ayami Hoshiori ⭐' },
-        thumbnail: { url: 'https://ayami-hoshiori.vercel.app/ayami-thumb.png' }
-      }],
-      components: [
-        this.row(btnFlows, btnCmds, btnNew, this._guideButton())
-      ]
-    };
+    /* ── Blocos Components V2 ── */
+    const blocks = [
+      this.cv2Text(
+        `# ⚡ Logic Builder ${ayami}\n` +
+        `Oii! Eu sou a **Ayami** ${this._e('corao')} e vou te ajudar a criar automações incríveis!\n\n` +
+        `Com o **Logic Builder** você cria regras automáticas pro seu servidor — sem precisar saber programar!\n\n` +
+        `> 🎯 **Trigger** → o que começa tudo *(ex: alguém entra no servidor)*\n` +
+        `> 🔍 **Condições** → verificações opcionais *(ex: só se tiver o cargo X)*\n` +
+        `> ⚡ **Ações** → o que acontece *(ex: enviar mensagem, dar cargo)*`
+      ),
+      this.cv2Divider(),
+      this.cv2Section(
+        `## 📊 | Seus Fluxos
+        
+        Total: **${flows.length}** • ✅ Ativos: **${enabled}** • ⏸️ Pausados: **${disabled}**`,
+        btnFlows
+      ),
+      this.cv2Divider(),
+      this.cv2Section(
+        `## 🔧 Comandos Personalizados
+        
+        Total: **${cmdCount}** comando${cmdCount !== 1 ? 's' : ''} personalizado${cmdCount !== 1 ? 's' : ''}`,
+        btnCmds
+      ),
+      this.cv2Divider(),
+      this.row(btnNew, this._guideButton()),
+      this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
+
+    ];
+
+    return this.cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main });
   }
 
   /* ═══════════════════════════════════════════
-     TELA: LISTA DE FLUXOS (com paginação)
+     TELA: LISTA DE FLUXOS  ─ Components V2
      ═══════════════════════════════════════════ */
 
   async flowList(interaction, user, page = 0) {
@@ -402,16 +396,17 @@ class FlowUI {
     });
 
     if (!flows.length) {
-      return this.editOriginal(interaction, {
-        embeds: [{
-          title:       `📋 Fluxos ${this._e('emburrada')}`,
-          description:
-            `Ainda não tem nenhum fluxo criado...\n\n` +
-            `${this._e('feliz')} Clica em **✨ Novo Fluxo** para criar o primeiro! É fácil, eu prometo!`,
-          color: COLOR.main
-        }],
-        components: [this.row(btnCreate, btnBack, this._guideButton())]
-      });
+      const blocks = [
+        this.cv2Text(
+          `# 📋 Fluxos ${this._e('emburrada')}\n` +
+          `Ainda não tem nenhum fluxo criado...\n\n` +
+          `${this._e('feliz')} Clica em **✨ Novo Fluxo** para criar o primeiro! É fácil, eu prometo!`
+        ),
+        this.cv2Divider(),
+        this.row(btnCreate, btnBack, this._guideButton()),
+        this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
+      ];
+      return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
     }
 
     const { page: safePage, maxPage } = this._clampPage(page, flows.length);
@@ -429,10 +424,23 @@ class FlowUI {
       return this.flowMenu(i, user, i.data.values[0]);
     });
 
-    const components = [this.row(sel)];
+    const listText = pageItems
+      .map(f => `${f.enabled ? '🟢' : '🔴'} **${f.name}** \`(${this._triggerLabel(f.trigger)})\``)
+      .join('\n');
+
+    const blocks = [
+      this.cv2Text(
+        `# 📋 Seus Fluxos (${flows.length}) ${this._e('pensando')}\n` +
+        `Selecione um fluxo abaixo para configurar ou gerenciar!\n` +
+        `*(Página ${safePage + 1}/${maxPage + 1})*\n\n${listText}`
+      ),
+      this.cv2Divider(),
+      this.row(sel),
+      this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
+    ];
 
     if (maxPage > 0) {
-      components.push(
+      blocks.push(
         this._paginationRow(
           user, safePage, maxPage,
           (i, p) => this.flowList(i, user, p),
@@ -441,21 +449,14 @@ class FlowUI {
       );
     }
 
-    components.push(this.row(btnCreate, btnBack, this._guideButton()));
+    blocks.push(this.cv2Divider());
+    blocks.push(this.row(btnCreate, btnBack, this._guideButton()));
 
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       `📋 Seus Fluxos (${flows.length}) ${this._e('pensando')}`,
-        description: `Selecione um fluxo abaixo para configurar ou gerenciar!`,
-        color:       COLOR.main,
-        footer:      { text: `Página ${safePage + 1}/${maxPage + 1} • Logic Builder` }
-      }],
-      components
-    });
+    return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
 
   /* ═══════════════════════════════════════════
-     TELA: MENU DO FLUXO
+     TELA: MENU DO FLUXO  ─ Components V2
      ═══════════════════════════════════════════ */
 
   async flowMenu(interaction, user, flowId) {
@@ -464,12 +465,17 @@ class FlowUI {
     const flow = await FlowModel.findOne({ flowId, guildId }).lean();
 
     if (!flow) {
-      return this.followUpEphemeral(interaction, {
-        content: `❌ Fluxo não encontrado. ${this._e('assustada')}`
-      });
+      return this.followUpEphemeral(interaction, this.cv2Payload([
+        this.cv2Text(`❌ Fluxo não encontrado. ${this._e('assustada')}`)
+      ]));
     }
 
-    const status = flow.enabled ? '🟢 Ativo' : '🔴 Pausado';
+    const status       = flow.enabled ? '🟢 Ativo' : '🔴 Pausado';
+    const triggerLabel = this._triggerLabel(flow.trigger);
+    const runs         = flow.stats?.totalRuns   || 0;
+    const ok           = flow.stats?.successRuns || 0;
+    const fail         = flow.stats?.failedRuns  || 0;
+    const ayami        = this._e(flow.enabled ? 'feliz' : 'sonolenta');
 
     const btnTrigger = this.btn(user, '🎯 Trigger', 1, async (i) => {
       await this.deferUpdate(i);
@@ -518,42 +524,42 @@ class FlowUI {
       return this.flowList(i, user, 0);
     });
 
-    return this.editOriginal(interaction, {
-      embeds: [this._flowEmbed(flow, status)],
-      components: [
-        this.row(btnTrigger, btnConditions, btnActions),
-        this.row(btnVars, btnSettings),
-        this.row(btnToggle, btnDelete, btnBack, this._guideButton())
-      ]
-    });
-  }
+    const cooldownText = flow.cooldown > 0 ? `${flow.cooldown / 1000}s` : 'Sem cooldown';
 
-  _flowEmbed(flow, status) {
-    const triggerLabel = this._triggerLabel(flow.trigger);
-    const runs = flow.stats?.totalRuns  || 0;
-    const ok   = flow.stats?.successRuns || 0;
-    const fail = flow.stats?.failedRuns  || 0;
-    const ayami = this._e(flow.enabled ? 'feliz' : 'sonolenta');
+    const blocks = [
+      this.cv2Text(
+        `# ⚡ ${flow.name} ${ayami}\n` +
+        `${flow.description || '_Sem descrição_'}`
+      ),
+      this.cv2Divider(),
+      this.cv2Section(
+        `**📌 Status:** ${status}  •  **🎯 Trigger:** ${triggerLabel}\n` +
+        `**⏱️ Cooldown:** ${cooldownText}`,
+        btnTrigger
+      ),
+      this.cv2Divider(),
+      this.cv2Section(
+        `**🔍 Condições:** ${flow.conditions?.length || 0}  •  **⚡ Ações:** ${flow.actions?.length || 0}`,
+        btnConditions
+      ),
+      this.cv2Divider(),
+      this.cv2Section(
+        `**📊 Execuções:** ✅ ${ok}  ❌ ${fail}  (Total: ${runs})`,
+        btnActions
+      ),
+      this.cv2Divider(),
+      this.row(btnVars, btnSettings),
+      this.row(btnToggle, btnDelete, btnBack, this._guideButton()),
+    ];
 
-    return {
-      title:       `⚡ ${flow.name} ${ayami}`,
-      description: flow.description || '_Sem descrição_',
-      color:       flow.enabled ? COLOR.success : COLOR.danger,
-      fields: [
-        { name: '📌 Status',      value: status,                                              inline: true  },
-        { name: '🎯 Trigger',     value: triggerLabel,                                        inline: true  },
-        { name: '🔍 Condições',   value: String(flow.conditions?.length || 0),                inline: true  },
-        { name: '⚡ Ações',       value: String(flow.actions?.length || 0),                   inline: true  },
-        { name: '📊 Execuções',   value: `✅ ${ok}  ❌ ${fail}  (Total: ${runs})`,           inline: true  },
-        { name: '⏱️ Cooldown',    value: flow.cooldown > 0 ? `${flow.cooldown / 1000}s` : 'Sem cooldown', inline: true }
-      ],
-      footer:    { text: `ID do fluxo: ${flow.flowId} • Logic Builder` },
-      timestamp: flow.updatedAt
-    };
+    return this.editOriginal(interaction, this.cv2Payload(blocks, {
+      ephemeral:   false,
+      accentColor: flow.enabled ? COLOR.success : COLOR.danger
+    }));
   }
 
   /* ═══════════════════════════════════════════
-     CONFIRMAR EXCLUSÃO
+     CONFIRMAR EXCLUSÃO  ─ Components V2
      ═══════════════════════════════════════════ */
 
   async _confirmDelete(interaction, user, flowId, flowName) {
@@ -563,9 +569,9 @@ class FlowUI {
       await this.deferUpdate(i);
       await this.client.logicEngine.deleteFlow(flowId, i.guild_id);
       this.invalidateCache(i.guild_id);
-      await this.followUpEphemeral(i, {
-        content: `${this._e('chorando')} Fluxo **${flowName}** excluído. Espero que não precise mais dele...`
-      });
+      await this.followUpEphemeral(i, this.cv2Payload([
+        this.cv2Text(`${this._e('chorando')} Fluxo **${flowName}** excluído. Espero que não precise mais dele...`)
+      ]));
       return this.flowList(i, user, 0);
     });
 
@@ -574,21 +580,25 @@ class FlowUI {
       return this.flowMenu(i, user, flowId);
     });
 
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       `⚠️ Excluir fluxo? ${ayami}`,
-        description:
-          `Tem certeza que quer excluir o fluxo **${flowName}**?\n\n` +
-          `**Esta ação não pode ser desfeita!** ${this._e('brava')}\n` +
-          `Todas as configurações (trigger, condições, ações, variáveis) serão perdidas.`,
-        color: COLOR.danger
-      }],
-      components: [this.row(btnConfirm, btnCancel)]
-    });
+    const blocks = [
+      this.cv2Text(
+        `# ⚠️ Excluir fluxo? ${ayami}\n` +
+        `Tem certeza que quer excluir o fluxo **${flowName}**?\n\n` +
+        `**Esta ação não pode ser desfeita!** ${this._e('brava')}\n` +
+        `Todas as configurações (trigger, condições, ações, variáveis) serão perdidas.`
+      ),
+      this.cv2Divider(),
+      this.row(btnConfirm, btnCancel),
+    ];
+
+    return this.editOriginal(interaction, this.cv2Payload(blocks, {
+      ephemeral:   false,
+      accentColor: COLOR.danger
+    }));
   }
 
   /* ═══════════════════════════════════════════
-     TELA: LISTA DE COMANDOS (com paginação)
+     TELA: LISTA DE COMANDOS  ─ Components V2
      ═══════════════════════════════════════════ */
 
   async commandList(interaction, user, page = 0) {
@@ -614,16 +624,17 @@ class FlowUI {
     });
 
     if (!commands.length) {
-      return this.editOriginal(interaction, {
-        embeds: [{
-          title:       `🔧 Comandos Personalizados ${this._e('emburrada')}`,
-          description:
-            `Nenhum comando criado ainda!\n\n` +
-            `${this._e('feliz')} Clica em **✨ Novo Comando** para criar o primeiro!`,
-          color: COLOR.main
-        }],
-        components: [this.row(btnCreate, btnBack, this._guideButton())]
-      });
+      const blocks = [
+        this.cv2Text(
+          `# 🔧 Comandos Personalizados ${this._e('emburrada')}\n` +
+          `Nenhum comando criado ainda!\n\n` +
+          `${this._e('feliz')} Clica em **✨ Novo Comando** para criar o primeiro!`
+        ),
+        this.cv2Divider(),
+        this.row(btnCreate, btnBack, this._guideButton()),
+        this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
+      ];
+      return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
     }
 
     const { page: safePage, maxPage } = this._clampPage(page, commands.length);
@@ -641,10 +652,23 @@ class FlowUI {
       return this.cmdBuilder.commandMenu(i, user, i.data.values[0]);
     });
 
-    const components = [this.row(sel)];
+    const listText = pageItems
+      .map(c => `${c.enabled ? '🟢' : '🔴'} **${c.prefix}${c.name}** \`${c.description?.slice(0, 50) || '_sem descrição_'}\``)
+      .join('\n');
+
+    const blocks = [
+      this.cv2Text(
+        `# 🔧 Comandos (${commands.length}) ${this._e('pensando')}\n` +
+        `Selecione um comando abaixo para gerenciar!\n` +
+        `*(Página ${safePage + 1}/${maxPage + 1})*\n\n${listText}`
+      ),
+      this.cv2Divider(),
+      this.row(sel),
+      this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
+    ];
 
     if (maxPage > 0) {
-      components.push(
+      blocks.push(
         this._paginationRow(
           user, safePage, maxPage,
           (i, p) => this.commandList(i, user, p),
@@ -653,17 +677,10 @@ class FlowUI {
       );
     }
 
-    components.push(this.row(btnCreate, btnBack, this._guideButton()));
+    blocks.push(this.cv2Divider());
+    blocks.push(this.row(btnCreate, btnBack, this._guideButton()));
 
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       `🔧 Comandos (${commands.length}) ${this._e('pensando')}`,
-        description: `Selecione um comando abaixo para gerenciar!`,
-        color:       COLOR.main,
-        footer:      { text: `Página ${safePage + 1}/${maxPage + 1} • Logic Builder` }
-      }],
-      components
-    });
+    return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
 
   /* ═══════════════════════════════════════════
@@ -673,39 +690,39 @@ class FlowUI {
   _triggerLabel(trigger) {
     if (!trigger) return 'Não configurado';
     const labels = {
-      'message:message_created':         '💬 Mensagem criada',
-      'message:message_edited':          '✏️ Mensagem editada',
-      'message:message_deleted':         '🗑️ Mensagem apagada',
-      'message:message_contains_text':   '🔍 Mensagem com texto',
-      'message:message_contains_link':   '🔗 Mensagem com link',
-      'message:message_contains_image':  '🖼️ Mensagem com imagem',
-      'message:message_contains_file':   '📎 Mensagem com arquivo',
-      'message:message_contains_mention':'📣 Mensagem com menção',
-      'message:message_contains_emoji':  '😀 Mensagem com emoji',
-      'message:message_contains_sticker':'🎭 Mensagem com sticker',
-      'member:member_joined':            '👋 Membro entrou',
-      'member:member_left':              '🚪 Membro saiu',
-      'member:member_banned':            '🔨 Membro banido',
-      'member:member_unbanned':          '✅ Membro desbanido',
-      'member:member_nick_changed':      '📝 Nick alterado',
-      'reaction:reaction_added':         '➕ Reação adicionada',
-      'reaction:reaction_removed':       '➖ Reação removida',
-      'voice:voice_joined':              '🔊 Entrou em call',
-      'voice:voice_left':                '🔇 Saiu da call',
-      'voice:voice_moved':               '🔀 Mudou de call',
-      'voice:camera_on':                 '📷 Câmera ligada',
-      'voice:camera_off':                '📷 Câmera desligada',
-      'voice:screen_share_start':        '🖥️ Compartilhando tela',
-      'voice:screen_share_stop':         '🖥️ Parou de compartilhar',
-      'component:button_clicked':        '🖱️ Botão clicado',
-      'component:select_used':           '📋 Select usado',
-      'component:modal_submitted':       '📝 Modal enviado',
-      'channel:channel_created':         '📁 Canal criado',
-      'channel:channel_deleted':         '❌ Canal apagado',
-      'channel:channel_updated':         '🔧 Canal atualizado',
-      'internal:custom_event':           '⚡ Evento customizado',
-      'time:scheduled_trigger':          '🕐 Horário agendado',
-      'command:command_executed':        '🔧 Comando executado'
+      'message:message_created':          '💬 Mensagem criada',
+      'message:message_edited':           '✏️ Mensagem editada',
+      'message:message_deleted':          '🗑️ Mensagem apagada',
+      'message:message_contains_text':    '🔍 Mensagem com texto',
+      'message:message_contains_link':    '🔗 Mensagem com link',
+      'message:message_contains_image':   '🖼️ Mensagem com imagem',
+      'message:message_contains_file':    '📎 Mensagem com arquivo',
+      'message:message_contains_mention': '📣 Mensagem com menção',
+      'message:message_contains_emoji':   '😀 Mensagem com emoji',
+      'message:message_contains_sticker': '🎭 Mensagem com sticker',
+      'member:member_joined':             '👋 Membro entrou',
+      'member:member_left':               '🚪 Membro saiu',
+      'member:member_banned':             '🔨 Membro banido',
+      'member:member_unbanned':           '✅ Membro desbanido',
+      'member:member_nick_changed':       '📝 Nick alterado',
+      'reaction:reaction_added':          '➕ Reação adicionada',
+      'reaction:reaction_removed':        '➖ Reação removida',
+      'voice:voice_joined':               '🔊 Entrou em call',
+      'voice:voice_left':                 '🔇 Saiu da call',
+      'voice:voice_moved':                '🔀 Mudou de call',
+      'voice:camera_on':                  '📷 Câmera ligada',
+      'voice:camera_off':                 '📷 Câmera desligada',
+      'voice:screen_share_start':         '🖥️ Compartilhando tela',
+      'voice:screen_share_stop':          '🖥️ Parou de compartilhar',
+      'component:button_clicked':         '🖱️ Botão clicado',
+      'component:select_used':            '📋 Select usado',
+      'component:modal_submitted':        '📝 Modal enviado',
+      'channel:channel_created':          '📁 Canal criado',
+      'channel:channel_deleted':          '❌ Canal apagado',
+      'channel:channel_updated':          '🔧 Canal atualizado',
+      'internal:custom_event':            '⚡ Evento customizado',
+      'time:scheduled_trigger':           '🕐 Horário agendado',
+      'command:command_executed':         '🔧 Comando executado'
     };
     return labels[`${trigger.category}:${trigger.type}`] || `${trigger.category}/${trigger.type}`;
   }

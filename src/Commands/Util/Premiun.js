@@ -1,8 +1,64 @@
 'use strict';
 
-const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS COMPONENTS V2
+   (mesmo padrão usado no Logic Builder / Biblioteca / Missões)
+   ═══════════════════════════════════════════════════════════ */
+
+function cv2Text(content) {
+  return { type: 10, content };
+}
+
+function cv2Divider(spacing = 1) {
+  return { type: 14, divider: true, spacing };
+}
+
+/**
+ * Section (type 9) com accessory de Thumbnail (type 11).
+ * Substitui o antigo `.setThumbnail(avatar)` do embed clássico —
+ * em CV2 a miniatura fica ao lado do texto via Section, não
+ * "flutuando" no canto do embed.
+ */
+function cv2SectionThumb(content, thumbUrl) {
+  return {
+    type: 9,
+    accessory: { type: 11, media: { url: thumbUrl } },
+    components: [cv2Text(content)]
+  };
+}
+
+function cv2Container(blocks, opts = {}) {
+  return {
+    type:         17,
+    accent_color: opts.accentColor ?? 0x7C8FFF,
+    spoiler:      opts.spoiler ?? false,
+    components:   blocks
+  };
+}
+
+function cv2Flags(ephemeral = true) {
+  return ephemeral ? 32768 | 64 : 32768;
+}
+
+function cv2Payload(blocks, opts = {}) {
+  return {
+    flags:      cv2Flags(opts.ephemeral ?? true),
+    components: [cv2Container(blocks, opts)]
+  };
+}
+
+function row(...components) {
+  return { type: 1, components };
+}
+
+/** Paleta aleatória "estilo Constellation" — mantém a ideia do antigo .randomColor(). */
+const RANDOM_COLORS = [0x7C8FFF, 0xA9D6FF, 0xFFD966, 0xFFB6C8, 0x243B7A, 0xC6CDD8];
+function randomColor() {
+  return RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)];
+}
 
 module.exports = {
   data: {
@@ -62,15 +118,14 @@ module.exports = {
           codigo
         );
 
-        const embed = new MessageEmbed()
-          .setTitle(`${emoji.animada} Resgate de Constellation`)
-          .setDescription(
-            result.status
+        const blocks = [
+          cv2Text(
+            `# ${emoji.animada} Resgate de Constellation\n` +
+            (result.status
               ? `${emoji.festa} Key resgatada com sucesso!\n\nCódigo: \`${codigo}\`\n\nBem-vinda à Constellation~ ${emoji.corao}`
-              : `${emoji.chorando} Ops! ${result.motivo}`
-          )
-          .randomColor()
-          .build();
+              : `${emoji.chorando} Ops! ${result.motivo}`)
+          ),
+        ];
 
         return DiscordRequest(
           `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -78,10 +133,7 @@ module.exports = {
             method: "POST",
             body: {
               type: 4,
-              data: {
-                flags: 64,
-                embeds: [embed]
-              }
+              data: cv2Payload(blocks, { accentColor: randomColor(), ephemeral: true })
             }
           }
         );
@@ -96,40 +148,45 @@ module.exports = {
 
 async function renderBuy(interaction, emoji) {
 
-  const embed = new MessageEmbed()
-    .setTitle(`${emoji.feliz} Constellation — Ayami Hoshiori`)
-    .setDescription(`
-${emoji.animada} **A assinatura oficial da Ayami chegou!**
-
-✨ Escolha seu plano:
-
-> 🗓 **Mensal** — R$ 7,99
-> 📆 **Trimestral** — R$ 21,99
-> 📅 **Semestral** — R$ 39,99
-
-${emoji.curtida} **Ou adquira um Código Constellation**
-> 🔑 Key avulsa — R$ 8,50
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-${emoji.corao} **Benefícios exclusivos:**
-
-🏅 Cargo exclusivo no Servidor Oficial
-⭐ Mais chances ao obter Personagens 5 Estrelas
-💎 Bônus de Primogemas no Daily
-⚙️ Configurações avançadas nos sistemas
-　*(Tipo de Chat, Form Sequencial, Form por Modal,*
-　*Cargos Temporários, Ticket Setup e muito mais)*
-🔗 Uso de Webhook em Sistemas
-📌 Botão Fixo + Webhook no Sistema de Aniversário
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-${emoji.pensando} *Constellation não é só um plano.*
-*É o seu lugar entre as estrelas.* ${emoji.sria}
-`)
-    .randomColor()
-    .build();
+  const blocks = [
+    cv2Text(
+      `# ${emoji.feliz} Constellation — Ayami Hoshiori\n` +
+      `${emoji.animada} **A assinatura oficial da Ayami chegou!**`
+    ),
+    cv2Divider(),
+    cv2Text(
+      `✨ **Escolha seu plano:**\n\n` +
+      `> 🗓 **Mensal** — R$ 7,99\n` +
+      `> 📆 **Trimestral** — R$ 21,99\n` +
+      `> 📅 **Semestral** — R$ 39,99\n\n` +
+      `${emoji.curtida} **Ou adquira um Código Constellation**\n` +
+      `> 🔑 Key avulsa — R$ 8,50`
+    ),
+    cv2Divider(),
+    cv2Text(
+      `${emoji.corao} **Benefícios exclusivos:**\n\n` +
+      `🏅 Cargo exclusivo no Servidor Oficial\n` +
+      `⭐ Mais chances ao obter Personagens 5 Estrelas\n` +
+      `💎 Bônus de Primogemas no Daily\n` +
+      `⚙️ Configurações avançadas nos sistemas\n` +
+      `　*(Tipo de Chat, Form Sequencial, Form por Modal,*\n` +
+      `　*Cargos Temporários, Ticket Setup e muito mais)*\n` +
+      `🔗 Uso de Webhook em Sistemas\n` +
+      `📌 Botão Fixo + Webhook no Sistema de Aniversário`
+    ),
+    cv2Divider(),
+    cv2Text(
+      `${emoji.pensando} *Constellation não é só um plano.*\n` +
+      `*É o seu lugar entre as estrelas.* ${emoji.sria}`
+    ),
+    cv2Divider(),
+    row({
+      type: 2,
+      style: 5,
+      label: "✨ Assinar Constellation",
+      url: "https://discord.gg/wfaRZw5pGn"
+    }),
+  ];
 
   return DiscordRequest(
     `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -137,23 +194,7 @@ ${emoji.pensando} *Constellation não é só um plano.*
       method: "POST",
       body: {
         type: 4,
-        data: {
-          flags: 64,
-          embeds: [embed],
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 2,
-                  style: 5,
-                  label: "✨ Assinar Constellation",
-                  url: "https://discord.gg/wfaRZw5pGn"
-                }
-              ]
-            }
-          ]
-        }
+        data: cv2Payload(blocks, { accentColor: randomColor(), ephemeral: true })
       }
     }
   );
@@ -191,19 +232,16 @@ async function renderPanel(interaction, client, userId, edit = false) {
   // ── Sem premium ──
   if (!userPremium.status) {
 
-    const embed = new MessageEmbed()
-      .setTitle(`${emoji.emduvida} Constellation`)
-      .setDescription(`
-${emoji.emburrada} Você ainda não possui a Constellation ativa...
-
-Use \`/premium comprar\` para conhecer os planos
-ou \`/premium resgatar\` se já tiver um código!
-
-${emoji.carinho} *Venha brilhar com a Ayami~*
-`)
-      .setThumbnail(avatar)
-      .randomColor()
-      .build();
+    const blocks = [
+      cv2SectionThumb(
+        `# ${emoji.emduvida} Constellation\n` +
+        `${emoji.emburrada} Você ainda não possui a Constellation ativa...\n\n` +
+        `Use \`/premium comprar\` para conhecer os planos\n` +
+        `ou \`/premium resgatar\` se já tiver um código!\n\n` +
+        `${emoji.carinho} *Venha brilhar com a Ayami~*`,
+        avatar
+      ),
+    ];
 
     return DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -211,10 +249,7 @@ ${emoji.carinho} *Venha brilhar com a Ayami~*
         method: "POST",
         body: {
           type: edit ? 7 : 4,
-          data: {
-            flags: 64,
-            embeds: [embed]
-          }
+          data: cv2Payload(blocks, { accentColor: randomColor(), ephemeral: true })
         }
       }
     );
@@ -234,42 +269,34 @@ ${emoji.carinho} *Venha brilhar com a Ayami~*
     })
   );
 
-  // ── Montar descrição ──
-  let desc = "";
+  // ── Montar bloco principal (substitui a "desc" do embed clássico) ──
+  let mainText = "";
+  mainText += `# ${emoji.festa} Painel Constellation\n`;
+  mainText += `${emoji.animada} **Assinante:** <@${userId}>\n`;
+  mainText += `✨ **Status:** Constellation Ativa\n`;
+  mainText += `⏳ **Expira em:** \`${formatTempo(userPremium.tempo)}\`\n\n`;
+  mainText += `🏠 **Servidores com Constellation:** ${guilds.length}`;
 
-  desc += `${emoji.animada} **Assinante:** <@${userId}>\n`;
-  desc += `✨ **Status:** Constellation Ativa\n`;
-  desc += `⏳ **Expira em:** \`${formatTempo(userPremium.tempo)}\`\n\n`;
-
-  desc += `🏠 **Servidores com Constellation:** ${guilds.length}\n`;
+  const blocks = [
+    cv2SectionThumb(mainText, avatar),
+  ];
 
   if (guildNames.length) {
-    desc += `\n**Servidores vinculados:**\n`;
-    for (const g of guildNames) {
-      desc += `${emoji.curtida} **${g.name}** \`(${g.guildId})\`\n`;
-    }
-    desc += "\n";
+    const listaServidores = guildNames
+      .map(g => `${emoji.curtida} **${g.name}** \`(${g.guildId})\``)
+      .join('\n');
+
+    blocks.push(cv2Divider());
+    blocks.push(cv2Text(`**Servidores vinculados:**\n${listaServidores}`));
   }
 
-  desc += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  desc += `**Servidor Atual**\n`;
+  blocks.push(cv2Divider());
 
-  if (guildPremium.status) {
-    desc +=
-      `${emoji.feliz} Constellation **ativa** aqui!\n` +
-      `⏳ \`${formatTempo(guildPremium.tempo)}\``;
-  } else {
-    desc +=
-      `${emoji.emburrada} Constellation **não ativa** neste servidor.\n` +
-      `Use o botão abaixo para ativar!`;
-  }
+  const servidorAtualText = guildPremium.status
+    ? `${emoji.feliz} Constellation **ativa** aqui!\n⏳ \`${formatTempo(guildPremium.tempo)}\``
+    : `${emoji.emburrada} Constellation **não ativa** neste servidor.\nUse o botão abaixo para ativar!`;
 
-  const embed = new MessageEmbed()
-    .setTitle(`${emoji.festa} Painel Constellation`)
-    .setDescription(desc)
-    .setThumbnail(avatar)
-    .randomColor()
-    .build();
+  blocks.push(cv2Text(`**Servidor Atual**\n${servidorAtualText}`));
 
   const components = [];
 
@@ -288,7 +315,7 @@ ${emoji.carinho} *Venha brilhar com a Ayami~*
       }
     });
 
-    components.push({ type: 1, components: [btnAdd] });
+    components.push(btnAdd);
   }
 
   // Botão: Remover
@@ -306,21 +333,19 @@ ${emoji.carinho} *Venha brilhar com a Ayami~*
       }
     });
 
-    components.push({ type: 1, components: [btnRemove] });
+    components.push(btnRemove);
   }
 
   // Botão: Comprar (link)
   components.push({
-    type: 1,
-    components: [
-      {
-        type: 2,
-        style: 5,
-        label: "✨ Ver Planos Constellation",
-        url: "https://discord.gg/wfaRZw5pGn"
-      }
-    ]
+    type: 2,
+    style: 5,
+    label: "✨ Ver Planos Constellation",
+    url: "https://discord.gg/wfaRZw5pGn"
   });
+
+  blocks.push(cv2Divider());
+  blocks.push(row(...components));
 
   return DiscordRequest(
     `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -328,11 +353,7 @@ ${emoji.carinho} *Venha brilhar com a Ayami~*
       method: "POST",
       body: {
         type: edit ? 7 : 4,
-        data: {
-          flags: 64,
-          embeds: [embed],
-          components
-        }
+        data: cv2Payload(blocks, { accentColor: randomColor(), ephemeral: true })
       }
     }
   );

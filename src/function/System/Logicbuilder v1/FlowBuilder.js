@@ -916,7 +916,7 @@ class FlowBuilder {
       components: [{
         type:        4,
         custom_id:   p,
-        label:       this._paramLabel(p),
+        label:       this._paramLabel(p).slice(0, 45),
         style:       p === 'content' || p === 'reason' ? 2 : 1,
         required:    !OPTIONAL_PARAMS.includes(p),
         max_length:  200,
@@ -1020,7 +1020,7 @@ class FlowBuilder {
       components: [{
         type:        4,
         custom_id:   p,
-        label:       this._paramLabel(p),
+        label:       this._paramLabel(p).slice(0, 45),
         style:       p === 'content' || p === 'reason' ? 2 : 1,
         required:    false,
         max_length:  200,
@@ -1234,7 +1234,7 @@ class FlowBuilder {
           custom_id:   p,
           label:       p === 'content' && meta.type === 'edit_interaction_message'
                          ? 'Novo conteúdo (vazio = mantém o atual)'
-                         : this._paramLabel(p),
+                         : this._paramLabel(p).slice(0, 45),
           style:       p === 'content' || p === 'reason' ? 2 : 1,
           required:    !OPTIONAL_PARAMS.includes(p) && !(p === 'content' && meta.type === 'edit_interaction_message'),
           max_length:  p === 'content' ? 4000 : 200,
@@ -2952,7 +2952,7 @@ class FlowBuilder {
       varName:       'Nome da variável',
       title:         'Título do ranking',
       embed:         'Embed (JSON — veja o guia para exemplos)',
-      targetUserId:  'USER — ID do usuário (vazio = quem disparou o fluxo)',
+      targetUserId:  'ID do usuário (vazio = quem disparou)',
       cancelMessage: 'Mensagem se o usuário cancelar',
       timeout:       'Tempo limite em segundos',
       currentValue:    'Valor Atual (número ou {var:nome})',

@@ -28,15 +28,22 @@ const CATEGORY_EMOJI = {
   'Outros':      '📦'
 };
 
-const COLORS = {
-  default:  0x7C8FFF,
-  success:  0x57F287,
-  warning:  0xFEE75C,
-  danger:   0xED4245,
-  library:  0x7C8FFF
+/* ─────────────────────────────────────────────
+   CORES DA AYAMI (mesma paleta do Logic Builder)
+   ───────────────────────────────────────────── */
+const COLOR = {
+  main:    0x7C8FFF,   // azul principal
+  gold:    0xFFD966,   // dourado
+  dark:    0x243B7A,   // azul escuro
+  hair:    0xA9D6FF,   // azul cabelo
+  pink:    0xFFB6C8,
+  danger:  0xED4245,
+  success: 0x57F287,
+  library: 0x7C8FFF,
 };
 
 const SUPPORT_ANNOUNCE_CHANNEL = '1508910999753850910';
+const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
 
 /* ═══════════════════════════════════════════════════════════
    MAPA DE CAMPOS QUE PRECISAM SER CONFIGURADOS NA INSTALAÇÃO
@@ -111,22 +118,6 @@ function _actionLabel(category, type) {
      se dois fluxos diferentes têm a mesma ação, pergunta separado.
    ═══════════════════════════════════════════════════════════ */
 
-/**
- * Retorna um array de perguntas, cada uma com:
- * {
- *   storeKey:    string único (ex: "flow0_act1_channelId") — chave no collected
- *   flowIndex:   number  — índice do fluxo no array entry.flows
- *   flowName:    string  — nome do fluxo
- *   location:    string  — 'action' | 'condition' | 'trigger'
- *   itemIndex:   number  — índice da ação/condição dentro do fluxo
- *   category:    string
- *   type:        string
- *   field:       string  — 'channelId' | 'roleId'
- *   label:       string  — label amigável do campo
- *   description: string  — instrução para o usuário
- *   actionLabel: string  — label amigável da ação/condição
- * }
- */
 function _buildInstallQuestions(entry) {
   const questions = [];
   const flows     = entry.flows || [];
@@ -189,8 +180,6 @@ function _buildInstallQuestions(entry) {
       const reqFields  = INSTALL_REQUIRED_FIELDS[triggerKey];
       if (reqFields) {
         for (const { field, label, description } of reqFields) {
-          // Só pergunta se o trigger realmente tem esse filtro OU se a categoria exige
-          // (sempre pergunta para que o instalador possa definir ou deixar em branco)
           questions.push({
             storeKey:    `f${fi}_t_${field}`,
             flowIndex:   fi,
@@ -219,13 +208,10 @@ function _buildInstallQuestions(entry) {
    ═══════════════════════════════════════════════════════════ */
 
 function _applyCollectedValues(flows, questions, collected) {
-  // Clona profundo para não mutar o original
   const cloned = JSON.parse(JSON.stringify(flows));
 
   for (const q of questions) {
     const rawValue = (collected[q.storeKey] || '').replace(/[<#@&!>]/g, '').trim();
-
-    // Valor vazio ou "-" = não aplicar (mantém sem valor ou remove)
     const value = (rawValue === '' || rawValue === '-') ? '' : rawValue;
 
     const flow = cloned[q.flowIndex];
@@ -258,6 +244,162 @@ function _applyCollectedValues(flows, questions, collected) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   HELPERS DE INTERACTION (REST)
+   ═══════════════════════════════════════════════════════════ */
+
+async function _defer(interaction) {
+  return DiscordRequest(
+    `/interactions/${interaction.id}/${interaction.token}/callback`,
+    { method: 'POST', body: { type: 5, data: { flags: 0 } } }
+  );
+}
+
+async function _deferUpdate(interaction) {
+  return DiscordRequest(
+    `/interactions/${interaction.id}/${interaction.token}/callback`,
+    { method: 'POST', body: { type: 6 } }
+  );
+}
+
+async function _reply(interaction, data) {
+  return DiscordRequest(
+    `/interactions/${interaction.id}/${interaction.token}/callback`,
+    { method: 'POST', body: { type: 4, data } }
+  );
+}
+
+/**
+ * Edita a "mensagem original" do painel. Normalmente relativo a
+ * @original do token da interação atual — mas se a interação foi
+ * marcada com `__rootOverride` (acontece depois de fluxos que rodam
+ * em followUp com token próprio, como o wizard de instalação por
+ * mensagens no canal), edita a mensagem raiz real via REST puro por
+ * channelId+messageId. Mesma estratégia usada no Logic Builder.
+ */
+async function _edit(interaction, client, data) {
+  if (interaction.__rootOverride) {
+    const { channelId, messageId } = interaction.__rootOverride;
+    return _editMessageById(client, channelId, messageId, data);
+  }
+  return DiscordRequest(
+    `/webhooks/${client.clientId}/${interaction.token}/messages/@original`,
+    { method: 'PATCH', body: data }
+  );
+}
+
+/** Edita qualquer mensagem do bot via REST puro (canal + messageId), sem depender de token. */
+async function _editMessageById(client, channelId, messageId, data) {
+  return DiscordRequest(
+    `/channels/${channelId}/messages/${messageId}`,
+    { method: 'PATCH', body: data }
+  );
+}
+
+async function _followUp(interaction, client, data) {
+  return DiscordRequest(
+    `/webhooks/${client.clientId}/${interaction.token}`,
+    { method: 'POST', body: data }
+  );
+}
+
+async function _followUpEphemeral(interaction, client, data) {
+  return _followUp(interaction, client, { ...data, flags: (data.flags ?? 0) | 64 });
+}
+
+async function _deleteFollowUp(interaction, client, messageId) {
+  return DiscordRequest(
+    `/webhooks/${client.clientId}/${interaction.token}/messages/${messageId}`,
+    { method: 'DELETE' }
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS COMPONENTS V2
+   (mesmo padrão usado no Logic Builder)
+   ═══════════════════════════════════════════════════════════ */
+
+/** Text Display (type 10) */
+function cv2Text(content) {
+  return { type: 10, content };
+}
+
+/** Separator (type 14) */
+function cv2Divider(spacing = 1) {
+  return { type: 14, divider: true, spacing };
+}
+
+/** Section (type 9) — texto + botão acessório ao lado. */
+function cv2Section(content, button) {
+  return {
+    type:      9,
+    accessory: button,
+    components: [cv2Text(content)]
+  };
+}
+
+/** Media Gallery (type 12) — imagem decorativa. */
+function cv2Gallery(urls) {
+  const list = Array.isArray(urls) ? urls : [urls];
+  return {
+    type:  12,
+    items: list.map(url => ({ media: { url }, description: null, spoiler: false }))
+  };
+}
+
+/** Container raiz (type 17). */
+function cv2Container(blocks, opts = {}) {
+  return {
+    type:         17,
+    accent_color: opts.accentColor ?? COLOR.main,
+    spoiler:      opts.spoiler ?? false,
+    components:   blocks
+  };
+}
+
+/** Flags para respostas CV2. IS_COMPONENTS_V2 = 1<<15 = 32768  EPHEMERAL = 1<<6 = 64 */
+function cv2Flags(ephemeral = false) {
+  return ephemeral ? 32768 | 64 : 32768;
+}
+
+/** Payload completo { flags, components: [container] } pronto para _edit/_followUp/_reply. */
+function cv2Payload(blocks, opts = {}) {
+  return {
+    flags:      cv2Flags(opts.ephemeral ?? false),
+    components: [cv2Container(blocks, opts)]
+  };
+}
+
+function row(...components) {
+  return { type: 1, components };
+}
+
+/** Botão simples — wrapper de client.interactions.createButton. */
+function btn(client, user, label, style, func, opts = {}) {
+  return client.interactions.createButton({
+    user,
+    data: { label, style, emoji: opts.emoji, disabled: opts.disabled },
+    funcao: func
+  });
+}
+
+function select(client, user, options, placeholder, func, opts = {}) {
+  return client.interactions.createSelect({
+    user,
+    data: { placeholder, options, min_values: opts.minValues, max_values: opts.maxValues },
+    funcao: func
+  });
+}
+
+const GUIDE_BUTTON = { type: 2, style: 5, label: '📖 Guia', url: GUIDE_URL };
+
+/* ── helper de paginação (mesmo padrão do Logic Builder) ── */
+function _clampPage(page, total, perPage = 8) {
+  const maxPage  = Math.max(0, Math.ceil(total / perPage) - 1);
+  const safePage = Math.min(Math.max(0, page), maxPage);
+  return { page: safePage, maxPage };
+}
+
+/* ═══════════════════════════════════════════════════════════
    WIZARD DE INSTALAÇÃO
    ═══════════════════════════════════════════════════════════ */
 
@@ -274,13 +416,9 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
   }
 
   if (!perms.includes('MANAGE_GUILD') && !perms.includes('ADMINISTRATOR')) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.brava} Sem permissão`,
-        description: 'Você precisa da permissão **Gerenciar Servidor** para instalar sistemas.',
-        color:       COLORS.danger
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(`# ${e.brava} Sem permissão\nVocê precisa da permissão **Gerenciar Servidor** para instalar sistemas.`)
+    ], { accentColor: COLOR.danger }));
   }
 
   const questions = _buildInstallQuestions(entry);
@@ -290,26 +428,34 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
     return _executeInstall(interaction, client, lib, entry, userId, guildId, [], {}, null, e);
   }
 
+  // Captura channelId + messageId REAIS da mensagem raiz, ANTES de
+  // qualquer mensagem nova ser enviada no canal pelo wizard. Isso
+  // permite editar a mensagem certa ao final, mesmo que o wizard
+  // tenha rodado fora do ciclo de token da interação atual.
+  const rootChannelId = interaction.channel_id || interaction.channel?.id;
+  let rootMessageId   = interaction.message?.id;
+  if (!rootMessageId) {
+    // Quando vem de /instalar direto (sem clique de botão), busca o @original.
+    const original = await DiscordRequest(
+      `/webhooks/${client.clientId}/${interaction.token}/messages/@original`
+    ).catch(() => null);
+    rootMessageId = original?.id;
+  }
+
   // Mostra resumo das perguntas antes de começar
-  await _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.pensando} Configurando — ${entry.name}`,
-      description: (
-        `Esse sistema precisa de **${questions.length} configuração(ões)** antes de instalar.\n\n` +
-        `Responda as próximas mensagens neste canal.\n` +
-        `Você tem **2 minutos** para cada resposta.\n\n` +
-        `> Envie \`-\` para pular (quando possível) ou \`cancelar\` para abortar.`
-      ),
-      color:  COLORS.library,
-      fields: questions.map((q, i) => ({
-        name:   `${i + 1}. ${q.label}`,
-        value:  `_${q.actionLabel}_`,
-        inline: true
-      })).slice(0, 25), // Discord limita 25 fields
-      footer: { text: `${entry.flows?.length || 0} fluxo(s) serão instalados • Ayami Hoshiori` }
-    }],
-    components: []
-  });
+  const summaryLines = questions.map((q, i) => `\`${i + 1}.\` **${q.label}** — _${q.actionLabel}_`).slice(0, 25).join('\n');
+
+  await _edit(interaction, client, cv2Payload([
+    cv2Text(
+      `# ${e.pensando} Configurando — ${entry.name}\n` +
+      `Esse sistema precisa de **${questions.length} configuração(ões)** antes de instalar.\n\n` +
+      `Responda as próximas mensagens neste canal.\n` +
+      `Você tem **2 minutos** para cada resposta.\n\n` +
+      `> Envie \`-\` para pular (quando possível) ou \`cancelar\` para abortar.`
+    ),
+    cv2Divider(),
+    cv2Text(summaryLines),
+  ], { accentColor: COLOR.main }));
 
   const collected = {};
 
@@ -317,14 +463,15 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
     const q        = questions[i];
     const progress = `(${i + 1}/${questions.length})`;
 
-    // Envia a pergunta no canal
+    // Envia a pergunta no canal (mensagem normal, não-CV2, para não
+    // conflitar com o painel raiz)
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body: {
         embeds: [{
           title:       `${e.emduvida} ${progress} ${q.label}`,
           description: q.description,
-          color:       COLORS.library,
+          color:       COLOR.library,
           fields: [
             { name: 'Para', value: q.actionLabel, inline: true },
             { name: 'Fluxo', value: q.flowName,   inline: true }
@@ -345,7 +492,7 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
           embeds: [{
             title:       `${e.sonolenta} Tempo esgotado`,
             description: 'A instalação foi cancelada por inatividade. Pode tentar de novo quando quiser~',
-            color:       COLORS.danger
+            color:       COLOR.danger
           }]
         }
       });
@@ -361,16 +508,19 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
           embeds: [{
             title:       `${e.emburrada} Instalação cancelada`,
             description: 'Tudo bem, pode instalar quando quiser~',
-            color:       COLORS.default
+            color:       COLOR.main
           }]
         }
       });
       return;
     }
 
-    // Armazena o valor bruto — a limpeza de menções é feita em _applyCollectedValues
     collected[q.storeKey] = content;
   }
+
+  // Marca a interação com o override de destino, para que o
+  // resumo final (_executeInstall) edite a mensagem raiz de verdade.
+  interaction.__rootOverride = { channelId: rootChannelId, messageId: rootMessageId };
 
   return _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId, e);
 }
@@ -381,10 +531,8 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
 
 async function _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId = null, e) {
   try {
-    // Aplica os valores coletados diretamente nos fluxos (field a field)
     const preparedFlows = _applyCollectedValues(entry.flows || [], questions, collected);
 
-    // Instala usando os fluxos já preparados (sem substituição de templateVars genérica)
     const flowIds = await lib.installPrepared({
       libId:   entry.libId,
       guildId,
@@ -393,7 +541,6 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
       version: entry.version
     });
 
-    // Monta resumo das configurações aplicadas
     const configLines = questions.length
       ? questions.map(q => {
           const raw   = collected[q.storeKey] || '-';
@@ -402,29 +549,29 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
         }).join('\n')
       : '_Nenhuma configuração necessária_';
 
-    const embed = {
-      title:       `${e.festa} ${entry.name} instalado!`,
-      description: `**${flowIds.length}** fluxo(s) criado(s) neste servidor!\n\n**Configurações aplicadas:**\n${configLines}`,
-      color:       COLORS.success,
-      footer:      { text: 'Logic Builder • Ayami Hoshiori' }
-    };
+    const blocks = [
+      cv2Text(
+        `# ${e.festa} ${entry.name} instalado!\n` +
+        `**${flowIds.length}** fluxo(s) criado(s) neste servidor!`
+      ),
+      cv2Divider(),
+      cv2Text(`**Configurações aplicadas:**\n${configLines}`),
+    ];
+    const payload = cv2Payload(blocks, { accentColor: COLOR.success });
 
     if (channelId) {
-      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: { embeds: [embed] } });
+      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: payload });
     }
-    return _edit(interaction, client, { embeds: [embed] });
+    return _edit(interaction, client, payload);
 
   } catch (err) {
-    const embed = {
-      title:       `${e.assustada} Erro na instalação`,
-      description: err.message,
-      color:       COLORS.danger
-    };
+    const blocks = [cv2Text(`# ${e.assustada} Erro na instalação\n${err.message}`)];
+    const payload = cv2Payload(blocks, { accentColor: COLOR.danger });
 
     if (channelId) {
-      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: { embeds: [embed] } });
+      return DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body: payload });
     }
-    return _edit(interaction, client, { embeds: [embed] });
+    return _edit(interaction, client, payload);
   }
 }
 
@@ -549,23 +696,15 @@ module.exports = {
         case 'perfil':    return await _perfil(interaction, client, lib, opts, userId, e);
         case 'destaques': return await _destaques(interaction, client, lib, e);
         default:
-          return _edit(interaction, client, {
-            embeds: [{
-              title:       `${e.assustada} Subcomando desconhecido`,
-              description: 'Não reconheci esse comando. Tente novamente!',
-              color:       COLORS.danger
-            }]
-          });
+          return _edit(interaction, client, cv2Payload([
+            cv2Text(`# ${e.assustada} Subcomando desconhecido\nNão reconheci esse comando. Tente novamente!`)
+          ], { accentColor: COLOR.danger }));
       }
     } catch (err) {
       console.error(`[biblioteca/${sub}]`, err);
-      return _edit(interaction, client, {
-        embeds: [{
-          title:       `${e.assustada} Algo deu errado...`,
-          description: err.message || 'Ocorreu um erro inesperado. Me desculpe!',
-          color:       COLORS.danger
-        }]
-      });
+      return _edit(interaction, client, cv2Payload([
+        cv2Text(`# ${e.assustada} Algo deu errado...\n${err.message || 'Ocorreu um erro inesperado. Me desculpe!'}`)
+      ], { accentColor: COLOR.danger }));
     }
   }
 };
@@ -590,6 +729,30 @@ async function _resolveAuthorName(lib, authorId, fallback = null) {
   return `Usuário ${authorId.slice(-4)}`;
 }
 
+function _opts(interaction) {
+  const sub  = interaction.data.options?.[0];
+  const opts = {};
+  for (const o of sub?.options || []) opts[o.name] = o.value;
+  return opts;
+}
+
+function _stars(avg, count) {
+  if (!count) return '☆☆☆☆☆ _sem avaliações_';
+  const full = Math.round(avg);
+  return '⭐'.repeat(full) + '☆'.repeat(5 - full) + ` ${avg.toFixed(1)}`;
+}
+
+function _triggerLabel(trigger) {
+  if (!trigger) return 'Não configurado';
+  const labels = {
+    'message:message_created':  '💬 Mensagem criada',
+    'member:member_joined':     '👋 Membro entrou',
+    'component:button_clicked': '🖱️ Botão clicado',
+    'time:scheduled_trigger':   '🕐 Agendado'
+  };
+  return labels[`${trigger.category}:${trigger.type}`] || `${trigger.category}/${trigger.type}`;
+}
+
 /* ═══════════════════════════════════════════════════════════
    SUBCOMANDOS
    ═══════════════════════════════════════════════════════════ */
@@ -606,13 +769,12 @@ async function _pesquisar(interaction, client, lib, opts, userId, e) {
   });
 
   if (!results.length) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emduvida} Nenhum resultado encontrado`,
-        description: 'Não encontrei nenhum fluxo com esses filtros.\nTente outros termos ou remova alguns filtros~',
-        color:       COLORS.library
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(
+        `# ${e.emduvida} Nenhum resultado encontrado\n` +
+        `Não encontrei nenhum fluxo com esses filtros.\nTente outros termos ou remova alguns filtros~`
+      )
+    ], { accentColor: COLOR.main }));
   }
 
   return _renderSearchPage(interaction, client, lib, {
@@ -636,7 +798,7 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
   if (filters.query)    filterDesc.push(`🔎 \`${filters.query}\``);
   if (filters.category) filterDesc.push(`${CATEGORY_EMOJI[filters.category] || '📦'} ${filters.category}`);
   if (filters.tag)      filterDesc.push(`🏷️ \`${filters.tag}\``);
-  const filterLine = filterDesc.length ? `**Filtros:** ${filterDesc.join('  •  ')}\n\n` : '';
+  const filterLine = filterDesc.length ? `**Filtros:** ${filterDesc.join('  •  ')}\n` : '';
 
   const sortLabels = {
     installs: '📥 Mais instalados',
@@ -644,7 +806,7 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
     trending: '🔥 Tendência',
     recent:   '🕐 Mais recentes'
   };
-  const sortLine = `**Ordem:** ${sortLabels[filters.sort] || '📥 Mais instalados'}\n`;
+  const sortLine = `**Ordem:** ${sortLabels[filters.sort] || '📥 Mais instalados'}`;
 
   const lines = results.map((entry, i) => {
     const emoji = CATEGORY_EMOJI[entry.category] || '📦';
@@ -652,8 +814,8 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
     const num   = page * 8 + i + 1;
     return (
       `**${num}.** ${emoji} **${entry.name}** \`v${entry.version}\`\n` +
-      `👤 ${entry._resolvedAuthor}  •  📥 ${entry.stats.installs.toLocaleString('pt-BR')} instalações  •  ${stars}\n` +
-      `_${entry.shortDesc || 'Sem descrição'}_`
+      `> 👤 ${entry._resolvedAuthor}  •  📥 ${entry.stats.installs.toLocaleString('pt-BR')} instalações  •  ${stars}\n` +
+      `> _${entry.shortDesc || 'Sem descrição'}_`
     );
   }).join('\n\n');
 
@@ -664,67 +826,51 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
     emoji:       { name: (CATEGORY_EMOJI[entry.category] || '📦').replace(/\uFE0F/g, '') }
   }));
 
-  const components = [];
-
-  const sel = client.interactions.createSelect({
-    user: userId,
-    data: { placeholder: '✨ Selecione para ver detalhes~', options: selectOptions },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      return _renderDetail(i, client, lib, i.data.values[0], userId, e);
-    }
+  const sel = select(client, userId, selectOptions, '✨ Selecione para ver detalhes~', async (i) => {
+    await _deferUpdate(i);
+    return _renderDetail(i, client, lib, i.data.values[0], userId, e);
   });
-  components.push({ type: 1, components: [sel] });
+
+  const blocks = [
+    cv2Text(
+      `# ${e.animada} Biblioteca de Fluxos\n` +
+      (filterLine ? `${filterLine}` : '') +
+      `${sortLine}`
+    ),
+    cv2Divider(),
+    cv2Text(lines),
+    cv2Divider(),
+    row(sel),
+  ];
 
   const navBtns = [];
   if (page > 0) {
-    navBtns.push(client.interactions.createButton({
-      user: userId,
-      data: { label: '◀ Anterior', style: 2 },
-      funcao: async (i) => {
-        await _deferUpdate(i);
-        return _renderSearchPage(i, client, lib, filters, page - 1, userId, e);
-      }
+    navBtns.push(btn(client, userId, '◀ Anterior', 2, async (i) => {
+      await _deferUpdate(i);
+      return _renderSearchPage(i, client, lib, filters, page - 1, userId, e);
     }));
   }
-  navBtns.push(client.interactions.createButton({
-    user: userId,
-    data: { label: `${page + 1} / ${pages}`, style: 2 },
-    funcao: async (i) => { await _deferUpdate(i); }
-  }));
+  navBtns.push(btn(client, userId, `${page + 1} / ${pages}`, 2, async (i) => { await _deferUpdate(i); }, { disabled: true }));
   if (page < pages - 1) {
-    navBtns.push(client.interactions.createButton({
-      user: userId,
-      data: { label: 'Próxima ▶', style: 2 },
-      funcao: async (i) => {
-        await _deferUpdate(i);
-        return _renderSearchPage(i, client, lib, filters, page + 1, userId, e);
-      }
+    navBtns.push(btn(client, userId, 'Próxima ▶', 2, async (i) => {
+      await _deferUpdate(i);
+      return _renderSearchPage(i, client, lib, filters, page + 1, userId, e);
     }));
   }
-  if (navBtns.length) components.push({ type: 1, components: navBtns });
+  if (navBtns.length) blocks.push(row(...navBtns));
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.animada} Biblioteca de Fluxos`,
-      description: `${filterLine}${sortLine}\n${lines}`,
-      color:       COLORS.library,
-      footer:      { text: `${total} resultado${total !== 1 ? 's' : ''} • Página ${page + 1} de ${pages} • Ayami Hoshiori` }
-    }],
-    components
-  });
+  blocks.push(cv2Divider());
+  blocks.push(cv2Text(`-# ${total} resultado${total !== 1 ? 's' : ''} • Página ${page + 1} de ${pages}`));
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
 }
 
 async function _ver(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emduvida} Entrada não encontrada`,
-        description: 'Não encontrei nada com esse ID. Confere se digitou certinho~',
-        color:       COLORS.danger
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID. Confere se digitou certinho~`)
+    ], { accentColor: COLOR.danger }));
   }
   return _renderDetail(interaction, client, lib, opts.id, userId, e, entry);
 }
@@ -741,90 +887,61 @@ async function _renderDetail(interaction, client, lib, libId, userId, e, entry =
   const likeStyle    = userRating?.vote === 'like'    ? 3 : 2;
   const dislikeStyle = userRating?.vote === 'dislike' ? 4 : 2;
 
-  // Calcula quantas perguntas de configuração serão feitas
-  const questions      = _buildInstallQuestions(entry);
-  const configsNeeded  = questions.length;
+  const questions     = _buildInstallQuestions(entry);
+  const configsNeeded = questions.length;
 
-  const btnInstall = client.interactions.createButton({
-    user: userId,
-    data: { label: '📥 Instalar', style: 3 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      return _startInstallWizard(i, client, lib, entry, userId, i.guild_id, e);
-    }
+  const btnInstall = btn(client, userId, '📥 Instalar', 3, async (i) => {
+    await _deferUpdate(i);
+    return _startInstallWizard(i, client, lib, entry, userId, i.guild_id, e);
   });
 
-  const btnLike = client.interactions.createButton({
-    user: userId,
-    data: { label: `👍 ${entry.stats.likes}`, style: likeStyle },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      await lib.vote(libId, userId, 'like');
-      const updated = await lib.getById(libId);
-      return _renderDetail(i, client, lib, libId, userId, e, updated);
-    }
+  const btnLike = btn(client, userId, `👍 ${entry.stats.likes}`, likeStyle, async (i) => {
+    await _deferUpdate(i);
+    await lib.vote(libId, userId, 'like');
+    const updated = await lib.getById(libId);
+    return _renderDetail(i, client, lib, libId, userId, e, updated);
   });
 
-  const btnDislike = client.interactions.createButton({
-    user: userId,
-    data: { label: `👎 ${entry.stats.dislikes}`, style: dislikeStyle },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      await lib.vote(libId, userId, 'dislike');
-      const updated = await lib.getById(libId);
-      return _renderDetail(i, client, lib, libId, userId, e, updated);
-    }
+  const btnDislike = btn(client, userId, `👎 ${entry.stats.dislikes}`, dislikeStyle, async (i) => {
+    await _deferUpdate(i);
+    await lib.vote(libId, userId, 'dislike');
+    const updated = await lib.getById(libId);
+    return _renderDetail(i, client, lib, libId, userId, e, updated);
   });
 
-  const btnRate = client.interactions.createButton({
-    user: userId,
-    data: { label: '⭐ Avaliar', style: 2 },
-    funcao: async (i) => _openRateModal(i, client, lib, libId, userId, e)
+  const btnRate = btn(client, userId, '⭐ Avaliar', 2, async (i) => _openRateModal(i, client, lib, libId, userId, e));
+
+  const btnAuthor = btn(client, userId, '👤 Ver Autor', 2, async (i) => {
+    await _deferUpdate(i);
+    return _renderProfile(i, client, lib, entry.authorId, userId, e);
   });
 
-  const btnAuthor = client.interactions.createButton({
-    user: userId,
-    data: { label: '👤 Ver Autor', style: 2 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      return _renderProfile(i, client, lib, entry.authorId, userId, e);
-    }
-  });
+  const blocks = [
+    cv2Text(`# ${emoji} ${entry.name} \`v${entry.version}\`\n${entry.fullDesc || entry.shortDesc || '_Sem descrição_'}`),
+    cv2Divider(),
+    cv2Text(
+      `> 👤 **Autor:** ${authorName}\n` +
+      `> 📂 **Categoria:** ${entry.category}\n` +
+      `> 📥 **Instalações:** ${entry.stats.installs.toLocaleString('pt-BR')}\n` +
+      `> ⭐ **Avaliação:** ${stars} (${entry.stats.ratingCount} avaliações)\n` +
+      `> 🔗 **Fluxos:** ${entry.flows?.length || 0}\n` +
+      `> 🔧 **Configurações:** ${configsNeeded > 0 ? `${configsNeeded} campo(s)` : '_Nenhuma necessária_'}\n` +
+      `> 🏷️ **Tags:** ${tags}\n` +
+      `> 🆔 **ID:** \`${entry.libId}\``
+    ),
+    cv2Divider(),
+    row(btnInstall, btnLike, btnDislike, btnRate, btnAuthor),
+  ];
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${emoji} ${entry.name} \`v${entry.version}\``,
-      description: entry.fullDesc || entry.shortDesc || '_Sem descrição_',
-      color:       COLORS.library,
-      fields: [
-        { name: '👤 Autor',          value: authorName,                                         inline: true },
-        { name: '📂 Categoria',      value: entry.category,                                     inline: true },
-        { name: '📥 Instalações',    value: entry.stats.installs.toLocaleString('pt-BR'),       inline: true },
-        { name: '⭐ Avaliação',      value: `${stars} (${entry.stats.ratingCount} avaliações)`, inline: true },
-        { name: '🔗 Fluxos',         value: String(entry.flows?.length || 0),                  inline: true },
-        { name: '🔧 Configurações',  value: configsNeeded > 0 ? `${configsNeeded} campo(s)` : '_Nenhuma necessária_', inline: true },
-        { name: '🏷️ Tags',           value: tags,                                               inline: false },
-        { name: '🆔 ID',             value: `\`${entry.libId}\``,                              inline: false }
-      ],
-      footer:    { text: `Publicado por ${authorName} • Ayami Hoshiori` },
-      timestamp: entry.updatedAt
-    }],
-    components: [
-      { type: 1, components: [btnInstall, btnLike, btnDislike, btnRate, btnAuthor] }
-    ]
-  });
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
 }
 
 async function _instalar(interaction, client, lib, opts, userId, guildId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emduvida} Entrada não encontrada`,
-        description: 'Não encontrei nada com esse ID. Confere se digitou certinho~',
-        color:       COLORS.danger
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID. Confere se digitou certinho~`)
+    ], { accentColor: COLOR.danger }));
   }
   return _startInstallWizard(interaction, client, lib, entry, userId, guildId, e);
 }
@@ -834,13 +951,9 @@ async function _publicar(interaction, client, lib, userId, guildId, e) {
   const flows = await FlowModel.find({ guildId }).lean();
 
   if (!flows.length) {
-    return _reply(interaction, {
-      embeds: [{
-        title:       `${e.emburrada} Sem fluxos`,
-        description: 'Crie pelo menos um fluxo antes de publicar na biblioteca~',
-        color:       COLORS.danger
-      }]
-    });
+    return _reply(interaction, cv2Payload([
+      cv2Text(`# ${e.emburrada} Sem fluxos\nCrie pelo menos um fluxo antes de publicar na biblioteca~`)
+    ], { accentColor: COLOR.danger }));
   }
 
   let authorName = 'Anônimo';
@@ -856,11 +969,20 @@ async function _publicar(interaction, client, lib, userId, guildId, e) {
 async function _renderPublishPanel(interaction, client, lib, flows, userId, guildId, authorName, state, isReply = true, e) {
   const selectedNames = state.selectedFlowIds
     .map(id => flows.find(f => f.flowId === id)?.name || id)
-    .map((n, i) => `${i + 1}. **${n}**`)
+    .map((n, i) => `\`${i + 1}.\` ${n}`)
     .join('\n') || '_Nenhum fluxo adicionado ainda_';
 
   const available = flows.filter(f => !state.selectedFlowIds.includes(f.flowId));
-  const selectRows = [];
+  const blocks = [];
+
+  blocks.push(cv2Text(
+    `# ${e.animada} Publicar na Biblioteca\n` +
+    `**Autor:** ${authorName}\n\n` +
+    `Adicione os fluxos que farão parte deste sistema e clique em **Publicar** quando estiver pronto!`
+  ));
+  blocks.push(cv2Divider());
+  blocks.push(cv2Text(`**📦 Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}`));
+  blocks.push(cv2Divider());
 
   if (available.length) {
     const options = available.slice(0, 25).map(f => ({
@@ -869,50 +991,33 @@ async function _renderPublishPanel(interaction, client, lib, flows, userId, guil
       description: `${f.enabled ? '🟢' : '🔴'} ${_triggerLabel(f.trigger)}`.slice(0, 100)
     }));
 
-    const sel = client.interactions.createSelect({
-      user: userId,
-      data: { placeholder: '✨ Adicionar fluxo ao sistema~', options },
-      funcao: async (i) => {
-        await _deferUpdate(i);
-        const newId = i.data.values[0];
-        if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
-        return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
-      }
+    const sel = select(client, userId, options, '✨ Adicionar fluxo ao sistema~', async (i) => {
+      await _deferUpdate(i);
+      const newId = i.data.values[0];
+      if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
+      return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
     });
-    selectRows.push({ type: 1, components: [sel] });
+    blocks.push(row(sel));
   }
 
-  const btnRemove = client.interactions.createButton({
-    user: userId,
-    data: { label: '➖ Remover último', style: 4 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      state.selectedFlowIds.pop();
-      return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
-    }
+  const btnRemove = btn(client, userId, '➖ Remover último', 4, async (i) => {
+    await _deferUpdate(i);
+    state.selectedFlowIds.pop();
+    return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
   });
 
-  const btnPublish = client.interactions.createButton({
-    user: userId,
-    data: { label: '📤 Publicar', style: 3, disabled: state.selectedFlowIds.length === 0 },
-    funcao: async (i) => {
-      if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
-      return _publicarModal(i, client, lib, userId, guildId, authorName, state.selectedFlowIds, e);
-    }
-  });
+  const btnPublish = btn(client, userId, '📤 Publicar', 3, async (i) => {
+    if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
+    return _publicarModal(i, client, lib, userId, guildId, authorName, state.selectedFlowIds, e);
+  }, { disabled: state.selectedFlowIds.length === 0 });
 
-  const embed = {
-    title:       `${e.animada} Publicar na Biblioteca`,
-    description: `**Autor:** ${authorName}\n\n**Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}\n\nAdicione os fluxos que farão parte deste sistema e clique em **Publicar** quando estiver pronto!`,
-    color:       COLORS.library,
-    footer:      { text: 'Você pode adicionar até 25 fluxos por publicação • Ayami Hoshiori' }
-  };
+  blocks.push(row(btnRemove, btnPublish));
+  blocks.push(cv2Divider());
+  blocks.push(cv2Text('-# Você pode adicionar até 25 fluxos por publicação'));
 
-  const actionRow  = { type: 1, components: [btnRemove, btnPublish] };
-  const components = [...selectRows, actionRow];
-
-  if (isReply) return _reply(interaction, { embeds: [embed], components });
-  return _edit(interaction, client, { embeds: [embed], components });
+  const payload = cv2Payload(blocks, { accentColor: COLOR.library });
+  if (isReply) return _reply(interaction, payload);
+  return _edit(interaction, client, payload);
 }
 
 async function _publicarModal(interaction, client, lib, userId, guildId, authorName, flowIds, e) {
@@ -935,13 +1040,9 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
       );
 
       if (!category) {
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.emduvida} Categoria inválida`,
-            description: `As categorias disponíveis são:\n${CATEGORIES.join(', ')}`,
-            color:       COLORS.danger
-          }]
-        });
+        return _followUpEphemeral(modalInteraction, client, cv2Payload([
+          cv2Text(`# ${e.emduvida} Categoria inválida\nAs categorias disponíveis são:\n${CATEGORIES.join(', ')}`)
+        ], { accentColor: COLOR.danger }));
       }
 
       try {
@@ -959,27 +1060,19 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
 
         _announcePublicLibrary(client, entry, authorName, flowIds.length, e).catch(() => {});
 
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.festa} Publicado com sucesso!`,
-            description: (
-              `**${entry.name}** já está disponível na biblioteca!\n\n` +
-              `🆔 ID: \`${entry.libId}\`\n` +
-              `📦 Fluxos: **${flowIds.length}**\n` +
-              `🔧 Campos de configuração: **${_buildInstallQuestions(entry).length}**`
-            ),
-            color:  COLORS.success,
-            footer: { text: 'Logic Builder • Ayami Hoshiori' }
-          }]
-        });
+        return _followUp(modalInteraction, client, cv2Payload([
+          cv2Text(
+            `# ${e.festa} Publicado com sucesso!\n` +
+            `**${entry.name}** já está disponível na biblioteca!\n\n` +
+            `> 🆔 **ID:** \`${entry.libId}\`\n` +
+            `> 📦 **Fluxos:** ${flowIds.length}\n` +
+            `> 🔧 **Campos de configuração:** ${_buildInstallQuestions(entry).length}`
+          )
+        ], { accentColor: COLOR.success }));
       } catch (err) {
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.assustada} Erro ao publicar`,
-            description: err.message,
-            color:       COLORS.danger
-          }]
-        });
+        return _followUpEphemeral(modalInteraction, client, cv2Payload([
+          cv2Text(`# ${e.assustada} Erro ao publicar\n${err.message}`)
+        ], { accentColor: COLOR.danger }));
       }
     }
   });
@@ -993,57 +1086,43 @@ async function _announcePublicLibrary(client, entry, authorName, flowCount, e) {
 
   await DiscordRequest(`/channels/${SUPPORT_ANNOUNCE_CHANNEL}/messages`, {
     method: 'POST',
-    body: {
-      embeds: [{
-        title:       `${emoji} Nova publicação na Biblioteca!`,
-        description: `**${entry.name}** foi publicado por **${authorName}**.\n\n${entry.shortDesc || ''}`,
-        color:       COLORS.library,
-        fields: [
-          { name: '📂 Categoria',      value: entry.category,                                    inline: true  },
-          { name: '🔗 Fluxos',         value: String(flowCount),                                 inline: true  },
-          { name: '🔧 Configurações',  value: String(_buildInstallQuestions(entry).length),      inline: true  },
-          { name: '🏷️ Tags',           value: tags,                                              inline: false },
-          { name: '🆔 ID',             value: `\`${entry.libId}\``,                             inline: false }
-        ],
-        footer:    { text: 'Logic Builder • Ayami Hoshiori' },
-        timestamp: new Date().toISOString()
-      }]
-    }
+    body: cv2Payload([
+      cv2Text(
+        `# ${emoji} Nova publicação na Biblioteca!\n` +
+        `**${entry.name}** foi publicado por **${authorName}**.\n\n${entry.shortDesc || ''}`
+      ),
+      cv2Divider(),
+      cv2Text(
+        `> 📂 **Categoria:** ${entry.category}\n` +
+        `> 🔗 **Fluxos:** ${flowCount}\n` +
+        `> 🔧 **Configurações:** ${_buildInstallQuestions(entry).length}\n` +
+        `> 🏷️ **Tags:** ${tags}\n` +
+        `> 🆔 **ID:** \`${entry.libId}\``
+      ),
+    ], { accentColor: COLOR.library })
   });
 }
 
 async function _atualizar(interaction, client, lib, opts, userId, guildId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _reply(interaction, {
-      embeds: [{
-        title:       `${e.emduvida} Entrada não encontrada`,
-        description: 'Não encontrei nada com esse ID~',
-        color:       COLORS.danger
-      }]
-    });
+    return _reply(interaction, cv2Payload([
+      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID~`)
+    ], { accentColor: COLOR.danger }));
   }
   if (entry.authorId !== userId) {
-    return _reply(interaction, {
-      embeds: [{
-        title:       `${e.brava} Sem permissão`,
-        description: 'Você não é o autor desta entrada.',
-        color:       COLORS.danger
-      }]
-    });
+    return _reply(interaction, cv2Payload([
+      cv2Text(`# ${e.brava} Sem permissão\nVocê não é o autor desta entrada.`)
+    ], { accentColor: COLOR.danger }));
   }
 
   const { FlowModel } = require('../../Mongodb/flow.js');
   const flows = await FlowModel.find({ guildId }).lean();
 
   if (!flows.length) {
-    return _reply(interaction, {
-      embeds: [{
-        title:       `${e.emburrada} Sem fluxos`,
-        description: 'Crie pelo menos um fluxo antes de atualizar~',
-        color:       COLORS.danger
-      }]
-    });
+    return _reply(interaction, cv2Payload([
+      cv2Text(`# ${e.emburrada} Sem fluxos\nCrie pelo menos um fluxo antes de atualizar~`)
+    ], { accentColor: COLOR.danger }));
   }
 
   let authorName = entry.authorName || 'Anônimo';
@@ -1059,11 +1138,20 @@ async function _atualizar(interaction, client, lib, opts, userId, guildId, e) {
 async function _renderUpdatePanel(interaction, client, lib, flows, userId, guildId, authorName, libId, entry, state, isReply = false, e) {
   const selectedNames = state.selectedFlowIds
     .map(id => flows.find(f => f.flowId === id)?.name || id)
-    .map((n, i) => `${i + 1}. **${n}**`)
+    .map((n, i) => `\`${i + 1}.\` ${n}`)
     .join('\n') || '_Nenhum fluxo adicionado ainda_';
 
   const available = flows.filter(f => !state.selectedFlowIds.includes(f.flowId));
-  const selectRows = [];
+  const blocks = [];
+
+  blocks.push(cv2Text(
+    `# ${e.pensando} Atualizar — ${entry.name}\n` +
+    `Versão atual: \`${entry.version}\`\n\n` +
+    `Selecione os fluxos da nova versão e clique em **Confirmar atualização**~`
+  ));
+  blocks.push(cv2Divider());
+  blocks.push(cv2Text(`**📦 Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}`));
+  blocks.push(cv2Divider());
 
   if (available.length) {
     const options = available.slice(0, 25).map(f => ({
@@ -1072,49 +1160,31 @@ async function _renderUpdatePanel(interaction, client, lib, flows, userId, guild
       description: `${f.enabled ? '🟢' : '🔴'} ${_triggerLabel(f.trigger)}`.slice(0, 100)
     }));
 
-    const sel = client.interactions.createSelect({
-      user: userId,
-      data: { placeholder: '✨ Adicionar fluxo à nova versão~', options },
-      funcao: async (i) => {
-        await _deferUpdate(i);
-        const newId = i.data.values[0];
-        if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
-        return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
-      }
+    const sel = select(client, userId, options, '✨ Adicionar fluxo à nova versão~', async (i) => {
+      await _deferUpdate(i);
+      const newId = i.data.values[0];
+      if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
+      return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
     });
-    selectRows.push({ type: 1, components: [sel] });
+    blocks.push(row(sel));
   }
 
-  const btnRemove = client.interactions.createButton({
-    user: userId,
-    data: { label: '➖ Remover último', style: 4 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      state.selectedFlowIds.pop();
-      return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
-    }
+  const btnRemove = btn(client, userId, '➖ Remover último', 4, async (i) => {
+    await _deferUpdate(i);
+    state.selectedFlowIds.pop();
+    return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
   });
 
-  const btnConfirm = client.interactions.createButton({
-    user: userId,
-    data: { label: '🔄 Confirmar atualização', style: 3, disabled: state.selectedFlowIds.length === 0 },
-    funcao: async (i) => {
-      if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
-      return _atualizarModal(i, client, lib, libId, userId, guildId, authorName, state.selectedFlowIds, entry.version, e);
-    }
-  });
+  const btnConfirm = btn(client, userId, '🔄 Confirmar atualização', 3, async (i) => {
+    if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
+    return _atualizarModal(i, client, lib, libId, userId, guildId, authorName, state.selectedFlowIds, entry.version, e);
+  }, { disabled: state.selectedFlowIds.length === 0 });
 
-  const embed = {
-    title:       `${e.pensando} Atualizar — ${entry.name}`,
-    description: `Versão atual: \`${entry.version}\`\n\n**Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}\n\nSelecione os fluxos da nova versão e clique em **Confirmar atualização**~`,
-    color:       COLORS.library
-  };
+  blocks.push(row(btnRemove, btnConfirm));
 
-  const actionRow  = { type: 1, components: [btnRemove, btnConfirm] };
-  const components = [...selectRows, actionRow];
-
-  if (isReply) return _reply(interaction, { embeds: [embed], components });
-  return _edit(interaction, client, { embeds: [embed], components });
+  const payload = cv2Payload(blocks, { accentColor: COLOR.library });
+  if (isReply) return _reply(interaction, payload);
+  return _edit(interaction, client, payload);
 }
 
 async function _atualizarModal(interaction, client, lib, libId, userId, guildId, authorName, flowIds, currentVersion, e) {
@@ -1138,21 +1208,17 @@ async function _atualizarModal(interaction, client, lib, libId, userId, guildId,
           changelog:  fields.changelog?.trim() || ''
         });
 
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.festa} Atualizado para v${updated.version}!`,
-            description: `**${updated.name}** foi atualizado com **${flowIds.length}** fluxo(s).\nOs instaladores serão notificados via DM~`,
-            color:       COLORS.success
-          }]
-        });
+        return _followUp(modalInteraction, client, cv2Payload([
+          cv2Text(
+            `# ${e.festa} Atualizado para v${updated.version}!\n` +
+            `**${updated.name}** foi atualizado com **${flowIds.length}** fluxo(s).\n` +
+            `Os instaladores serão notificados via DM~`
+          )
+        ], { accentColor: COLOR.success }));
       } catch (err) {
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.assustada} Erro ao atualizar`,
-            description: err.message,
-            color:       COLORS.danger
-          }]
-        });
+        return _followUpEphemeral(modalInteraction, client, cv2Payload([
+          cv2Text(`# ${e.assustada} Erro ao atualizar\n${err.message}`)
+        ], { accentColor: COLOR.danger }));
       }
     }
   });
@@ -1163,22 +1229,14 @@ async function _atualizarModal(interaction, client, lib, libId, userId, guildId,
 async function _editar(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _reply(interaction, {
-      embeds: [{
-        title:       `${e.emduvida} Entrada não encontrada`,
-        description: 'Não encontrei nada com esse ID~',
-        color:       COLORS.danger
-      }]
-    });
+    return _reply(interaction, cv2Payload([
+      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID~`)
+    ], { accentColor: COLOR.danger }));
   }
   if (entry.authorId !== userId) {
-    return _reply(interaction, {
-      embeds: [{
-        title:       `${e.brava} Sem permissão`,
-        description: 'Você não é o autor desta entrada.',
-        color:       COLORS.danger
-      }]
-    });
+    return _reply(interaction, cv2Payload([
+      cv2Text(`# ${e.brava} Sem permissão\nVocê não é o autor desta entrada.`)
+    ], { accentColor: COLOR.danger }));
   }
 
   const modal = client.interactions.createModal({
@@ -1210,21 +1268,13 @@ async function _editar(interaction, client, lib, opts, userId, e) {
           tags:      fields.tags ? fields.tags.split(',').map(t => t.trim()).filter(Boolean) : entry.tags
         });
 
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.feliz} Entrada atualizada!`,
-            description: 'As informações foram salvas com sucesso~',
-            color:       COLORS.success
-          }]
-        });
+        return _followUp(modalInteraction, client, cv2Payload([
+          cv2Text(`# ${e.feliz} Entrada atualizada!\nAs informações foram salvas com sucesso~`)
+        ], { accentColor: COLOR.success }));
       } catch (err) {
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.assustada} Erro ao editar`,
-            description: err.message,
-            color:       COLORS.danger
-          }]
-        });
+        return _followUpEphemeral(modalInteraction, client, cv2Payload([
+          cv2Text(`# ${e.assustada} Erro ao editar\n${err.message}`)
+        ], { accentColor: COLOR.danger }));
       }
     }
   });
@@ -1235,89 +1285,59 @@ async function _editar(interaction, client, lib, opts, userId, e) {
 async function _apagar(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.emduvida} Entrada não encontrada`,
-        description: 'Não encontrei nada com esse ID~',
-        color:       COLORS.danger
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID~`)
+    ], { accentColor: COLOR.danger }));
   }
   if (entry.authorId !== userId) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.brava} Sem permissão`,
-        description: 'Você não é o autor desta entrada.',
-        color:       COLORS.danger
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(`# ${e.brava} Sem permissão\nVocê não é o autor desta entrada.`)
+    ], { accentColor: COLOR.danger }));
   }
 
-  const btnConfirm = client.interactions.createButton({
-    user: userId,
-    data: { label: '✅ Confirmar exclusão', style: 4 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      try {
-        await lib.delete(opts.id, userId);
-        return _edit(i, client, {
-          embeds: [{
-            title:       `${e.emburrada} Entrada removida`,
-            description: `**${entry.name}** foi removida da biblioteca.`,
-            color:       COLORS.danger
-          }],
-          components: []
-        });
-      } catch (err) {
-        return _edit(i, client, {
-          embeds: [{
-            title:       `${e.assustada} Erro ao apagar`,
-            description: err.message,
-            color:       COLORS.danger
-          }],
-          components: []
-        });
-      }
+  const btnConfirm = btn(client, userId, '✅ Confirmar exclusão', 4, async (i) => {
+    await _deferUpdate(i);
+    try {
+      await lib.delete(opts.id, userId);
+      return _edit(i, client, cv2Payload([
+        cv2Text(`# ${e.emburrada} Entrada removida\n**${entry.name}** foi removida da biblioteca.`)
+      ], { accentColor: COLOR.danger }));
+    } catch (err) {
+      return _edit(i, client, cv2Payload([
+        cv2Text(`# ${e.assustada} Erro ao apagar\n${err.message}`)
+      ], { accentColor: COLOR.danger }));
     }
   });
 
-  const btnCancel = client.interactions.createButton({
-    user: userId,
-    data: { label: '❌ Cancelar', style: 2 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      return _edit(i, client, {
-        embeds: [{
-          title:       `${e.feliz} Cancelado!`,
-          description: 'A entrada continua na biblioteca~',
-          color:       COLORS.default
-        }],
-        components: []
-      });
-    }
+  const btnCancel = btn(client, userId, '❌ Cancelar', 2, async (i) => {
+    await _deferUpdate(i);
+    return _edit(i, client, cv2Payload([
+      cv2Text(`# ${e.feliz} Cancelado!\nA entrada continua na biblioteca~`)
+    ], { accentColor: COLOR.main }));
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.assustada} Confirmar exclusão`,
-      description: `Tem certeza que quer remover **${entry.name}** da biblioteca?\n\nEssa ação **não pode ser desfeita**.\nInstalações existentes nos servidores não serão afetadas.`,
-      color:       COLORS.danger
-    }],
-    components: [{ type: 1, components: [btnConfirm, btnCancel] }]
-  });
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(
+      `# ${e.assustada} Confirmar exclusão\n` +
+      `Tem certeza que quer remover **${entry.name}** da biblioteca?\n\n` +
+      `**Essa ação não pode ser desfeita.**\n` +
+      `Instalações existentes nos servidores não serão afetadas.`
+    ),
+    cv2Divider(),
+    row(btnConfirm, btnCancel),
+  ], { accentColor: COLOR.danger }));
 }
 
 async function _minhas(interaction, client, lib, userId, e) {
   const entries = await lib.getMyPublications(userId);
 
   if (!entries.length) {
-    return _edit(interaction, client, {
-      embeds: [{
-        title:       `${e.pensando} Minhas Publicações`,
-        description: 'Você ainda não publicou nada na biblioteca.\nUse `/biblioteca publicar` para começar~!',
-        color:       COLORS.library
-      }]
-    });
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(
+        `# ${e.pensando} Minhas Publicações\n` +
+        `Você ainda não publicou nada na biblioteca.\nUse \`/biblioteca publicar\` para começar~!`
+      )
+    ], { accentColor: COLOR.library }));
   }
 
   const lines = entries.map((entry, i) => {
@@ -1325,7 +1345,7 @@ async function _minhas(interaction, client, lib, userId, e) {
     const emoji      = CATEGORY_EMOJI[entry.category] || '📦';
     return (
       `**${i + 1}.** ${statusIcon} ${emoji} **${entry.name}** \`v${entry.version}\`\n` +
-      `📥 ${entry.stats.installs} instalações  •  ${_stars(entry.stats.avgRating, 0)}`
+      `> 📥 ${entry.stats.installs} instalações  •  ${_stars(entry.stats.avgRating, 0)}`
     );
   }).join('\n\n');
 
@@ -1335,25 +1355,19 @@ async function _minhas(interaction, client, lib, userId, e) {
     description: (`v${entry.version} • ${entry.stats.installs} instalações`).slice(0, 100)
   }));
 
-  const sel = client.interactions.createSelect({
-    user: userId,
-    data: { placeholder: '✨ Selecione para gerenciar~', options: selectOptions },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      const selected = entries.find(entry => entry.libId === i.data.values[0]);
-      return _renderManageEntry(i, client, lib, selected, userId, e);
-    }
+  const sel = select(client, userId, selectOptions, '✨ Selecione para gerenciar~', async (i) => {
+    await _deferUpdate(i);
+    const selected = entries.find(entry => entry.libId === i.data.values[0]);
+    return _renderManageEntry(i, client, lib, selected, userId, e);
   });
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.curtida} Minhas Publicações (${entries.length})`,
-      description: lines,
-      color:       COLORS.library,
-      footer:      { text: 'Selecione uma entrada para gerenciá-la • Ayami Hoshiori' }
-    }],
-    components: [{ type: 1, components: [sel] }]
-  });
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(`# ${e.curtida} Minhas Publicações (${entries.length})\n${lines}`),
+    cv2Divider(),
+    row(sel),
+    cv2Divider(),
+    cv2Text('-# Selecione uma entrada para gerenciá-la'),
+  ], { accentColor: COLOR.library }));
 }
 
 async function _renderManageEntry(interaction, client, lib, entry, userId, e) {
@@ -1365,49 +1379,32 @@ async function _renderManageEntry(interaction, client, lib, entry, userId, e) {
         .join('\n')
     : '_Nenhum histórico_';
 
-  const btnEditar = client.interactions.createButton({
-    user: userId,
-    data: { label: '✏️ Editar', style: 2 },
-    funcao: async (i) => _editar(i, client, lib, { id: entry.libId }, userId, e)
+  const btnEditar = btn(client, userId, '✏️ Editar', 2, async (i) => _editar(i, client, lib, { id: entry.libId }, userId, e));
+
+  const btnAtualizar = btn(client, userId, '🔄 Atualizar versão', 1, async (i) => _atualizar(i, client, lib, { id: entry.libId }, userId, i.guild_id, e));
+
+  const btnApagar = btn(client, userId, '🗑️ Apagar', 4, async (i) => {
+    await _deferUpdate(i);
+    return _apagar(i, client, lib, { id: entry.libId }, userId, e);
   });
 
-  const btnAtualizar = client.interactions.createButton({
-    user: userId,
-    data: { label: '🔄 Atualizar versão', style: 1 },
-    funcao: async (i) => _atualizar(i, client, lib, { id: entry.libId }, userId, i.guild_id, e)
+  const btnVoltar = btn(client, userId, '⬅️ Voltar', 2, async (i) => {
+    await _deferUpdate(i);
+    return _minhas(i, client, lib, userId, e);
   });
 
-  const btnApagar = client.interactions.createButton({
-    user: userId,
-    data: { label: '🗑️ Apagar', style: 4 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      return _apagar(i, client, lib, { id: entry.libId }, userId, e);
-    }
-  });
-
-  const btnVoltar = client.interactions.createButton({
-    user: userId,
-    data: { label: '⬅️ Voltar', style: 2 },
-    funcao: async (i) => {
-      await _deferUpdate(i);
-      return _minhas(i, client, lib, userId, e);
-    }
-  });
-
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${CATEGORY_EMOJI[entry.category] || '📦'} ${entry.name} \`v${entry.version}\``,
-      description: entry.shortDesc + changelog,
-      color:       COLORS.library,
-      fields: [
-        { name: '📊 Stats',     value: `📥 ${entry.stats.installs} instalações  •  👍 ${entry.stats.likes}  •  ⭐ ${entry.stats.avgRating}`, inline: false },
-        { name: '📜 Histórico', value: history,                                                                                                inline: false },
-        { name: '🆔 ID',        value: `\`${entry.libId}\``,                                                                                  inline: false }
-      ]
-    }],
-    components: [{ type: 1, components: [btnEditar, btnAtualizar, btnApagar, btnVoltar] }]
-  });
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(`# ${CATEGORY_EMOJI[entry.category] || '📦'} ${entry.name} \`v${entry.version}\`\n${entry.shortDesc}${changelog}`),
+    cv2Divider(),
+    cv2Text(
+      `> 📊 **Stats:** 📥 ${entry.stats.installs} instalações  •  👍 ${entry.stats.likes}  •  ⭐ ${entry.stats.avgRating}\n` +
+      `> 🆔 **ID:** \`${entry.libId}\``
+    ),
+    cv2Divider(),
+    cv2Text(`**📜 Histórico:**\n${history}`),
+    cv2Divider(),
+    row(btnEditar, btnAtualizar, btnApagar, btnVoltar),
+  ], { accentColor: COLOR.library }));
 }
 
 async function _perfil(interaction, client, lib, opts, userId, e) {
@@ -1436,38 +1433,35 @@ async function _renderProfile(interaction, client, lib, targetId, userId, e) {
 
   const isFollowing = (await lib.getFollowers(targetId)).includes(userId);
   const isSelf      = targetId === userId;
-  const components  = [];
+
+  const blocks = [
+    cv2Text(`# ${e.carinho} ${displayName}\n${profile.bio || '_Sem bio_'}`),
+    cv2Divider(),
+    cv2Text(
+      `> 📦 **Publicações:** ${profile.stats.totalFlows}\n` +
+      `> 📥 **Instalações:** ${profile.stats.totalInstalls.toLocaleString('pt-BR')}\n` +
+      `> 👍 **Likes:** ${profile.stats.totalLikes}\n` +
+      `> ⭐ **Avaliação:** ${profile.stats.avgRating.toFixed(1)} ⭐\n` +
+      `> 👥 **Seguidores:** ${profile.followers}`
+    ),
+    cv2Divider(),
+    cv2Text(`**🏆 Top Fluxos:**\n${topEntries}`),
+  ];
 
   if (!isSelf) {
-    const btnFollow = client.interactions.createButton({
-      user: userId,
-      data: { label: isFollowing ? '➖ Deixar de seguir' : '➕ Seguir', style: isFollowing ? 4 : 3 },
-      funcao: async (i) => {
-        await _deferUpdate(i);
-        await lib.toggleFollow(userId, targetId);
-        return _renderProfile(i, client, lib, targetId, userId, e);
-      }
+    const btnFollow = btn(client, userId, isFollowing ? '➖ Deixar de seguir' : '➕ Seguir', isFollowing ? 4 : 3, async (i) => {
+      await _deferUpdate(i);
+      await lib.toggleFollow(userId, targetId);
+      return _renderProfile(i, client, lib, targetId, userId, e);
     });
-    components.push({ type: 1, components: [btnFollow] });
+    blocks.push(cv2Divider());
+    blocks.push(row(btnFollow));
   }
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:       `${e.carinho} ${displayName}`,
-      description: profile.bio || '_Sem bio_',
-      color:       COLORS.library,
-      fields: [
-        { name: '📦 Publicações', value: String(profile.stats.totalFlows),                    inline: true },
-        { name: '📥 Instalações', value: profile.stats.totalInstalls.toLocaleString('pt-BR'), inline: true },
-        { name: '👍 Likes',       value: String(profile.stats.totalLikes),                    inline: true },
-        { name: '⭐ Avaliação',   value: `${profile.stats.avgRating.toFixed(1)} ⭐`,          inline: true },
-        { name: '👥 Seguidores',  value: String(profile.followers),                           inline: true },
-        { name: '🏆 Top Fluxos',  value: topEntries,                                          inline: false }
-      ],
-      footer: { text: `ID: ${targetId} • Ayami Hoshiori` }
-    }],
-    components
-  });
+  blocks.push(cv2Divider());
+  blocks.push(cv2Text(`-# ID: ${targetId}`));
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
 }
 
 async function _destaques(interaction, client, lib, e) {
@@ -1485,20 +1479,17 @@ async function _destaques(interaction, client, lib, e) {
     fmt(trending), fmt(topInstalls), fmt(topRated), fmt(recent)
   ]);
 
-  return _edit(interaction, client, {
-    embeds: [{
-      title:  `${e.festa} Destaques da Semana`,
-      color:  COLORS.library,
-      fields: [
-        { name: '📈 Tendência',        value: fTrending, inline: false },
-        { name: '📥 Mais instalados',  value: fInstalls, inline: false },
-        { name: '⭐ Melhor avaliados', value: fRated,    inline: false },
-        { name: '🕐 Mais recentes',    value: fRecent,   inline: false }
-      ],
-      footer:    { text: 'Logic Builder • Ayami Hoshiori' },
-      timestamp: new Date().toISOString()
-    }]
-  });
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(`# ${e.festa} Destaques da Semana`),
+    cv2Divider(),
+    cv2Text(`**📈 Tendência**\n${fTrending}`),
+    cv2Divider(),
+    cv2Text(`**📥 Mais instalados**\n${fInstalls}`),
+    cv2Divider(),
+    cv2Text(`**⭐ Melhor avaliados**\n${fRated}`),
+    cv2Divider(),
+    cv2Text(`**🕐 Mais recentes**\n${fRecent}`),
+  ], { accentColor: COLOR.library }));
 }
 
 async function _openRateModal(interaction, client, lib, libId, userId, e) {
@@ -1526,88 +1517,21 @@ async function _openRateModal(interaction, client, lib, libId, userId, e) {
       );
 
       if (!rating || rating < 1 || rating > 5) {
-        return _followUp(modalInteraction, client, {
-          embeds: [{
-            title:       `${e.emduvida} Nota inválida`,
-            description: 'Informe um número entre 1 e 5~',
-            color:       COLORS.danger
-          }]
-        });
+        return _followUpEphemeral(modalInteraction, client, cv2Payload([
+          cv2Text(`# ${e.emduvida} Nota inválida\nInforme um número entre 1 e 5~`)
+        ], { accentColor: COLOR.danger }));
       }
 
       const result = await lib.rate(libId, userId, rating);
-      return _followUp(modalInteraction, client, {
-        embeds: [{
-          title:       `${e.corao} Avaliação registrada!`,
-          description: `Você deu **${rating} ⭐** para este fluxo.\nNova média: **${result.avg} ⭐** (${result.count} avaliações)`,
-          color:       COLORS.success
-        }]
-      });
+      return _followUp(modalInteraction, client, cv2Payload([
+        cv2Text(
+          `# ${e.corao} Avaliação registrada!\n` +
+          `Você deu **${rating} ⭐** para este fluxo.\n` +
+          `Nova média: **${result.avg} ⭐** (${result.count} avaliações)`
+        )
+      ], { accentColor: COLOR.success }));
     }
   });
 
   return client.interactions.showModal(interaction, modal);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════════════════ */
-
-function _opts(interaction) {
-  const sub  = interaction.data.options?.[0];
-  const opts = {};
-  for (const o of sub?.options || []) opts[o.name] = o.value;
-  return opts;
-}
-
-function _stars(avg, count) {
-  if (!count) return '☆☆☆☆☆ _sem avaliações_';
-  const full = Math.round(avg);
-  return '⭐'.repeat(full) + '☆'.repeat(5 - full) + ` ${avg.toFixed(1)}`;
-}
-
-function _triggerLabel(trigger) {
-  if (!trigger) return 'Não configurado';
-  const labels = {
-    'message:message_created':  '💬 Mensagem criada',
-    'member:member_joined':     '👋 Membro entrou',
-    'component:button_clicked': '🖱️ Botão clicado',
-    'time:scheduled_trigger':   '🕐 Agendado'
-  };
-  return labels[`${trigger.category}:${trigger.type}`] || `${trigger.category}/${trigger.type}`;
-}
-
-async function _defer(interaction) {
-  return DiscordRequest(
-    `/interactions/${interaction.id}/${interaction.token}/callback`,
-    { method: 'POST', body: { type: 5, data: { flags: 0 } } }
-  );
-}
-
-async function _deferUpdate(interaction) {
-  return DiscordRequest(
-    `/interactions/${interaction.id}/${interaction.token}/callback`,
-    { method: 'POST', body: { type: 6 } }
-  );
-}
-
-async function _reply(interaction, data) {
-  return DiscordRequest(
-    `/interactions/${interaction.id}/${interaction.token}/callback`,
-    { method: 'POST', body: { type: 4, data } }
-  );
-}
-
-async function _edit(interaction, client, data) {
-  return DiscordRequest(
-    `/webhooks/${client.clientId}/${interaction.token}/messages/@original`,
-    { method: 'PATCH', body: data }
-  );
-}
-
-async function _followUp(interaction, client, data) {
-  return DiscordRequest(
-    `/webhooks/${client.clientId}/${interaction.token}`,
-    { method: 'POST', body: data }
-  );
 }
