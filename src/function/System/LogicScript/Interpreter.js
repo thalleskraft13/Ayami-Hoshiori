@@ -183,8 +183,9 @@ function buildMessageBody(content, opts = {}) {
   }
 
   // Componentes
-  const comps = resolveComponents(opts.components ?? opts.component);
-  if (comps.length) body.components = comps;
+  if (opts.components !== undefined || opts.component !== undefined) {
+    body.components = resolveComponents(opts.components ?? opts.component);
+  }
 
   // Flags
   if (opts.ephemeral) body.flags = 64;
