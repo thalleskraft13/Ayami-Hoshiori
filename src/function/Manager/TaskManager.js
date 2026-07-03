@@ -87,6 +87,8 @@ class TaskManager {
         await task.save();
         return;
       }
+      
+      
 
       if (task.repeat && task.repeatDelay) {
         task.executeAt = new Date(Date.now() + task.repeatDelay);
@@ -120,6 +122,14 @@ class TaskManager {
       case 'scheduled_trigger':
         await this.handleScheduledTrigger(task);
         break;
+        case 'giveaway_end': {
+  const { giveawayId } = task.dados;
+  if (this.client.giveawayScheduler) {
+    await this.client.giveawayScheduler._end(giveawayId)
+      .catch(err => console.error('[TaskManager] giveaway_end error:', err));
+  }
+  break;
+}
 
       // Roda todo dia no horário configurado pela guild:
       // varre os aniversariantes do dia e dispara um birthday_notify por membro

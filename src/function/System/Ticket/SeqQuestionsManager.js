@@ -26,25 +26,34 @@ class SeqQuestionsManager {
    * Inicia o formulário sequencial no canal do ticket.
    * Deve ser chamado depois que o canal/thread já foi criado.
    *
-   * @param {{ interaction: object, panel: object, channelId: string, userId: string }} opts
+   * @param {object} opts
+   * @param {object} opts.panel      Painel (ou opção do select) com seqQuestionsConfig
+   * @param {string} opts.channelId
+   * @param {string} opts.userId
+   * @param {object} [opts.messages] Mensagens personalizadas (vindas de
+   *        ticketMensagensConfig, já resolvidas com fallback no chamador):
+   *          { inicioTitulo, inicioDescricao, canceladoMensagem, resumoTitulo }
    * @returns {Promise<object|null>} Mapa de respostas ou null se cancelado/timeout
    */
-  async run({ interaction, panel, channelId, userId }) {
+  async run({ panel, channelId, userId, messages = {} }) {
     const cfg = panel.seqQuestionsConfig;
     if (!cfg?.enabled || !cfg.questions?.length) return null;
 
-    const answers = {};
+    const answers     = {};
+    const timeoutMs   = cfg.timeout || 120_000;
+    const timeoutSec  = Math.floor(timeoutMs / 1000);
 
-    // Mensagem de início
+    // Mensagem de início — personalizável
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body:   {
         embeds: [{
-          title:       '📋 Formulário de Atendimento',
-          description: `Olá <@${userId}>! Por favor, responda as perguntas abaixo.\n\n` +
-                       `Você tem **${Math.floor((cfg.timeout || 120_000) / 1000)} segundos** para cada resposta.\n` +
+          title:       messages.inicioTitulo || '📋 Formulário de Atendimento',
+          description: messages.inicioDescricao ||
+                       `Olá <@${userId}>! Por favor, responda as perguntas abaixo.\n\n` +
+                       `Você tem **${timeoutSec} segundos** para cada resposta.\n` +
                        `Digite \`cancelar\` a qualquer momento para encerrar.`,
-          color: 0x5865F2
+          color: 0x7C8FFF
         }]
       }
     });
@@ -57,15 +66,15 @@ class SeqQuestionsManager {
         question,
         index:   i + 1,
         total:   cfg.questions.length,
-        timeout: cfg.timeout || 120_000
+        timeout: timeoutMs
       });
 
       if (result === null) {
-        // timeout ou cancelamento
+        // timeout ou cancelamento — mensagem personalizável
         await DiscordRequest(`/channels/${channelId}/messages`, {
           method: 'POST',
           body:   {
-            content: `<@${userId}> ⚠️ Formulário encerrado.`,
+            content: `<@${userId}> ${messages.canceladoMensagem || '⚠️ Formulário encerrado.'}`,
             flags:   0
           }
         });
@@ -76,7 +85,7 @@ class SeqQuestionsManager {
     }
 
     // Envia resumo das respostas
-    await this._sendAnswersSummary({ cfg, panel, channelId, userId, answers });
+    await this._sendAnswersSummary({ cfg, panel, channelId, userId, answers, resumoTitulo: messages.resumoTitulo });
 
     return answers;
   }
@@ -135,7 +144,7 @@ class SeqQuestionsManager {
      ENVIO DO RESUMO
      ═══════════════════════════════════════════ */
 
-  async _sendAnswersSummary({ cfg, panel, channelId, userId, answers }) {
+  async _sendAnswersSummary({ cfg, panel, channelId, userId, answers, resumoTitulo }) {
 
     const fields = panel.seqQuestionsConfig.questions.map(q => ({
       name:   q.label,
@@ -144,25 +153,36 @@ class SeqQuestionsManager {
     }));
 
     const embed = {
-      title:  '✅ Respostas Recebidas',
+      title:  resumoTitulo || '✅ Respostas Recebidas',
       color:  0x57F287,
       fields,
       footer: { text: `Respondido por ${userId}` },
       timestamp: new Date().toISOString()
     };
 
-    // envia no ticket
+    // Aviso curto SEMPRE no ticket — mesmo quando o resumo completo
+    // vai pro canal de log, quem abriu o ticket precisa saber que
+    // terminou e a equipe já foi notificada.
+    await DiscordRequest(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body:   {
+        content: `<@${userId}>`,
+        embeds:  [{
+          title:       '✅ Perguntas Respondidas!',
+          description: 'Já anotei tudo! Agora é só esperar a equipe te chamar~ 🌸',
+          color:       0x57F287
+        }]
+      }
+    }).catch(err => console.error('[SeqQuestions] Erro ao enviar aviso de conclusão:', err));
+
+    // Resumo completo das respostas — no ticket OU no canal de log
     if (cfg.sendMode === 0) {
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: 'POST',
-        body:   {
-          content: `<@${userId}>`,
-          embeds:  [embed]
-        }
-      });
+        body:   { embeds: [embed] }
+      }).catch(err => console.error('[SeqQuestions] Erro ao enviar resumo no ticket:', err));
     }
 
-    // envia no canal de log
     if (cfg.sendMode === 1 && cfg.logChannelId) {
       await DiscordRequest(`/channels/${cfg.logChannelId}/messages`, {
         method: 'POST',

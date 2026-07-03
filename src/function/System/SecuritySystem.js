@@ -4,6 +4,7 @@ const { GuildDb } = require("../../Mongodb/guild.js");
 const DiscordRequest = require("../DiscordRequest.js");
 const PremiumManager = require("../Utils/PremiumManager.js");
 const getPerm = require("../Utils/Permission.js");
+const TTLCache = require("../Utils/TTLCache.js");
 
 class SecuritySystem {
 
@@ -11,7 +12,7 @@ class SecuritySystem {
     this.client = client;
     this._joinTracker   = {};
     this._spamTracker   = {};
-    this._botPermCache  = {}; // cache de permissões do bot { key: { perms, expires } }
+    this._botPermCache  = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
   }
 
   /* ================= INTERACTIONS ================= */
@@ -120,19 +121,19 @@ class SecuritySystem {
   // Busca (com cache de 60s) as permissões do bot no servidor ou em um canal específico
   async _getBotPermissions(guildId, channelId = null) {
     const key = channelId ? `${guildId}:${channelId}` : guildId;
-    const now = Date.now();
 
-    const cached = this._botPermCache[key];
-    if (cached && cached.expires > now) return cached.perms;
+    const cached = this._botPermCache.get(key);
+    if (cached) return cached;
 
     try {
       const perms = await getPerm({
         channel: !!channelId,
         id:      channelId || guildId,
         guildId,
-        bot:     true
+        bot:     true,
+        client:  this.client
       });
-      this._botPermCache[key] = { perms, expires: now + 60000 };
+      this._botPermCache.set(key, perms); // TTL padrão de 60s
       return perms;
     } catch (err) {
       console.error("[Security] _getBotPermissions:", err);
@@ -142,9 +143,7 @@ class SecuritySystem {
 
   // Limpa o cache de permissões (útil após criar canais/cargos via backup, por ex.)
   _clearBotPermCache(guildId) {
-    for (const key of Object.keys(this._botPermCache)) {
-      if (key === guildId || key.startsWith(`${guildId}:`)) delete this._botPermCache[key];
-    }
+    this._botPermCache.deleteWhere(key => key === guildId || key.startsWith(`${guildId}:`));
   }
 
   // Retorna true se o bot tem TODAS as permissões necessárias

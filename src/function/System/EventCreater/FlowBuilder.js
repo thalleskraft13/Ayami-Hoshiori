@@ -1067,7 +1067,7 @@ class FlowBuilder {
     if (params.channelId && ['send_message', 'reply_message', 'edit_message'].includes(type)) {
       const rawId = params.channelId.replace(/[<#>]/g, '').trim();
       try {
-        const perms = await getPerm({ channel: true, id: rawId, guildId, bot: true });
+        const perms = await getPerm({ channel: true, id: rawId, guildId, bot: true, client: this.client });
         if (!perms.includes('SEND_MESSAGES') || !perms.includes('VIEW_CHANNEL')) {
           warnings.push(`⚠️ O bot não tem permissão para enviar mensagens no canal <#${rawId}>.`);
         }
@@ -1094,7 +1094,7 @@ class FlowBuilder {
     const requiredPerm = PERM_MAP[`${category}:${type}`];
     if (requiredPerm) {
       try {
-        const perms = await getPerm({ guildId, bot: true });
+        const perms = await getPerm({ guildId, bot: true, client: this.client });
         if (!perms.includes(requiredPerm)) warnings.push(`⚠️ O bot não tem a permissão **${requiredPerm}** no servidor.`);
       } catch {}
     }

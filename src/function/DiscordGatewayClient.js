@@ -13,6 +13,8 @@ const connectMongo         = require('./ConnectMongo.js');
 const InteractionManager   = require('./Manager/InteractionManager.js');
 const NextMessageCollector = require('./Manager/MessageCollectorManager.js');
 const GuildManager = require('./Manager/GuildManager.js');
+const BlacklistManager     = require('./Manager/BlacklistManager.js');
+const CommandLogManager    = require('./Manager/CommandLogManager.js');
 const TicketSystem         = require('./System/Ticket/index.js');
 const UidSystem            = require('./System/UidManager.js');
 const TaskManager          = require('./Manager/TaskManager.js');
@@ -30,6 +32,8 @@ const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
 const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js');
 const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
 const { LanguageManager } = require('./Manager/LanguageManager');
+const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
+const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
 
 
 const EventEmitter = require('events');
@@ -97,6 +101,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.giveaway   = new GiveawaySystem(this);
         this.gScheduler = new GiveawayScheduler(this);
         this.giveaway.messageTracker = new GiveawayMessageTracker();
+        this.logicScriptRunner = new ScriptRunner(this);
         
         this.languageManager = new LanguageManager({
             systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
@@ -111,6 +116,7 @@ class DiscordGatewayClient extends EventEmitter {
 
         
         this.guilds = new GuildManager(this);
+        this.blacklist = new BlacklistManager(this); // seção 3 — carregado após o Mongo conectar (ver _connectMongo)
         this.emoji = require("../public/emojis.js")
 
         this._reconnectAttempts = 0;
@@ -137,6 +143,23 @@ class DiscordGatewayClient extends EventEmitter {
             console.error('[Gateway] Connection error:', err);
             this._scheduleReconnect();
         }
+
+        // Aguarda MongoDB conectar antes de subir a Internal API
+        const waitMongo = async (retries = 20) => {
+            if (this._mongoConnected) return true;
+            if (retries <= 0) return false;
+            await new Promise(r => setTimeout(r, 1500));
+            return waitMongo(retries - 1);
+        };
+
+        waitMongo().then(async (ok) => {
+            if (!ok) {
+                console.warn('[LogicScript] MongoDB nao conectou a tempo. Internal API nao iniciada.');
+                return;
+            }
+            await this.logicScriptRunner.start();
+            startInternalApi(this);
+        });
     }
 
     /**
@@ -355,6 +378,8 @@ class DiscordGatewayClient extends EventEmitter {
             this.guilds.handleDispatch(payload);
             await this.logicEngine.handleGateway(payload);
             
+            await this.logicScriptRunner.handleGateway(payload).catch(() => {});
+            
             if (payload.t === 'MESSAGE_CREATE') return await this._onMessage(payload.d);
 
             if (payload.t === 'READY')             return await this._onReady(payload.d);
@@ -457,6 +482,13 @@ async _onReactionAdd(d) {
 
     async _onReady(d) {
     console.log(`\n----------> SHARD: ${d.shard[0]}`)
+
+    // Seção 5 (correção): marca ANTES de qualquer outra coisa, não depende
+    // de Mongo. `d.guilds` é a lista (parcial/unavailable) de guilds que
+    // esse shard já tinha antes desse READY — GUILD_CREATE pra uma dessas
+    // logo em seguida é resync, não entrada nova.
+    this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
+
     await this._loadCommands();
   //  await this._connectMongo(); // todos conectam
     const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
@@ -474,7 +506,17 @@ async _onReactionAdd(d) {
     }
    
 
-    this.setPresence(d.shard[0],{
+    // Seção 6: se alguém já definiu uma presence customizada via comando,
+    // ela foi persistida no Mongo — usa ela em vez do texto hardcoded, senão
+    // todo restart desfaria a mudança.
+    let customPresence = null;
+    try {
+        const BotConfig = require('../Mongodb/botConfig.js');
+        const cfg = await BotConfig.findOne({ key: 'global' }).lean();
+        if (cfg?.presence?.name) customPresence = cfg.presence;
+    } catch { /* Mongo pode não estar pronto ainda nesse ponto — usa o default */ }
+
+    this.setPresence(d.shard[0], customPresence ?? {
       name: `🌙 Assinatura "Constellation" por R$7,99 | Cluster ${this.CLUSTERS_NAME[process.env.CLUSTER_ID ?? 0]}, Shard: ${d.shard[0]}/4`
     });
     
@@ -490,6 +532,12 @@ async _onReactionAdd(d) {
             this._mongoConnected  = true;
             this._mongoConnecting = false;
             console.log('[Ready] MongoDB connected.');
+
+            // Seção 3: carrega a blacklist pra memória e começa a sincronizar
+            // com os outros clusters (Mongo Change Streams — seção 1.3).
+            this.blacklist.start().catch(err =>
+                console.error('[Blacklist] Falha ao iniciar:', err)
+            );
         } catch (err) {
             this._mongoConnecting = false;
             console.error('[Ready] MongoDB connection failed:', err);
@@ -508,6 +556,13 @@ async _onReactionAdd(d) {
 
 
     async _onInteraction(interaction) {
+        // Seção 3: blacklist global — checagem síncrona (cache em memória),
+        // ANTES de qualquer processamento (XP, comando, componente, modal).
+        const userId = interaction.member?.user?.id ?? interaction.user?.id;
+        if (userId && this.blacklist?.isBanned(userId)) {
+            return this._replyBlacklisted(interaction, userId);
+        }
+
         // Always process XP first, regardless of interaction type
         await this._processAdventureRankXp(interaction);
 
@@ -521,14 +576,85 @@ async _onReactionAdd(d) {
         }
     }
 
+    async _replyBlacklisted(interaction, userId) {
+        const entry = this.blacklist.getEntry(userId);
+        try {
+            await DiscordRequest(
+                `/interactions/${interaction.id}/${interaction.token}/callback`,
+                {
+                    method: 'POST',
+                    body: {
+                        type: 4,
+                        data: {
+                            flags: 64, // efêmera — só o usuário banido vê
+                            embeds: [{
+                                title: '⛔ Você está banido da Ayami',
+                                description: 'Você não pode usar a Ayami em nenhum servidor enquanto estiver na blacklist global.',
+                                fields: [
+                                    { name: 'Staff responsável', value: entry?.staffId ? `<@${entry.staffId}>` : 'Desconhecido', inline: true },
+                                    { name: 'Quando', value: entry?.appliedAt ? `<t:${Math.floor(entry.appliedAt / 1000)}:R>` : 'Desconhecido', inline: true },
+                                    { name: 'Motivo', value: entry?.motivo ?? 'Não especificado', inline: false },
+                                ],
+                                color: 0xED4245,
+                            }],
+                        },
+                    },
+                }
+            );
+        } catch (err) {
+            console.error('[Blacklist] Falha ao responder usuário banido:', err);
+        }
+    }
+
     async _executeCommand(interaction) {
         const command = this.commands.get(interaction.data.name);
         if (!command) return;
+
+        // Seção 4: log de comandos — fire-and-forget, nunca atrasa a resposta real.
+        this._logCommand(interaction);
 
         try {
             await command.execute(interaction, this);
         } catch (err) {
             console.error(`[Command] Error executing /${interaction.data.name}:`, err);
+        }
+    }
+
+    /**
+     * Seção 4 — log de TODOS os comandos (⚠️ ASSUMIDO no prompt original: não
+     * só staff/moderação, já que um canal específico foi definido só pra
+     * isso). Webhook em tempo real pro canal de log + persistência no banco
+     * com TTL, pra consulta histórica depois. Sempre fire-and-forget.
+     */
+    _logCommand(interaction) {
+        try {
+            const LOG_CHANNEL_ID = '1522177449440448613';
+
+            const topLevelOption = interaction.data.options?.[0];
+            const isSubcommand   = topLevelOption?.type === 1 || topLevelOption?.type === 2;
+            const subcommandName = isSubcommand ? topLevelOption.name : null;
+            const optionsSource  = isSubcommand ? (topLevelOption.options ?? []) : (interaction.data.options ?? []);
+
+            const optionsMap = {};
+            for (const opt of optionsSource) {
+                if (opt?.name !== undefined) optionsMap[opt.name] = opt.value;
+            }
+
+            const guildId   = interaction.guild_id ?? null;
+            const guildName = guildId ? (this.guilds.get(guildId)?.name ?? null) : null;
+            const user      = interaction.member?.user ?? interaction.user ?? {};
+
+            CommandLogManager.log(this, {
+                commandName:    interaction.data.name,
+                subcommandName,
+                options:        optionsMap,
+                guildId,
+                guildName,
+                userId:         user.id,
+                username:       user.username ?? null,
+            });
+        } catch (err) {
+            console.error('[CommandLog] Falha ao preparar log de comando:', err);
         }
     }
 
@@ -748,12 +874,22 @@ async getClusterInfo() {
         }))
     );
 
+    // Seção 7: lista de guilds deste cluster, lida direto do cache do
+    // GuildManager (tempo real via gateway, sem gastar chamada à API do
+    // Discord). Payload leve — só id/name/memberCount, não o objeto inteiro.
+    const guilds = Array.from(this.guilds.values()).map(g => ({
+        id: g.id,
+        name: g.name,
+        memberCount: g.memberCount,
+    }));
+
     return {
         clusterId: cluster,
         shards:    shardInfos,
         totalShards: parseInt(process.env.TOTAL_SHARDS ?? '1'),
         uptime:    process.uptime(),
         memory:    process.memoryUsage().heapUsed,
+        guilds,
     };
 }
 
@@ -771,6 +907,41 @@ requestAllStats() {
         parentPort.postMessage({ type: 'GET_ALL_STATS', requestId });
     });
 }
+
+/**
+ * Seção 7 — lista completa e correta de guilds do bot, agregada entre
+ * TODOS os clusters (não paginada/silenciosamente truncada como o antigo
+ * `DiscordRequest("/users/@me/guilds")`, e sem gastar chamada à API do
+ * Discord — cada cluster devolve o próprio cache do GuildManager).
+ */
+async getAllGuilds() {
+    const allStats = await this.requestAllStats();
+    const seen = new Map();
+    for (const cluster of allStats) {
+        for (const g of cluster.guilds ?? []) {
+            seen.set(g.id, g); // dedupe por id, por segurança
+        }
+    }
+    return Array.from(seen.values());
+}
+
+/**
+ * Seção 6 — define a presence em TODOS os clusters (não só o atual) e
+ * persiste no banco, pra sobreviver a restarts (senão o valor hardcoded
+ * do handler de READY sempre desfaria a mudança). Pede pro ClusterManager
+ * (thread principal) fazer o broadcast, já que este worker só fala com os
+ * próprios shards.
+ */
+async setPresenceAllClusters(opts) {
+    const BotConfig = require('../Mongodb/botConfig.js');
+    await BotConfig.findOneAndUpdate(
+        { key: 'global' },
+        { key: 'global', presence: opts },
+        { upsert: true }
+    );
+    parentPort.postMessage({ type: 'REQUEST_SET_PRESENCE', opts });
+}
+
 }
 
 module.exports = DiscordGatewayClient;

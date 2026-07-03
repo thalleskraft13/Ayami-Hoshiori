@@ -30,21 +30,27 @@ class TranscriptManager {
    * Deve ser chamado ANTES de deletar o canal.
    * Não bloqueia o fluxo de fechamento (retorna Promise separada).
    *
-   * @param {{ interaction: object, panel: object, closedBy: string }} opts
+   * @param {object} opts
+   * @param {object} opts.interaction
+   * @param {object} opts.panel
+   * @param {string} opts.closedBy
+   * @param {object} [opts.messages] Mensagens personalizadas:
+   *        { canalTitulo, dmTitulo, dmDescricao } — fallback para o
+   *        texto padrão da Ayami quando ausentes.
    * @returns {Promise<void>}
    */
-  async generate({ interaction, panel, closedBy }) {
+  async generate({ interaction, panel, closedBy, messages = {} }) {
     const cfg = panel.transcriptConfig;
     if (!cfg?.enabled || !cfg.channelId) return;
 
     try {
       const channelId = interaction.channel_id;
-      const messages  = await this._fetchAllMessages(channelId);
+      const msgs      = await this._fetchAllMessages(channelId);
       const channel   = await DiscordRequest(`/channels/${channelId}`);
 
       const content = cfg.format === 'html'
-        ? this._buildHtml(messages, channel, closedBy)
-        : this._buildTxt(messages, channel, closedBy);
+        ? this._buildHtml(msgs, channel, closedBy)
+        : this._buildTxt(msgs, channel, closedBy);
 
       const filename    = `transcript-${channel.name || channelId}-${Date.now()}.${cfg.format}`;
       const contentType = cfg.format === 'html' ? 'text/html' : 'text/plain';
@@ -56,9 +62,9 @@ class TranscriptManager {
         method: 'POST',
         body: {
           embeds: [{
-            title:       '📄 Transcript',
-            description: `Canal: **${channel.name || channelId}**\nFechado por: <@${closedBy}>\nMensagens: **${messages.length}**`,
-            color:       0x5865F2,
+            title:       messages.canalTitulo || '📄 Transcript',
+            description: `Canal: **${channel.name || channelId}**\nFechado por: <@${closedBy}>\nMensagens: **${msgs.length}**`,
+            color:       0x7C8FFF,
             timestamp:   new Date().toISOString()
           }]
         },
@@ -67,9 +73,9 @@ class TranscriptManager {
 
       // Envia DM para o usuário que abriu o ticket (se configurado)
       if (cfg.sendToUser) {
-        const openerMention = this._findTicketOpener(messages);
+        const openerMention = this._findTicketOpener(msgs);
         if (openerMention) {
-          await this._sendDmTranscript(openerMention, filename, fileBuffer, contentType, channel.name).catch(() => {});
+          await this._sendDmTranscript(openerMention, filename, fileBuffer, contentType, channel.name, messages).catch(() => {});
         }
       }
 
@@ -269,7 +275,7 @@ ${rows}
      DM AO USUÁRIO
      ═══════════════════════════════════════════ */
 
-  async _sendDmTranscript(userId, filename, buffer, contentType, channelName) {
+  async _sendDmTranscript(userId, filename, buffer, contentType, channelName, messages = {}) {
     // Abre DM channel
     const dm = await DiscordRequest('/users/@me/channels', {
       method: 'POST',
@@ -280,9 +286,9 @@ ${rows}
       method: 'POST',
       body: {
         embeds: [{
-          title:       '📄 Seu Transcript',
-          description: `Seu ticket **#${channelName || 'ticket'}** foi fechado.\nSegue o transcript em anexo.`,
-          color:       0x5865F2
+          title:       messages.dmTitulo || '📄 Seu Transcript',
+          description: messages.dmDescricao || `Seu ticket **#${channelName || 'ticket'}** foi fechado.\nSegue o transcript em anexo.`,
+          color:       0x7C8FFF
         }]
       },
       files: [{ name: filename, data: buffer, contentType }]

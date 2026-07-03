@@ -390,7 +390,8 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
 
     const perms = await getPerm({
       id:      ctx.discord.userId,
-      guildId: ctx.discord.guildId
+      guildId: ctx.discord.guildId,
+      client:  this.client
     }).catch(() => []);
 
     switch (type) {

@@ -8,10 +8,9 @@ const UserGlobalDb   = require('../../Mongodb/userglobal.js');
 const sendDm         = require('../Utils/sendDm.js');
 const MessageEmbed   = require('../Messages/EmbedBuild.js');
 const DiscordRequest = require('../DiscordRequest.js');
+const { STAFF_IDS }  = require('../Utils/StaffIds.js');
 
 
-
-const STAFF_IDS = new Set(['1438170698580361287']);
 
 const MAX_ADVENTURE_LEVEL  = 60;
 const XP_PER_MESSAGE       = 5;
@@ -19,6 +18,9 @@ const ROLLS_PER_LEVEL      = 5;
 const PRIMOGEMAS_PER_ROLL  = 160;
 const EVAL_OUTPUT_LIMIT    = 1900;
 const COLLECTOR_DEFAULT_MS = 60_000;
+
+const STATUS_MAP = { online: 'online', ausente: 'idle', ocupado: 'dnd', invisivel: 'invisible' };
+const TYPE_MAP    = { jogando: 0, transmitindo: 1, ouvindo: 2, assistindo: 3, competindo: 5 };
 
 
 
@@ -332,7 +334,130 @@ Eu estarei observando.`
             ['guildaddpremium',   this._cmdGuildAddPremium.bind(this)],
             ['guildremovepremium',this._cmdGuildRemovePremium.bind(this)],
             ['eval',              this._cmdEval.bind(this)],
+            ['status',            this._cmdStatus.bind(this)],
+            ['blacklist',         this._cmdBlacklist.bind(this)],
         ]);
+    }
+
+
+    /**
+     * !status [tipo] [presenca] <texto>
+     * tipo/presenca são opcionais e podem vir em qualquer ordem —
+     * o handler reconhece as palavras-chave e trata o resto como texto.
+     * Ex: !status jogando ausente Genshin Impact
+     *     !status Só o texto mesmo
+     */
+    async _cmdStatus(message, args) {
+        if (!args.length) {
+            return this._send(
+                message.channel_id,
+                '❌ Uso: `!status [tipo] [presenca] <texto>`\n' +
+                `Tipos: ${Object.keys(TYPE_MAP).join(', ')}\n` +
+                `Presenças: ${Object.keys(STATUS_MAP).join(', ')}`
+            );
+        }
+
+        let tipo = null;
+        let presenca = null;
+        const textoParts = [];
+
+        for (const arg of args) {
+            const lower = arg.toLowerCase();
+
+            if (!tipo && TYPE_MAP[lower] !== undefined) {
+                tipo = lower;
+                continue;
+            }
+            if (!presenca && STATUS_MAP[lower] !== undefined) {
+                presenca = lower;
+                continue;
+            }
+            textoParts.push(arg);
+        }
+
+        const texto = textoParts.join(' ');
+        if (!texto) {
+            return this._send(message.channel_id, '❌ Você precisa informar o texto do status.');
+        }
+
+        await this.client.setPresenceAllClusters({
+            name:   texto,
+            type:   TYPE_MAP[tipo] ?? 0,
+            status: STATUS_MAP[presenca] ?? 'online',
+        });
+
+        return this._send(
+            message.channel_id,
+            `✅ Presence atualizada em todos os clusters: **${texto}**`
+        );
+    }
+
+
+    /**
+     * !blacklist banir <id|@usuario> [motivo]
+     * !blacklist desbanir <id|@usuario>
+     * !blacklist consultar <id|@usuario>
+     */
+    async _cmdBlacklist(message, args) {
+        const [rawSub, rawTarget, ...rest] = args;
+        const sub    = rawSub?.toLowerCase();
+        const motivo = rest.join(' ');
+
+        if (!sub || !['banir', 'desbanir', 'consultar'].includes(sub)) {
+            return this._send(
+                message.channel_id,
+                '❌ Uso: `!blacklist <banir|desbanir|consultar> [ID/@usuário] [motivo]`'
+            );
+        }
+
+        if (!this.client.blacklist) {
+            return this._send(
+                message.channel_id,
+                '⚠️ O sistema de blacklist ainda não terminou de carregar. Tenta de novo em alguns segundos.'
+            );
+        }
+
+        const target = this._extractUserId(rawTarget);
+        if (!target) {
+            return this._send(message.channel_id, '❌ Você precisa informar um ID ou menção de usuário válido.');
+        }
+
+        switch (sub) {
+            case 'banir': {
+                await this.client.blacklist.ban(target, message.author.id, motivo || 'Não especificado');
+                return this._send(
+                    message.channel_id,
+                    `🔨 <@${target}> foi adicionado à blacklist da Ayami.\n` +
+                    `Staff: <@${message.author.id}>\n` +
+                    `Motivo: ${motivo || 'Não especificado'}`
+                );
+            }
+
+            case 'desbanir': {
+                const existed = this.client.blacklist.isBanned(target);
+                await this.client.blacklist.unban(target);
+                return this._send(
+                    message.channel_id,
+                    existed
+                        ? `✅ <@${target}> foi removido da blacklist global.`
+                        : `ℹ️ <@${target}> não estava banido.`
+                );
+            }
+
+            case 'consultar': {
+                const entry = this.client.blacklist.getEntry(target);
+                if (!entry) {
+                    return this._send(message.channel_id, `ℹ️ <@${target}> não está na blacklist global.`);
+                }
+                return this._send(
+                    message.channel_id,
+                    `🔨 <@${target}> está banido globalmente.\n` +
+                    `Staff que aplicou: <@${entry.staffId}>\n` +
+                    `Quando: <t:${Math.floor(entry.appliedAt / 1000)}:R>\n` +
+                    `Motivo: ${entry.motivo}`
+                );
+            }
+        }
     }
 
 
@@ -448,6 +573,22 @@ Eu estarei observando.`
 
     _isStaff(userId) {
         return STAFF_IDS.has(userId);
+    }
+
+
+    /**
+     * Aceita tanto uma menção (<@id> / <@!id>) quanto um ID cru.
+     * Retorna null se não conseguir extrair um ID válido.
+     */
+    _extractUserId(raw) {
+        if (!raw) return null;
+
+        const mentionMatch = raw.match(/^<@!?(\d+)>$/);
+        if (mentionMatch) return mentionMatch[1];
+
+        if (/^\d{15,25}$/.test(raw)) return raw;
+
+        return null;
     }
 
     

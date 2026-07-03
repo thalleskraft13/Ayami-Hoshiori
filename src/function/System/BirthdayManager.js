@@ -336,7 +336,7 @@ class BirthdayManager {
       return this.followUpEphemeral(interaction, { content: "❌ Canal inválido." });
     }
 
-    const perms    = await getPerm({ guildId: interaction.guild_id, channel: true, id, bot: true });
+    const perms    = await getPerm({ guildId: interaction.guild_id, channel: true, id, bot: true, client: this.client });
     const required = ["VIEW_CHANNEL", "SEND_MESSAGES", "EMBED_LINKS"];
     const missing  = required.filter(p => !perms.includes(p));
 
@@ -511,7 +511,7 @@ class BirthdayManager {
       return this.followUpEphemeral(interaction, { content: "❌ Configure um canal primeiro." });
     }
 
-    const perms    = await getPerm({ guildId: interaction.guild_id, channel: true, id: cfg.channel, bot: true });
+    const perms    = await getPerm({ guildId: interaction.guild_id, channel: true, id: cfg.channel, bot: true, client: this.client });
     const required = ["VIEW_CHANNEL", "SEND_MESSAGES", "MANAGE_WEBHOOKS"];
     const missing  = required.filter(p => !perms.includes(p));
 

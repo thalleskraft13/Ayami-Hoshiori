@@ -18,7 +18,8 @@ module.exports = {
 
     const perms = await getPerm({
       id:      interaction.member.user.id,
-      guildId: interaction.guild_id
+      guildId: interaction.guild_id,
+      client
     });
 
     if (!perms || !perms.includes("MANAGE_GUILD")) {

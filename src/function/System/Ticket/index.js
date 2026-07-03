@@ -1,1684 +1,1840 @@
 'use strict';
 
-/**
- * TicketSystem — versão expandida
- *
- * Mantém 100% da lógica existente.
- * Adiciona:
- *   1. Cargos Automáticos  (AutoRoleManager)
- *   2. Transcript          (TranscriptManager)
- *   3. Perguntas Sequenciais (SeqQuestionsManager)
- *   4. Select Menu Hub     (painel via select menu)
- *   5. Melhorias estruturais (sem quebrar nada)
- */
-
-const {GuildDb}        = require('../../../Mongodb/guild.js');
-const DiscordRequest = require('../../DiscordRequest.js');
-const PremiumManager = require('../../Utils/PremiumManager.js');
-const getPerm        = require('../../Utils/GetPerm.js');
-
-const AutoRoleManager    = require('./AutoRoleManager.js');
-const TranscriptManager  = require('./TranscriptManager.js');
+const DiscordRequest      = require('../../DiscordRequest.js');
+const { GuildDb: GuildModel } = require('../../../Mongodb/guild.js');
+const AutoRoleManager     = require('./AutoRoleManager.js');
 const SeqQuestionsManager = require('./SeqQuestionsManager.js');
+const TranscriptManager   = require('./TranscriptManager.js');
+const EmbedBuilderUI      = require('./EmbedBuilderUI.js');
+const { randomUUID }      = require('crypto');
+
+/* ─────────────────────────────────────────────
+   CORES DA AYAMI (mesma paleta do Logic Builder)
+   ───────────────────────────────────────────── */
+const COLOR = {
+  main:    0x7C8FFF,
+  gold:    0xFFD966,
+  dark:    0x243B7A,
+  pink:    0xFFB6C8,
+  danger:  0xED4245,
+  success: 0x57F287,
+};
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS COMPONENTS V2
+   (mesmo padrão usado em todo o resto do bot)
+   ═══════════════════════════════════════════════════════════ */
+
+function cv2Text(content) {
+  return { type: 10, content };
+}
+
+function cv2Divider(spacing = 1) {
+  return { type: 14, divider: true, spacing };
+}
+
+function cv2Section(content, accessory) {
+  return { type: 9, accessory, components: [cv2Text(content)] };
+}
+
+function cv2Container(blocks, opts = {}) {
+  return {
+    type:         17,
+    accent_color: opts.accentColor ?? COLOR.main,
+    spoiler:      opts.spoiler ?? false,
+    components:   blocks
+  };
+}
+
+function cv2Flags(ephemeral = false) {
+  return ephemeral ? 32768 | 64 : 32768;
+}
+
+function cv2Payload(blocks, opts = {}) {
+  return {
+    flags:      cv2Flags(opts.ephemeral ?? false),
+    components: [cv2Container(blocks, opts)]
+  };
+}
+
+function row(...components) {
+  return { type: 1, components };
+}
+
+/**
+ * Resolve uma mensagem customizável do painel, com fallback para o
+ * texto padrão (Ayami) caso o usuário não tenha personalizado.
+ * Substitui {user}, {id} e {count} quando fornecidos no contexto.
+ */
+function resolveMsg(panel, key, fallback, ctx = {}) {
+  let text = panel.mensagensConfig?.[key] || fallback;
+  if (ctx.userId)  text = text.replaceAll('{user}', `<@${ctx.userId}>`).replaceAll('{id}', ctx.userId);
+  if (ctx.count != null) text = text.replaceAll('{count}', String(ctx.count));
+  if (ctx.timeout != null) text = text.replaceAll('{timeout}', String(ctx.timeout));
+  return text;
+}
 
 class TicketSystem {
 
   constructor(client) {
     this.client = client;
-
-    // Sub-managers (injetam client para acesso ao NextMessageCollector etc.)
-    this.autoRole    = new AutoRoleManager(client);
-    this.transcript  = new TranscriptManager(client);
-    this.seqQuestions = new SeqQuestionsManager(client);
+    this.autoRoleManager = new AutoRoleManager(client);
   }
 
-  /* ═══════════════════════════════════════════
-     INTERACTIONS — sem alteração
-     ═══════════════════════════════════════════ */
+  _e(name) {
+    return this.client?.emoji?.[name] ?? '';
+  }
 
+  /* ═══════════════════════════════════════
+     HELPERS — DISCORD
+  ═══════════════════════════════════════ */
+
+  /**
+   * Responde diretamente à interação (type 4).
+   * Delega para o InteractionManager do framework, que mantém o
+   * Map `_states` sincronizado (replied/deferred) — bater direto no
+   * Discord por fora disso causava dessincronia: em caso de erro
+   * subsequente, `_replyError` tentava reconhecer a interação de
+   * novo (achando que ainda não tinha sido respondida) e batia em
+   * "Unknown interaction" / "Unknown Webhook" (404).
+   */
   async reply(interaction, data) {
-    return DiscordRequest(
-      `/interactions/${interaction.id}/${interaction.token}/callback`,
-      { method: 'POST', body: { type: 4, data } }
-    );
+    return this.client.interactions._callback(interaction, { type: 4, data });
   }
 
   async deferUpdate(interaction) {
-    return DiscordRequest(
-      `/interactions/${interaction.id}/${interaction.token}/callback`,
-      { method: 'POST', body: { type: 6 } }
-    );
+    return this.client.interactions.defer(interaction);
   }
 
+  /**
+   * Edita a "mensagem original" do painel. Normalmente relativo a
+   * @original do token da interação atual — mas se a interação foi
+   * marcada com `__rootOverride` (acontece depois do embed builder,
+   * que roda num followUp com token próprio), edita a mensagem raiz
+   * real via REST puro por channelId+messageId. Mesmo padrão do
+   * Logic Builder.
+   */
   async editOriginal(interaction, data) {
+    if (interaction.__rootOverride) {
+      const { channelId, messageId } = interaction.__rootOverride;
+      return DiscordRequest(
+        `/channels/${channelId}/messages/${messageId}`,
+        { method: 'PATCH', body: data }
+      );
+    }
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
       { method: 'PATCH', body: data }
     );
   }
 
-  async followUp(interaction, data) {
+  async followUpEphemeral(interaction, data) {
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}`,
-      { method: 'POST', body: data }
+      { method: 'POST', body: { ...data, flags: (data.flags ?? 32768) | 64 } }
     );
   }
 
-  async followUpEphemeral(interaction, data) {
-    return this.followUp(interaction, { ...data, flags: 64 });
+  btn(user, label, style, func, opts = {}) {
+    return this.client.interactions.createButton({ user, data: { label, style, disabled: opts.disabled }, funcao: func });
   }
-  
-  async deferReply(interaction, ephemeral = false) {
-  return DiscordRequest(
-    `/interactions/${interaction.id}/${interaction.token}/callback`,
-    {
-      method: 'POST',
-      body: {
-        type: 5,
-        data: ephemeral ? { flags: 64 } : {}
-      }
+
+  select(user, options, placeholder, func, opts = {}) {
+    return this.client.interactions.createSelect({ user, data: { placeholder, options, min_values: opts.minValues, max_values: opts.maxValues }, funcao: func });
+  }
+
+  async _ask(interaction, question, opts = {}) {
+    await this.followUpEphemeral(interaction, cv2Payload([
+      cv2Text(question),
+      cv2Divider(),
+      cv2Text('-# Digite "cancelar" para cancelar. Tempo: 2 minutos.'),
+    ], { accentColor: COLOR.main, ephemeral: true }));
+
+    try {
+      const msg = await this.client.NextMessageCollector.wait({
+        channelId: interaction.channel_id,
+        userId:    interaction.member?.user?.id || interaction.user?.id,
+        timeout:   120_000,
+      });
+      if (msg.content?.toLowerCase() === 'cancelar') return null;
+      return msg.content;
+    } catch {
+      return null;
     }
-  );
-}
-
-  /* ═══════════════════════════════════════════
-     DATABASE — sem alteração
-     ═══════════════════════════════════════════ */
-
-  async getGuild(guildId) {
-    let g = await GuildDb.findOne({ guildId });
-    if (!g) g = await GuildDb.create({ guildId });
-    return g;
   }
 
-  async save(guild) {
-    await guild.save();
+  async _getGuildDoc(guildId) {
+    return GuildModel.findOne({ guildId });
   }
 
-  getPanel(guild, id) {
-    return guild.ticket.find(t => t.panelId === id);
+  _findPanel(guildDoc, panelId) {
+    return guildDoc.ticket?.find(t => t.panelId === panelId);
   }
 
-  extractId(text) {
-    return text?.match(/\d{17,19}/)?.[0];
+  _uid() {
+    return randomUUID().replace(/-/g, '').slice(0, 16);
   }
 
-  async isPremium(guildId) {
-    const p = await PremiumManager.getGuildPremium(guildId);
-    return p.status;
+  /* ═══════════════════════════════════════
+     ABERTURA / LISTA DE PAINÉIS
+  ═══════════════════════════════════════ */
+
+  async open(interaction) {
+    const user    = interaction.member?.user?.id || interaction.user?.id;
+    const guildId = interaction.guild_id;
+    const doc     = await this._getGuildDoc(guildId);
+    const panels  = doc?.ticket || [];
+
+    return this.editOriginal(interaction, this._homePayload(user, panels));
   }
 
-  /* ═══════════════════════════════════════════
-     UI HELPERS — sem alteração
-     ═══════════════════════════════════════════ */
-
-  btn(user, label, style, func) {
-    return this.client.interactions.createButton({
-      user,
-      data: { label, style },
-      funcao: func
-    });
-  }
-
-  select(user, options, placeholder, func) {
-    return this.client.interactions.createSelect({
-      user,
-      data: { placeholder, options },
-      funcao: func
-    });
-  }
-
-  row(...c) {
-    return { type: 1, components: c };
-  }
-
-  /* ═══════════════════════════════════════════
-     EMBEDS — expandido com novas configs
-     ═══════════════════════════════════════════ */
-
-  buildEmbeds(panel) {
-    const tipoMap = {
-      0: 'Canal de Texto',
-      1: 'Thread Pública (Premium)',
-      2: 'Thread Privada (Premium)'
-    };
-
-    const painelTipoMap = {
-      0: 'Botão',
-      1: 'Select Menu Hub'
-    };
-
-    const config = {
-      title: '⚙️ Configuração do Ticket',
-      description:
-        `📌 ID: ${panel.panelId}\n` +
-        `📂 Categoria: ${panel.categoriaId ? `<#${panel.categoriaId}>` : 'Não definida'}\n` +
-        `💬 Canal: ${panel.canalId ? `<#${panel.canalId}>` : 'Não definido'}\n` +
-        `👮 Staff:\n${panel.cargosStaff.map(r => `<@&${r}>`).join('\n') || 'Nenhum'}\n` +
-        `🎫 Tipo de Canal: ${tipoMap[panel.tipoDeCriacao]}\n` +
-        `📝 Nome: ${panel.ticketChatName || 'Padrão'}\n` +
-        `🖥️ Painel: ${painelTipoMap[panel.selectMenuConfig?.enabled ? 1 : 0]}\n` +
-        `📸 Transcript: ${panel.transcriptConfig?.enabled ? '🟢 Ativado' : '🔴 Desativado'}\n` +
-        `🏷️ Cargos Auto: ${panel.autoRoleConfig?.enabled ? `🟢 (${panel.autoRoleConfig.roles?.length || 0} cargo(s))` : '🔴 Desativado'}\n` +
-        `📋 Form. Sequencial: ${panel.seqQuestionsConfig?.enabled ? `🟢 (${panel.seqQuestionsConfig.questions?.length || 0} pergunta(s))` : '🔴 Desativado'}`
-    };
-
-    const preview = panel.painelPrincipal || {
-      title:       '🎫 Painel de Tickets',
-      description: 'Crie seu ticket apertando no botão abaixo.'
-    };
-
-    return [config, preview];
-  }
-
-  /* ═══════════════════════════════════════════
-     MENU PRINCIPAL — sem alteração
-     ═══════════════════════════════════════════ */
-
-  async startSetup(interaction) {
-    const guild = await this.getGuild(interaction.guild_id);
-    const user  = interaction.member.user.id;
-
-    const select = this.select(
-      user,
-      guild.ticket.length
-        ? guild.ticket.map(p => ({ label: p.panelId, value: p.panelId }))
-        : [{ label: 'Nenhum painel', value: 'none' }],
-      'Selecionar painel',
-      async (i) => {
-        await this.deferUpdate(i);
-        if (!guild.ticket.length) return;
-        return this.panelMenu(i, guild, i.data.values[0], user);
-      }
-    );
-
-    const create = this.btn(user, '➕ Criar Painel', 3, async (i) => {
+  _homePayload(user, panels) {
+    const btnList = this.btn(user, `📋 Painéis (${panels.length})`, 1, async (i) => {
       await this.deferUpdate(i);
-      return this.createPanel(i, guild, user);
+      return this.painelList(i, user);
     });
 
-    return this.editOriginal(interaction, {
-      embeds: [{ title: '🎫 Sistema de Tickets', description: 'Gerencie seus painéis' }],
-      components: [this.row(select), this.row(create)]
-    });
+    const btnNew = this.btn(user, '✨ Novo Painel', 3, async (i) => this.criar(i, user));
+
+    const blocks = [
+      cv2Text(
+        `# 🎫 Sistema de Tickets ${this._e('animada')}\n` +
+        `Oii! Eu sou a Ayami ${this._e('corao')} e vou te ajudar a montar o atendimento do servidor!`
+      ),
+      cv2Divider(),
+      row(btnList, btnNew),
+    ];
+
+    return cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main });
   }
 
-  /* ═══════════════════════════════════════════
-     PANEL — expandido com novas opções
-     ═══════════════════════════════════════════ */
+  async painelList(interaction, user) {
+    const guildId = interaction.guild_id;
+    const doc     = await this._getGuildDoc(guildId);
+    const panels  = doc?.ticket || [];
 
-  async createPanel(interaction, guild, user) {
-    const id = 'panel_' + Date.now();
-    guild.ticket.push({
-      panelId:        id,
-      contadorTicket: 0,
-      tipoDeCriacao:  0,
-      cargosStaff:    []
-    });
-    await this.save(guild);
-    return this.panelMenu(interaction, guild, id, user);
-  }
-
-  async panelMenu(interaction, guild, panelId, user) {
-    const panel   = this.getPanel(guild, panelId);
-    const premium = await this.isPremium(guild.guildId);
-
-    const select = this.select(
-      user,
-      [
-        { label: 'Cargos da Staff',                                           value: 'staff'    },
-        { label: 'Canal de envio',                                            value: 'canal'    },
-        { label: premium ? 'Tipo de Criação' : '🔒 Tipo (Premium)',           value: 'tipo'     },
-        { label: 'Categoria',                                                  value: 'categoria'},
-        { label: premium ? 'Nome do Ticket'  : '🔒 Nome (Premium)',           value: 'nome'     },
-        { label: premium ? 'Modal Personalizado' : '🔒 Modal (Premium)',      value: 'modal'    },
-        { label: 'Embed JSON',                                                 value: 'json'     },
-        // ── NOVAS OPÇÕES ──
-        { label: premium ? 'Cargos Automáticos' : '🔒 Cargos Auto (Premium)',value: 'autorole' },
-        { label: 'Transcript',                                                 value: 'transcript'},
-        { label: premium ? 'Form. Sequencial' : '🔒 Form. Seq. (Premium)',    value: 'seqform'  },
-        { label: 'Select Menu Hub',                                            value: 'selecthub'},
-        // ── FIM NOVAS ──
-        { label: 'Enviar Painel',                                              value: 'send'     },
-        { label: 'Excluir Painel',                                             value: 'delete'   }
-      ],
-      'Configurar',
-      async (i) => {
-        const v = i.data.values[0];
-
-        // opções que mostram modal (não devem ter deferUpdate antes)
-        if (v === 'json') return this.setJson(i, guild, panelId, user);
-
-        await this.deferUpdate(i);
-
-        // opções originais
-        if (v === 'staff')     return this.setStaff(i, guild, panelId, user);
-        if (v === 'canal')     return this.setCanal(i, guild, panelId, user);
-        if (v === 'categoria') return this.setCategoria(i, guild, panelId, user);
-        if (v === 'send')      return this.sendPanel(i, guild, panelId);
-        if (v === 'delete')    return this.deletePanel(i, guild, panelId, user);
-        if (v === 'tipo')      return this.setTipo(i, guild, panelId, user);
-        if (v === 'nome')      return this.setNome(i, guild, panelId, user);
-        if (v === 'modal')     return this.modalMenu(i, guild, panelId, user);
-
-        // novas opções
-        if (v === 'autorole')   return this.autoRoleMenu(i, guild, panelId, user);
-        if (v === 'transcript') return this.transcriptMenu(i, guild, panelId, user);
-        if (v === 'seqform')    return this.seqFormMenu(i, guild, panelId, user);
-        if (v === 'selecthub')  return this.selectHubMenu(i, guild, panelId, user);
-      }
-    );
-
-    return this.editOriginal(interaction, {
-      embeds: this.buildEmbeds(panel),
-      components: [
-        this.row(select),
-        this.row(this.btn(user, '⬅️ Voltar', 2, async (i) => {
-          await this.deferUpdate(i);
-          return this.startSetup(i);
-        }))
-      ]
-    });
-  }
-
-  /* ═══════════════════════════════════════════
-     TICKET CREATE — expandido
-     ═══════════════════════════════════════════ */
-
-  async create(interaction) {
-    try {
-      const guild = await this.getGuild(interaction.guild_id);
-      const data  = JSON.parse(interaction.data.custom_id);
-      const panel = this.getPanel(guild, data.p);
-
-      
-
-      if (!panel) {
-        return this.reply(interaction, { content: '❌ Painel não encontrado', flags: 64 });
-      }
-
-      // ── modal existente (tem precedência) ──
-      if (panel.modalConfig?.enabled && panel.modalConfig.fields?.length > 0) {
-        const modal = this.client.interactions.createModal({
-          user:  interaction.member.user.id,
-          title: panel.modalConfig.title || 'Formulário',
-          components: panel.modalConfig.fields.map(f => ({
-            type: 1,
-            components: [{
-              type:        4,
-              custom_id:   f.customId,
-              label:       f.label,
-              style:       f.style,
-              required:    f.required,
-              placeholder: f.placeholder,
-              min_length:  f.minLength,
-              max_length:  f.maxLength
-            }]
-          })),
-          funcao: async (modalInteraction, client, fields) => {
-            return this.createAfterModal(modalInteraction, guild, panel, fields);
-          }
-        });
-
-        return DiscordRequest(
-          `/interactions/${interaction.id}/${interaction.token}/callback`,
-          { method: 'POST', body: { type: 9, data: modal } }
-        );
-      }
-
-      // ── fluxo normal ──
-      await this.reply(interaction,{
-        content: "Criando Ticket...",
-        flags: 64
-      })
-      
-      const permCheck = await this.checkBotPermissions(interaction, panel);
-      if (!permCheck.ok) {
-        return this.reply(interaction, {
-          content: '❌ Não tenho as seguintes permissões:\n\n' +
-                   permCheck.missing.map(p => `• ${p}`).join('\n'),
-          flags: 64
-        });
-      }
-      
-      console.clear()
-      console.log('tururu rururueu\n\n')
-
-      const channel = await this.createTicketNormally(interaction, guild, panel);
-
-      // Formulário sequencial (se ativado e sem modal) — não bloqueia o ACK
-      if (panel.seqQuestionsConfig?.enabled && panel.seqQuestionsConfig.questions?.length > 0) {
-        this.seqQuestions.run({
-          interaction,
-          panel,
-          channelId: channel.id,
-          userId:    interaction.member.user.id
-        }).catch(err => console.error('[SeqQuestions] Erro:', err));
-      }
-
-      return this.editOriginal(interaction, {
-  content: `✅ Ticket criado em <#${channel.id}>`
-});
-
-    } catch (err) {
-      console.error(err);
-      return this.reply(interaction, { content: '❌ Erro ao criar ticket', flags: 64 });
-    }
-  }
-
-  async createAfterModal(interaction, guild, panel, fields) {
-    try {
-      const user    = interaction.member?.user || interaction.user;
-      const channel = await this.createTicketNormally(interaction, guild, panel);
-
-      if (!channel?.id) {
-        return DiscordRequest(
-          `/interactions/${interaction.id}/${interaction.token}/callback`,
-          { method: 'POST', body: { type: 4, data: { content: '❌ Erro ao criar ticket', flags: 64 } } }
-        );
-      }
-
-      const embed = {
-        title: '📋 Respostas do Formulário',
-        description: Object.entries(fields)
-          .map(([key, value]) => {
-            const fieldData = panel.modalConfig.fields.find(f => f.customId === key);
-            return `**${fieldData?.label || key}**\n${value}`;
-          })
-          .join('\n\n')
-      };
-
-      if (panel.modalConfig?.sendMode === 0) {
-        await DiscordRequest(`/channels/${channel.id}/messages`, {
-          method: 'POST',
-          body:   {
-            content:    `<@${user.id}>`,
-            embeds:     [embed],
-            components: [{ type: 1, components: [{ type: 2, label: 'Fechar Ticket', style: 4, custom_id: 'close_ticket' }] }]
-          }
-        });
-      }
-
-      if (panel.modalConfig?.sendMode === 1 && panel.modalConfig?.logChannelId) {
-        await DiscordRequest(`/channels/${panel.modalConfig.logChannelId}/messages`, {
-          method: 'POST',
-          body:   { content: `📥 Novo formulário de <@${user.id}>`, embeds: [embed] }
-        });
-      }
-
-      return DiscordRequest(
-        `/interactions/${interaction.id}/${interaction.token}/callback`,
-        { method: 'POST', body: { type: 4, data: { content: `✅ Ticket criado em <#${channel.id}>`, flags: 64 } } }
-      );
-
-    } catch (err) {
-      console.error('Erro no modal:', err);
-      return DiscordRequest(
-        `/interactions/${interaction.id}/${interaction.token}/callback`,
-        { method: 'POST', body: { type: 4, data: { content: '❌ Erro ao processar formulário', flags: 64 } } }
-      );
-    }
-  }
-
-  async createTicketNormally(interaction, guild, panel) {
-    const user = interaction.member?.user || interaction.user;
-    if (!user?.id) throw new Error('User indefinido na interaction');
-
-    panel.contadorTicket++;
-
-    let ticketName = panel.ticketChatName || 'ticket-{count}';
-    ticketName = ticketName
-      .replace(/{user}/g, (user.username || 'user').toLowerCase())
-      .replace(/{id}/g, user.id)
-      .replace(/{count}/g, panel.contadorTicket)
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .slice(0, 90);
-
-    let channel;
-
-    // ── Canal de Texto ──
-    if (panel.tipoDeCriacao === 0) {
-      const body = {
-        name: ticketName,
-        type: 0,
-        permission_overwrites: [
-          { id: interaction.guild_id, type: 0, deny: '1024' },
-          { id: user.id,              type: 1, allow: '1024' }
-        ]
-      };
-
-      for (const roleId of panel.cargosStaff || []) {
-        body.permission_overwrites.push({ id: roleId, type: 0, allow: '1024' });
-      }
-
-      if (panel.categoriaId) body.parent_id = panel.categoriaId;
-
-      channel = await DiscordRequest(`/guilds/${interaction.guild_id}/channels`, {
-        method: 'POST',
-        body
-      });
-    }
-
-    // ── Thread Pública ──
-    else if (panel.tipoDeCriacao === 1) {
-      channel = await DiscordRequest(`/channels/${interaction.channel_id}/threads`, {
-        method: 'POST',
-        body:   { name: ticketName, type: 11, auto_archive_duration: 1440 }
-      });
-    }
-
-    // ── Thread Privada ──
-    else if (panel.tipoDeCriacao === 2) {
-      channel = await DiscordRequest(`/channels/${interaction.channel_id}/threads`, {
-        method: 'POST',
-        body:   { name: ticketName, type: 12, auto_archive_duration: 1440, invitable: false }
-      });
-      await DiscordRequest(`/channels/${channel.id}/thread-members/${user.id}`, { method: 'PUT' });
-    }
-
-    if (!channel?.id) throw new Error('Falha ao criar canal/thread');
-
-    await this.save(guild);
-
-    // ── Mensagem de boas-vindas ──
-    const staff = panel.cargosStaff.length
-      ? panel.cargosStaff.map(r => `<@&${r}>`).join(' ')
-      : '';
-
-    await DiscordRequest(`/channels/${channel.id}/messages`, {
-      method: 'POST',
-      body:   {
-        content:    `<@${user.id}> ${staff}`,
-        embeds:     [{
-          title:       '🎫 Ticket Criado',
-          description: `Olá <@${user.id}>, seu ticket foi criado!\n\nA equipe irá te atender em breve.\n\n🔒 Use o botão abaixo para fechar o ticket.`,
-          color:       0x2b2d31
-        }],
-        components: [{
-          type: 1,
-          components: [{ type: 2, label: 'Fechar Ticket', style: 4, custom_id: 'close_ticket' }]
-        }]
-      }
+    const btnNew  = this.btn(user, '✨ Novo Painel', 3, async (i) => this.criar(i, user));
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.open(i);
     });
 
-    // ── Cargos Automáticos (novo) ──
-    await this.autoRole.applyRoles({
-      guildId:  interaction.guild_id,
-      userId:   user.id,
-      ticketId: channel.id,
-      panel
+    if (!panels.length) {
+      const blocks = [
+        cv2Text(`# 📋 Seus Painéis ${this._e('emburrada')}\nNenhum painel ainda... vamos criar o primeiro?`),
+        cv2Divider(),
+        row(btnNew, btnBack),
+      ];
+      return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false }));
+    }
+
+    const options = panels.map(p => ({
+      label:       (p.painelPrincipal?.title || p.panelId).slice(0, 100),
+      value:       p.panelId,
+      description: `${p.cargosStaff?.length || 0} staff • ${p.selectMenuConfig?.enabled ? 'Select Menu' : 'Botão único'}`
+    }));
+
+    const sel = this.select(user, options, '✨ Qual painel você quer ver?', async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, i.data.values[0]);
     });
 
-    return channel;
+    const listText = panels
+      .map(p => `🎫 **${p.painelPrincipal?.title || p.panelId}**`)
+      .join('\n');
+
+    const blocks = [
+      cv2Text(`# 📋 Seus Painéis (${panels.length}) ${this._e('feliz')}\n${listText}`),
+      cv2Divider(),
+      row(sel),
+      cv2Divider(),
+      row(btnNew, btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false }));
   }
 
-  /* ═══════════════════════════════════════════
-     CLOSE — expandido com transcript e cargos vinculados
-     ═══════════════════════════════════════════ */
+  /* ═══════════════════════════════════════
+     CRIAR PAINEL
+  ═══════════════════════════════════════ */
 
-  async close(interaction) {
-    try {
-      await this.reply(interaction, { content: '⛔ Ticket será fechado em 10 segundos...' });
-
-      // Recupera panel para transcript e cargos vinculados
-      const guild  = await this.getGuild(interaction.guild_id).catch(() => null);
-      const panel  = guild ? this._findPanelByChannelOrAny(guild, interaction.channel_id) : null;
-      const userId = interaction.member?.user?.id || interaction.user?.id;
-
-      setTimeout(async () => {
-        try {
-          // 1. Gera transcript ANTES de deletar
-          if (panel) {
-            await this.transcript.generate({
-              interaction,
-              panel,
-              closedBy: userId
-            });
-          }
-
-          // 2. Remove cargos vinculados
-          if (userId && interaction.guild_id) {
-            await this.autoRole.handleTicketClose({
-              guildId:  interaction.guild_id,
-              userId,
-              ticketId: interaction.channel_id
-            });
-          }
-
-          // 3. Deleta o canal
-          await DiscordRequest(`/channels/${interaction.channel_id}`, { method: 'DELETE' });
-
-        } catch (err) {
-          console.error('Erro ao fechar ticket:', err);
-        }
-      }, 10_000);
-
-    } catch (err) {
-      console.error('close ticket error:', err);
-    }
-  }
-
-  /**
-   * Tenta encontrar o painel que corresponde a um canal de ticket.
-   * Estratégia: percorre todos os painéis e tenta match pelo canal de envio
-   * (não é garantido — é best-effort para transcript/autorole).
-   */
-  _findPanelByChannelOrAny(guild, channelId) {
-    // tenta match pelo canalId de envio (embora seja o canal do painel, não do ticket)
-    const byCanal = guild.ticket.find(p => p.canalId === channelId);
-    if (byCanal) return byCanal;
-    // fallback: retorna o primeiro painel disponível
-    return guild.ticket[0] || null;
-  }
-
-  /* ═══════════════════════════════════════════
-     CONFIG — métodos originais sem alteração
-     ═══════════════════════════════════════════ */
-
-  async setJson(interaction, guild, panelId, user) {
+  async criar(interaction, user) {
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Configurar Embed JSON',
-      components: [{
-        type: 1,
-        components: [{
-          type:        4,
-          custom_id:   'embed_json',
-          label:       'Cole o JSON da embed',
-          style:       2,
-          required:    true,
-          max_length:  4000,
-          placeholder: '{\n  "title": "Meu Painel",\n  "description": "Descrição aqui"\n}'
-        }]
-      }],
-      funcao: async (modalInteraction, client, fields) => {
-        try {
-          let parsed;
-          try { parsed = JSON.parse(fields.embed_json); }
-          catch {
-            return DiscordRequest(
-              `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-              { method: 'POST', body: { type: 4, data: { content: '❌ JSON inválido.', flags: 64 } } }
-            );
-          }
-
-          const embed = parsed.embeds?.[0] || parsed.embed || parsed;
-          const hasEmbedData = embed.title || embed.description || embed.fields ||
-                               embed.author || embed.footer || embed.image || embed.thumbnail;
-
-          if (!hasEmbedData || typeof embed !== 'object') {
-            return DiscordRequest(
-              `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-              { method: 'POST', body: { type: 4, data: { content: '❌ O JSON enviado não parece ser uma embed válida.', flags: 64 } } }
-            );
-          }
-
-          const panel        = this.getPanel(guild, panelId);
-          panel.painelPrincipal = embed;
-          await this.save(guild);
-
-          await DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 6 } }
-          );
-
-          await this.followUpEphemeral(modalInteraction, { content: '✅ Embed configurada com sucesso!' });
-          return this.panelMenu(modalInteraction, guild, panelId, user);
-
-        } catch (err) {
-          console.error(err);
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Erro ao processar JSON.', flags: 64 } } }
-          );
+      title: 'Criar Painel de Ticket ✨',
+      components: [
+        { type: 1, components: [{ type: 4, custom_id: 'panelId', label: 'ID do painel (sem espaços)', style: 1, required: true, max_length: 50, placeholder: 'suporte, denuncias, parcerias...' }] }
+      ],
+      funcao: async (mi, client, fields) => {
+        const panelId = fields.panelId?.trim().toLowerCase().replace(/\s+/g, '_');
+        if (!panelId) {
+          return this.client.interactions._callback(mi, { type: 4, data: { content: `❌ ID inválido!`, flags: 64 } });
         }
+
+        const doc = await this._getGuildDoc(mi.guild_id) || new GuildModel({ guildId: mi.guild_id });
+        if (this._findPanel(doc, panelId)) {
+          return this.client.interactions._callback(mi, { type: 4, data: { content: `${this._e('emburrada')} Já existe um painel com ID **${panelId}**.`, flags: 64 } });
+        }
+
+        doc.ticket = doc.ticket || [];
+        doc.ticket.push({ panelId });
+        await doc.save();
+
+        await this.client.interactions._callback(mi, { type: 4, data: this._homePayload(user, doc.ticket) });
+
+        return this.painelMenu(mi, user, panelId);
       }
     });
 
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  async sendPanel(interaction, guild, panelId) {
-    const panel = this.getPanel(guild, panelId);
+  /* ═══════════════════════════════════════
+     MENU DO PAINEL
+  ═══════════════════════════════════════ */
 
-    if (!panel.canalId) {
-      return this.followUpEphemeral(interaction, { content: 'Defina um canal primeiro' });
+  async painelMenu(interaction, user, panelId, { successMsg } = {}) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+
+    if (!panel) {
+      return this.followUpEphemeral(interaction, cv2Payload([
+        cv2Text(`# ${this._e('emduvida')} Não achei esse painel...\nPode ter sido apagado!`)
+      ]));
     }
 
-    const permCheck = await this.checkSendPanelPermissions(guild.guildId, panel.canalId);
-    if (!permCheck.ok) {
-      return this.followUpEphemeral(interaction, {
-        content: '❌ Não tenho permissões suficientes no canal:\n\n' +
-                 permCheck.missing.map(p => `• ${p}`).join('\n')
-      });
-    }
+    const hasEmbed   = !!panel.painelPrincipal;
+    const hubEnabled = panel.selectMenuConfig?.enabled;
 
-    // ── Select Menu Hub ──
-    if (panel.selectMenuConfig?.enabled && panel.selectMenuConfig.options?.length > 0) {
-      return this._sendPanelAsSelectMenu(interaction, guild, panel);
-    }
-
-    // ── Botão padrão (original) ──
-    await DiscordRequest(`/channels/${panel.canalId}/messages`, {
-      method: 'POST',
-      body:   {
-        embeds:     [panel.painelPrincipal || { title: '🎫 Painel de Tickets', description: 'Crie seu ticket apertando no botão abaixo.' }],
-        components: [{
-          type: 1,
-          components: [{
-            type:      2,
-            label:     '🎫 Criar Ticket',
-            style:     3,
-            custom_id: JSON.stringify({ t: 'create_ticket', p: panel.panelId })
-          }]
-        }]
-      }
-    });
-
-    return this.followUpEphemeral(interaction, { content: '✅ Painel enviado!' });
-  }
-
-  /** Envia o painel como select menu hub */
-  async _sendPanelAsSelectMenu(interaction, guild, panel) {
-    const cfg = panel.selectMenuConfig;
-
-    const options = cfg.options.map(opt => {
-      const o = {
-        label: opt.label,
-        value: JSON.stringify({ t: 'create_ticket', p: opt.panelId })
+    const navSelect = this.select(user, [
+      { label: hasEmbed ? '🎨 Editar Embed' : '✨ Criar Embed', value: 'embed', description: 'A carinha do seu painel' },
+      { label: '📌 Canal & Categoria',     value: 'destino',  description: panel.canalId ? 'Já configurado' : 'Ainda não configurado' },
+      { label: '👥 Staff & Nome',          value: 'staff',    description: 'Quem atende e como o ticket se chama' },
+      { label: '⚙️ Tipo de Criação',       value: 'tipo',     description: ['Canal', 'Thread Pública', 'Thread Privada'][panel.tipoDeCriacao] || 'Canal' },
+      { label: '📋 Modal',                 value: 'modal',    description: panel.modalConfig?.enabled ? 'Ativo' : 'Inativo' },
+      { label: '📝 Form Sequencial',       value: 'seqform',  description: panel.seqQuestionsConfig?.enabled ? 'Ativo' : 'Inativo' },
+      { label: '🏷️ Auto-Cargo',           value: 'autorole', description: panel.autoRoleConfig?.enabled ? 'Ativo' : 'Inativo' },
+      { label: '📄 Transcript',            value: 'transcript', description: panel.transcriptConfig?.enabled ? 'Ativo' : 'Inativo' },
+      { label: '🧩 Select Menu',           value: 'selecthub', description: hubEnabled ? `${panel.selectMenuConfig.options.length} opção(ões)` : 'Inativo' },
+      { label: '💬 Mensagens',             value: 'mensagens', description: 'Deixe tudo com a sua cara!' },
+    ], '✨ O que você quer configurar?', async (i) => {
+      await this.deferUpdate(i);
+      const dest = {
+        embed: async () => EmbedBuilderUI.open(i, this.client, {
+          user,
+          existingEmbed: panel.painelPrincipal,
+          title: `Embed — ${panelId}`,
+          onDone: async (rootInteraction, embedResult) => {
+            const freshDoc   = await this._getGuildDoc(rootInteraction.guild_id);
+            const freshPanel = this._findPanel(freshDoc, panelId);
+            freshPanel.painelPrincipal = embedResult;
+            await freshDoc.save();
+            return this.painelMenu(rootInteraction, user, panelId, {
+              successMsg: embedResult ? `${this._e('curtida')} Ficou linda!` : `${this._e('emduvida')} Tirei a embed.`
+            });
+          }
+        }),
+        destino:    () => this.destinoMenu(i, user, panelId),
+        staff:      () => this.staffNomeMenu(i, user, panelId),
+        tipo:       () => this.tipoCriacaoMenu(i, user, panelId),
+        modal:      () => this.modalMenu(i, user, panelId),
+        seqform:    () => this.seqFormMenu(i, user, panelId),
+        autorole:   () => this.autoRoleMenu(i, user, panelId),
+        transcript: () => this.transcriptMenu(i, user, panelId),
+        selecthub:  () => this.selectHubMenu(i, user, panelId),
+        mensagens:  () => this.mensagensMenu(i, user, panelId),
       };
-      if (opt.description) o.description = opt.description.slice(0, 100);
-      if (opt.emoji)       o.emoji = { name: opt.emoji };
-      return o;
+      return dest[i.data.values[0]]?.();
     });
 
-    await DiscordRequest(`/channels/${panel.canalId}/messages`, {
-      method: 'POST',
-      body:   {
-        embeds:     [panel.painelPrincipal || { title: '🎫 Painel de Tickets', description: 'Selecione o tipo de atendimento.' }],
-        components: [{
-          type: 1,
-          components: [{
-            type:        3,
-            custom_id:   JSON.stringify({ t: 'hub_select', p: panel.panelId }),
-            placeholder: cfg.placeholder || 'Selecione o tipo de atendimento',
-            min_values:  1,
-            max_values:  1,
-            options
-          }]
-        }]
-      }
+    const btnPublish = this.btn(user, '🚀 Publicar', 3, async (i) => {
+      await this.deferUpdate(i);
+      return this._publicarPainel(i, user, panelId);
     });
 
-    return this.followUpEphemeral(interaction, { content: '✅ Painel enviado como Select Menu!' });
-  }
+    const btnDelete = this.btn(user, '🗑️ Excluir', 4, async (i) => {
+      await this.deferUpdate(i);
+      return this._confirmDeletePanel(i, user, panelId);
+    });
 
-  async setTipo(interaction, guild, panelId, user) {
-    const premium = await this.isPremium(guild.guildId);
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelList(i, user);
+    });
 
-    const options = [
-      { label: 'Canal de Texto',                                                              value: '0' },
-      { label: premium ? 'Thread Pública'  : '🔒 Thread Pública (Premium)',                  value: '1' },
-      { label: premium ? 'Thread Privada'  : '🔒 Thread Privada (Premium)',                  value: '2' }
+    const blocks = [
+      cv2Text(
+        `# 🎫 ${panelId} ${this._e('animada')}\n` +
+        (successMsg ? `${successMsg}\n\n` : '') +
+        `> 🎨 Embed: ${hasEmbed ? 'pronta!' : 'falta criar'}\n` +
+        `> 📌 Canal: ${panel.canalId ? `<#${panel.canalId}>` : 'não escolhido'}\n` +
+        `> 👥 Staff: ${panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : 'ninguém ainda'}`
+      ),
+      cv2Divider(),
+      row(navSelect),
+      row(btnPublish, btnDelete, btnBack),
     ];
 
-    const select = this.select(user, options, 'Escolha o tipo', async (i) => {
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async _confirmDeletePanel(interaction, user, panelId) {
+    const btnConfirm = this.btn(user, '✅ Sim, excluir', 4, async (i) => {
       await this.deferUpdate(i);
-      const value = Number(i.data.values[0]);
+      const doc = await this._getGuildDoc(i.guild_id);
+      doc.ticket = doc.ticket.filter(t => t.panelId !== panelId);
+      await doc.save();
+      return this.painelList(i, user);
+    });
+    const btnCancel = this.btn(user, '❌ Cancelar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
 
-      if (!premium && value !== 0) {
-        return this.followUpEphemeral(i, { content: '❌ Apenas usuários premium podem usar threads' });
+    const blocks = [
+      cv2Text(`# ${this._e('assustada')} Excluir o painel?\nTem certeza? Não vai dar pra desfazer depois...`),
+      cv2Divider(),
+      row(btnConfirm, btnCancel),
+    ];
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.danger }));
+  }
+
+  async _publicarPainel(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+
+    if (!panel.canalId) {
+      return this.painelMenu(interaction, user, panelId, { successMsg: `${this._e('emduvida')} Escolhe um canal antes, tá bom?` });
+    }
+    if (!panel.painelPrincipal) {
+      return this.painelMenu(interaction, user, panelId, { successMsg: `${this._e('emduvida')} Falta criar a embed primeiro!` });
+    }
+
+    const components = panel.selectMenuConfig?.enabled
+      ? [row({
+          type: 3,
+          custom_id: JSON.stringify({ t: 'ticket_select_hub', p: panelId }),
+          placeholder: panel.selectMenuConfig.placeholder || 'Selecione o tipo de atendimento',
+          options: panel.selectMenuConfig.options.map(o => ({
+            label: o.label, value: o.optionId, description: o.description || undefined,
+            emoji: o.emoji ? { name: o.emoji } : undefined
+          }))
+        })]
+      : [row({ type: 2, style: 1, label: '🎫 Abrir Ticket', custom_id: JSON.stringify({ t: 'create_ticket_select', p: panelId }) })];
+
+    const msg = await DiscordRequest(`/channels/${panel.canalId}/messages`, {
+      method: 'POST',
+      body: { embeds: [panel.painelPrincipal], components }
+    });
+
+    panel.messageId = msg.id;
+    await doc.save();
+
+    return this.painelMenu(interaction, user, panelId, { successMsg: `${this._e('festa')} Prontinho! Publiquei em <#${panel.canalId}>~` });
+  }
+
+  /* ═══════════════════════════════════════
+     CANAL & CATEGORIA
+  ═══════════════════════════════════════ */
+
+  async destinoMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+
+    const chSel = this.client.interactions.createChannelSelect({
+      user, data: { placeholder: '📌 Canal onde o painel será enviado', channel_types: [0, 5] },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        this._findPanel(fd, panelId).canalId = i.data.values[0];
+        await fd.save();
+        return this.destinoMenu(i, user, panelId);
       }
-
-      const panel = this.getPanel(guild, panelId);
-      panel.tipoDeCriacao = value;
-      await this.save(guild);
-
-      this.followUpEphemeral(i, { content: '✅ Tipo de canal configurado!' });
-      return this.panelMenu(interaction, guild, panelId, user);
     });
 
-    return this.followUpEphemeral(interaction, {
-      content:    'Selecione o tipo de criação:',
-      components: [this.row(select)]
-    });
-  }
-
-  async setStaff(interaction, guild, panelId, user) {
-    await this.followUpEphemeral(interaction, { content: 'Envie o cargo' });
-
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
-
-    const id = this.extractId(msg.content);
-    if (!id) return;
-
-    const panel = this.getPanel(guild, panelId);
-    if (!panel.cargosStaff.includes(id)) panel.cargosStaff.push(id);
-
-    await this.save(guild);
-    return this.panelMenu(interaction, guild, panelId, user);
-  }
-
-  async setCanal(interaction, guild, panelId, user) {
-    await this.followUpEphemeral(interaction, { content: 'Envie o canal' });
-
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
-
-    const id = this.extractId(msg.content);
-    if (!id) return;
-
-    const panel = this.getPanel(guild, panelId);
-    panel.canalId = id;
-    await this.save(guild);
-
-    this.followUpEphemeral(interaction, { content: '✅ Canal configurado!' });
-    return this.panelMenu(interaction, guild, panelId, user);
-  }
-
-  async setNome(interaction, guild, panelId, user) {
-    const premium = await this.isPremium(guild.guildId);
-    if (!premium) {
-      return this.followUpEphemeral(interaction, { content: '🔒 Apenas usuários premium podem personalizar o nome do ticket.' });
-    }
-
-    await this.followUpEphemeral(interaction, {
-      content:
-        'Envie o nome personalizado do ticket.\n\n' +
-        'Você pode usar variáveis:\n' +
-        '`{user}` → nome do usuário\n' +
-        '`{id}` → ID do usuário\n' +
-        '`{count}` → número do ticket\n\n' +
-        'Exemplo:\n`ticket-{user}-{count}`'
+    const catSel = this.client.interactions.createChannelSelect({
+      user, data: { placeholder: '📂 Categoria onde os tickets serão criados', channel_types: [4] },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        this._findPanel(fd, panelId).categoriaId = i.data.values[0];
+        await fd.save();
+        return this.destinoMenu(i, user, panelId);
+      }
     });
 
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
 
-    const panel = this.getPanel(guild, panelId);
-    panel.ticketChatName = msg.content.slice(0, 90);
-    await this.save(guild);
+    const blocks = [
+      cv2Text(
+        `# 📌 Canal & Categoria ${this._e('feliz')}\n` +
+        `> 📢 Canal: ${panel.canalId ? `<#${panel.canalId}>` : 'nenhum ainda'}\n` +
+        `> 📂 Categoria: ${panel.categoriaId ? `<#${panel.categoriaId}>` : 'nenhuma ainda'}`
+      ),
+      cv2Divider(),
+      row(chSel),
+      row(catSel),
+      cv2Divider(),
+      row(btnBack),
+    ];
 
-    this.followUpEphemeral(interaction, { content: '✅ Nome do ticket configurado!' });
-    return this.panelMenu(interaction, guild, panelId, user);
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  async setCategoria(interaction, guild, panelId, user) {
-    await this.followUpEphemeral(interaction, { content: 'Envie a categoria' });
+  /* ═══════════════════════════════════════
+     STAFF & NOME DO TICKET
+  ═══════════════════════════════════════ */
 
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
+  async staffNomeMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
 
-    const id = this.extractId(msg.content);
-    if (!id) return;
+    const roleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: '👥 Adicionar cargo staff', max_values: 5 },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.cargosStaff = [...new Set([...(fp.cargosStaff || []), ...i.data.values])];
+        await fd.save();
+        return this.staffNomeMenu(i, user, panelId);
+      }
+    });
 
-    const panel = this.getPanel(guild, panelId);
-    panel.categoriaId = id;
-    await this.save(guild);
+    const btnClearStaff = this.btn(user, '🧹 Limpar Staff', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).cargosStaff = [];
+      await fd.save();
+      return this.staffNomeMenu(i, user, panelId);
+    });
 
-    this.followUpEphemeral(interaction, { content: '✅ Categoria configurada!' });
-    return this.panelMenu(interaction, guild, panelId, user);
+    const btnNome = this.btn(user, '✏️ Nome do Ticket', 2, async (i) => {
+      const resp = await this._ask(i, `${this._e('pensando')} Como o ticket vai se chamar?\nUse \`{count}\` pro número. Ex: \`ticket-{count}\``);
+      if (resp === null) return;
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).ticketChatName = resp.trim().slice(0, 90);
+      await fd.save();
+      return this.staffNomeMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 👥 Staff & Nome ${this._e('feliz')}\n` +
+        `> 🛡️ Staff: ${panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : 'ninguém ainda'}\n` +
+        `> 🏷️ Nome: \`${panel.ticketChatName || 'ticket-{count}'}\``
+      ),
+      cv2Divider(),
+      row(roleSel),
+      row(btnClearStaff, btnNome),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ═══════════════════════════════════════════
-     MODAL MENU — sem alteração
-     ═══════════════════════════════════════════ */
+  /* ═══════════════════════════════════════
+     TIPO DE CRIAÇÃO
+  ═══════════════════════════════════════ */
 
-  async modalMenu(interaction, guild, panelId, user) {
-    const panel   = this.getPanel(guild, panelId);
-    const premium = await this.isPremium(guild.guildId);
+  async tipoCriacaoMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
 
-    if (!premium) {
-      return this.followUpEphemeral(interaction, { content: '🔒 Função exclusiva premium.' });
-    }
+    const labels = ['📁 Canal de Texto', '🧵 Thread Pública', '🔒 Thread Privada'];
 
-    if (!panel.modalConfig) {
-      panel.modalConfig = { enabled: false, title: 'Formulário do Ticket', sendMode: 0, logChannelId: null, fields: [] };
-    }
+    const sel = this.select(user, labels.map((l, i) => ({ label: l, value: String(i), description: i === panel.tipoDeCriacao ? '✅ Atual' : undefined })), 'Selecionar tipo de criação', async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).tipoDeCriacao = Number(i.data.values[0]);
+      await fd.save();
+      return this.tipoCriacaoMenu(i, user, panelId);
+    });
 
-    const status = panel.modalConfig.enabled ? '🟢 Ativado' : '🔴 Desativado';
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
 
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title: '⚙️ Configuração do Modal',
-        description:
-          `Status: ${status}\n` +
-          `Título: ${panel.modalConfig.title}\n` +
-          `Campos: ${panel.modalConfig.fields.length}\n` +
-          `Modo: ${panel.modalConfig.sendMode === 0 ? '📨 Ticket' : '📂 Log'}\n` +
-          `Log: ${panel.modalConfig.logChannelId ? `<#${panel.modalConfig.logChannelId}>` : 'Não definido'}`
-      }],
+    const blocks = [
+      cv2Text(`# ⚙️ Tipo de Criação ${this._e('feliz')}\nComo o ticket é criado? Atual: ${labels[panel.tipoDeCriacao] || labels[0]}`),
+      cv2Divider(),
+      row(sel),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  /* ═══════════════════════════════════════
+     MODAL PERSONALIZADO
+  ═══════════════════════════════════════ */
+
+  async modalMenu(interaction, user, panelId, opts = {}) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const cfg   = panel.modalConfig || { enabled: false, fields: [] };
+
+    const fieldsList = cfg.fields?.length
+      ? cfg.fields.map((f, i) => `\`${i + 1}.\` **${f.label}** (${f.style === 2 ? 'parágrafo' : 'curto'})${f.required ? ' *obrigatório*' : ''}`).join('\n')
+      : '_Nenhum campo adicionado_';
+
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Modal' : '▶️ Ativar Modal', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.modalConfig.enabled = !fp.modalConfig.enabled;
+      await fd.save();
+      return this.modalMenu(i, user, panelId);
+    });
+
+    const btnTitulo = this.btn(user, '✏️ Título do Modal', 2, async (i) => {
+      const resp = await this._ask(i, `${this._e('pensando')} Qual o título do modal?`);
+      if (resp === null) return;
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).modalConfig.title = resp.trim().slice(0, 45);
+      await fd.save();
+      return this.modalMenu(i, user, panelId);
+    });
+
+    const btnAddField = this.btn(user, '➕ Adicionar Campo', 1, async (i) => {
+      return this._modalAddField(i, user, panelId);
+    }, { disabled: (cfg.fields?.length || 0) >= 5 });
+
+    const btnRemField = this.btn(user, '🗑️ Remover Último Campo', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).modalConfig.fields.pop();
+      await fd.save();
+      return this.modalMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 📋 Modal ${this._e('feliz')}\n` +
+        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
+        `Aparece quando alguém clica em Abrir Ticket!\n` +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
+        `> Título: \`${cfg.title || 'Formulário de Atendimento'}\`\n\n` +
+        `**Campos (${cfg.fields?.length || 0}/5):**\n${fieldsList}`
+      ),
+      cv2Divider(),
+      row(btnToggle, btnTitulo),
+      row(btnAddField, btnRemField),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async _modalAddField(interaction, user, panelId) {
+    const modal = this.client.interactions.createModal({
+      user,
+      title: 'Adicionar Campo do Modal',
       components: [
-        this.row(
-          this.btn(user, 'Ativar/Desativar', 3, i => this.toggleModal(i, guild, panelId, user)),
-          this.btn(user, 'Editar Título',    2, i => this.setModalTitle(i, guild, panelId, user))
-        ),
-        this.row(
-          this.btn(user, '➕ Add Pergunta',    1, i => this.addModalField(i, guild, panelId, user)),
-          this.btn(user, '🗑️ Deletar Última', 4, i => this.removeLastField(i, guild, panelId, user))
-        ),
-        this.row(
-          this.btn(user, 'Modo de Envio', 2, i => this.setModalSendMode(i, guild, panelId, user)),
-          this.btn(user, 'Canal de Log',  1, i => this.setModalLogChannel(i, guild, panelId, user)),
-          this.btn(user, '⬅️ Voltar',     2, async (i) => { await this.deferUpdate(i); return this.panelMenu(i, guild, panelId, user); })
-        )
-      ]
+        { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Pergunta/Label do campo', style: 1, required: true, max_length: 45 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: 'Placeholder (opcional)', style: 1, required: false, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'style', label: 'Estilo: curto ou paragrafo', style: 1, required: true, max_length: 10, placeholder: 'curto' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatório? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
+      ],
+      funcao: async (mi, _, fields) => {
+        const fd = await this._getGuildDoc(mi.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.modalConfig = fp.modalConfig || { enabled: true, fields: [] };
+        fp.modalConfig.fields = fp.modalConfig.fields || [];
+        fp.modalConfig.fields.push({
+          customId:    this._uid(),
+          label:       fields.label.trim(),
+          placeholder: fields.placeholder?.trim() || '',
+          style:       (fields.style || '').toLowerCase().startsWith('par') ? 2 : 1,
+          required:    !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
+        });
+        await fd.save();
+
+        await this.client.interactions._callback(mi, { type: 6 });
+        return this.modalMenu(mi, user, panelId, { successMsg: `${this._e('curtida')} Campo adicionado!` });
+      }
     });
+
+    return this.client.interactions.showModal(interaction, modal);
   }
 
-  async addModalField(interaction, guild, panelId, user) {
-    const panel = this.getPanel(guild, panelId);
+  /* ═══════════════════════════════════════
+     FORMULÁRIO SEQUENCIAL
+  ═══════════════════════════════════════ */
 
-    if (!panel.modalConfig) {
-      panel.modalConfig = { enabled: false, title: 'Formulário do Ticket', sendMode: 0, logChannelId: null, fields: [] };
-    }
+  async seqFormMenu(interaction, user, panelId, opts = {}) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const cfg   = panel.seqQuestionsConfig || { enabled: false, questions: [], timeout: 60000 };
 
-    if (panel.modalConfig.fields.length >= 5) {
-      return this.followUpEphemeral(interaction, { content: '❌ Você pode adicionar no máximo 5 perguntas.' });
-    }
+    const questionsList = cfg.questions?.length
+      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label}${q.required ? ' *obrigatória*' : ''}`).join('\n')
+      : '_Nenhuma pergunta adicionada_';
 
+    const timeoutSec = Math.round((cfg.timeout ?? 60000) / 1000);
+
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Form' : '▶️ Ativar Form', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.seqQuestionsConfig.enabled = !fp.seqQuestionsConfig.enabled;
+      await fd.save();
+      return this.seqFormMenu(i, user, panelId);
+    });
+
+    const btnAddQ = this.btn(user, '➕ Adicionar Pergunta', 1, async (i) => {
+      return this._seqAddQuestion(i, user, panelId);
+    }, { disabled: (cfg.questions?.length || 0) >= 10 });
+
+    const btnRemQ = this.btn(user, '🗑️ Remover Última', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).seqQuestionsConfig.questions.pop();
+      await fd.save();
+      return this.seqFormMenu(i, user, panelId);
+    });
+
+    /**
+     * Tempo do Form Sequencial — PERSONALIZÁVEL.
+     * Select com presets comuns + opção de digitar valor customizado.
+     */
+    const timeoutSel = this.select(user, [
+      { label: '30 segundos',  value: '30'  },
+      { label: '1 minuto',     value: '60'  },
+      { label: '2 minutos',    value: '120' },
+      { label: '5 minutos',    value: '300' },
+      { label: '10 minutos',   value: '600' },
+      { label: '✏️ Personalizado (digitar)', value: 'custom' },
+    ], `⏱️ Tempo por pergunta — Atual: ${timeoutSec}s`, async (i) => {
+      if (i.data.values[0] === 'custom') {
+        const resp = await this._ask(i, `${this._e('pensando')} Quantos **segundos** o usuário terá para responder cada pergunta? *(5 a 600)*`);
+        if (resp === null) return;
+        const sec = parseInt(resp);
+        if (!sec || sec < 5 || sec > 600) {
+          await this.followUpEphemeral(i, cv2Payload([cv2Text(`${this._e('emduvida')} Valor inválido! Use entre 5 e 600 segundos.`)], { ephemeral: true }));
+          return this.seqFormMenu(i, user, panelId);
+        }
+        const fd = await this._getGuildDoc(i.guild_id);
+        this._findPanel(fd, panelId).seqQuestionsConfig.timeout = sec * 1000;
+        await fd.save();
+        return this.seqFormMenu(i, user, panelId);
+      }
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).seqQuestionsConfig.timeout = Number(i.data.values[0]) * 1000;
+      await fd.save();
+      return this.seqFormMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    /**
+     * Onde mandar o resumo das respostas — só no ticket (padrão) ou
+     * também/só num canal de log configurado.
+     */
+    const sendModeSel = this.select(user, [
+      { label: '🎫 Só no ticket', value: '0', description: cfg.sendMode === 0 ? 'Selecionado' : undefined },
+      { label: '📋 Canal de log', value: '1', description: cfg.sendMode === 1 ? 'Selecionado' : undefined },
+    ], '📤 Onde mandar as respostas?', async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).seqQuestionsConfig.sendMode = Number(i.data.values[0]);
+      await fd.save();
+      return this.seqFormMenu(i, user, panelId);
+    });
+
+    const logChSel = this.client.interactions.createChannelSelect({
+      user, data: { placeholder: '📋 Canal de log das respostas', channel_types: [0, 5] },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        this._findPanel(fd, panelId).seqQuestionsConfig.logChannelId = i.data.values[0];
+        await fd.save();
+        return this.seqFormMenu(i, user, panelId);
+      }
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 📝 Form Sequencial ${this._e('animada')}\n` +
+        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
+        `Eu faço as perguntas no chat, uma de cada vez!\n` +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
+        `> Tempo por pergunta: ${timeoutSec}s\n` +
+        `> Resumo vai pra: ${cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : '🎫 o próprio ticket'}\n\n` +
+        `**Perguntas (${cfg.questions?.length || 0}/10):**\n${questionsList}`
+      ),
+      cv2Divider(),
+      row(btnToggle, btnAddQ, btnRemQ),
+      row(timeoutSel),
+      row(sendModeSel),
+      ...(cfg.sendMode === 1 ? [row(logChSel)] : []),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async _seqAddQuestion(interaction, user, panelId) {
     const modal = this.client.interactions.createModal({
       user,
       title: 'Adicionar Pergunta',
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'label',       label: 'Pergunta (máx. 45 caracteres)', style: 1, required: true,  max_length: 45  }] },
-        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: 'Placeholder (opcional)',         style: 1, required: false, max_length: 100 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'style',       label: 'Tipo (1=Curta | 2=Longa)',       style: 1, required: true,  max_length: 1   }] }
+        { type: 1, components: [{ type: 4, custom_id: 'text', label: 'Texto da pergunta', style: 2, required: true, max_length: 300 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatória? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
       ],
-      funcao: async (modalInteraction, client, fields) => {
-        const panelAtual = this.getPanel(guild, panelId);
-
-        if (panelAtual.modalConfig.fields.length >= 5) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Limite máximo de 5 perguntas atingido.', flags: 64 } } }
-          );
-        }
-
-        const label = fields.label?.trim();
-        if (!label || label.length > 45) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ A pergunta deve ter no máximo 45 caracteres.', flags: 64 } } }
-          );
-        }
-
-        const style = Number(fields.style) === 2 ? 2 : 1;
-
-        panelAtual.modalConfig.fields.push({
-          label,
-          customId:    'field_' + Date.now(),
-          style,
-          required:    true,
-          placeholder: fields.placeholder?.slice(0, 100) || '',
-          minLength:   0,
-          maxLength:   4000
+      funcao: async (mi, _, fields) => {
+        const fd = await this._getGuildDoc(mi.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.seqQuestionsConfig = fp.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
+        fp.seqQuestionsConfig.questions = fp.seqQuestionsConfig.questions || [];
+        fp.seqQuestionsConfig.questions.push({
+          id:       this._uid(),
+          label:    fields.text.trim(),
+          required: !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
         });
+        await fd.save();
 
-        await this.save(guild);
-
-        await DiscordRequest(
-          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-          { method: 'POST', body: { type: 6 } }
-        );
-
-        return this.modalMenu(modalInteraction, guild, panelId, user);
+        await this.client.interactions._callback(mi, { type: 6 });
+        return this.seqFormMenu(mi, user, panelId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` });
       }
     });
 
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  async toggleModal(interaction, guild, panelId, user) {
-    await this.deferUpdate(interaction);
-    const panel = this.getPanel(guild, panelId);
+  /* ═══════════════════════════════════════
+     AUTO-CARGO
+  ═══════════════════════════════════════ */
 
-    if (!panel.modalConfig) {
-      panel.modalConfig = { enabled: false, title: 'Formulário do Ticket', sendMode: 0, logChannelId: null, fields: [] };
-    }
+  async _autoRoleAskTipo(interaction, user, panelId, roleId) {
+    const sel = this.select(user, [
+      { label: '♾️ Permanente',        value: '0', description: 'O cargo fica para sempre' },
+      { label: '⏱️ Temporário',        value: '1', description: 'Removido após X minutos' },
+      { label: '🔗 Vinculado ao Ticket', value: '2', description: 'Removido quando o ticket fechar' },
+    ], `Tipo do cargo <@&${roleId}>`, async (i) => {
+      const tipo = Number(i.data.values[0]);
 
-    panel.modalConfig.enabled = !panel.modalConfig.enabled;
-    await this.save(guild);
-    return this.modalMenu(interaction, guild, panelId, user);
+      if (tipo === 1) {
+        const resp = await this._ask(i, `${this._e('pensando')} Em quantos **minutos** o cargo <@&${roleId}> deve ser removido?`);
+        if (resp === null) return this.autoRoleMenu(i, user, panelId);
+        const min = parseInt(resp);
+        if (!min || min < 1) {
+          await this.followUpEphemeral(i, cv2Payload([cv2Text(`${this._e('emduvida')} Valor inválido!`)], { ephemeral: true }));
+          return this.autoRoleMenu(i, user, panelId);
+        }
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.autoRoleConfig = fp.autoRoleConfig || { enabled: true, roles: [] };
+        fp.autoRoleConfig.roles = fp.autoRoleConfig.roles || [];
+        fp.autoRoleConfig.roles.push({ roleId, tipo: 1, duration: min * 60_000 });
+        await fd.save();
+        return this.autoRoleMenu(i, user, panelId);
+      }
+
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.autoRoleConfig = fp.autoRoleConfig || { enabled: true, roles: [] };
+      fp.autoRoleConfig.roles = fp.autoRoleConfig.roles || [];
+      fp.autoRoleConfig.roles.push({ roleId, tipo, duration: null });
+      await fd.save();
+      return this.autoRoleMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(`# 🏷️ Esse cargo é... ${this._e('pensando')}\nComo o cargo <@&${roleId}> deve se comportar?`),
+      cv2Divider(),
+      row(sel),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  async setModalTitle(interaction, guild, panelId, user) {
-    const panel = this.getPanel(guild, panelId);
+  async autoRoleMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const cfg   = panel.autoRoleConfig || { enabled: false, roles: [] };
+
+    const tipoLabel = (tipo, duration) => {
+      if (tipo === 1) return `⏱️ Temporário (${Math.round((duration || 0) / 60000)}min)`;
+      if (tipo === 2) return `🔗 Vinculado (some quando o ticket fecha)`;
+      return '♾️ Permanente';
+    };
+
+    const rolesList = cfg.roles?.length
+      ? cfg.roles.map(r => `<@&${r.roleId}> — ${tipoLabel(r.tipo, r.duration)}`).join('\n')
+      : '_Nenhum cargo configurado_';
+
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar' : '▶️ Ativar', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.autoRoleConfig.enabled = !fp.autoRoleConfig.enabled;
+      await fd.save();
+      return this.autoRoleMenu(i, user, panelId);
+    });
+
+    const roleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: '➕ Adicionar cargo automático (dado ao abrir o ticket)' },
+      funcao: async (i) => {
+        // Pede o tipo antes de salvar
+        return this._autoRoleAskTipo(i, user, panelId, i.data.values[0]);
+      }
+    });
+
+    const btnRemRole = this.btn(user, '🗑️ Remover Último', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).autoRoleConfig.roles.pop();
+      await fd.save();
+      return this.autoRoleMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 🏷️ Auto-Cargo ${this._e('feliz')}\n` +
+        `Dou um cargo automático pra quem abre o ticket!\n` +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n\n` +
+        `> ♾️ Permanente — fica pra sempre\n` +
+        `> ⏱️ Temporário — some depois de X minutos\n` +
+        `> 🔗 Vinculado — some quando o ticket fecha\n\n` +
+        `**Cargos:**\n${rolesList}`
+      ),
+      cv2Divider(),
+      row(btnToggle),
+      row(roleSel),
+      row(btnRemRole),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  /* ═══════════════════════════════════════
+     TRANSCRIPT
+  ═══════════════════════════════════════ */
+
+  async transcriptMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const cfg   = panel.transcriptConfig || { enabled: false, channelId: null, sendToUser: true };
+
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar' : '▶️ Ativar', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.transcriptConfig.enabled = !fp.transcriptConfig.enabled;
+      await fd.save();
+      return this.transcriptMenu(i, user, panelId);
+    });
+
+    const chSel = this.client.interactions.createChannelSelect({
+      user, data: { placeholder: '📌 Canal para salvar transcripts', channel_types: [0, 5] },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.transcriptConfig = fp.transcriptConfig || { enabled: true, sendToUser: true };
+        fp.transcriptConfig.channelId = i.data.values[0];
+        await fd.save();
+        return this.transcriptMenu(i, user, panelId);
+      }
+    });
+
+    const btnDmToggle = this.btn(user, cfg.sendToUser ? '🔕 Não enviar DM' : '🔔 Enviar DM ao usuário', 2, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.transcriptConfig.sendToUser = !fp.transcriptConfig.sendToUser;
+      await fd.save();
+      return this.transcriptMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 📄 Transcript ${this._e('feliz')}\n` +
+        `Guardo um histórico da conversa quando o ticket fecha!\n` +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
+        `> Canal: ${cfg.channelId ? `<#${cfg.channelId}>` : 'nenhum ainda'}\n` +
+        `> Mandar por DM: ${cfg.sendToUser ? '✅ Sim' : '❌ Não'}`
+      ),
+      cv2Divider(),
+      row(btnToggle, btnDmToggle),
+      row(chSel),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  /* ═══════════════════════════════════════
+     MENSAGENS PERSONALIZADAS
+
+     Todas as mensagens do sistema de ticket (criado, fechar,
+     modal, form sequencial, transcript) podem ser customizadas
+     aqui. Variáveis disponíveis por campo são indicadas no texto
+     de ajuda de cada uma.
+  ═══════════════════════════════════════ */
+
+  async mensagensMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const m     = panel.mensagensConfig || {};
+
+    const fieldDefs = [
+      { key: 'ticketCriadoTitulo',    label: '🎫 Ticket Criado — Título',          vars: '' },
+      { key: 'ticketCriadoDescricao', label: '🎫 Ticket Criado — Descrição',       vars: '{user}' },
+      { key: 'fecharBotaoLabel',      label: '🔒 Texto do Botão Fechar',           vars: '' },
+      { key: 'fechandoMensagem',      label: '🔒 Mensagem ao Fechar',              vars: '' },
+      { key: 'modalRespostasTitulo',  label: '📋 Título das Respostas do Modal',   vars: '' },
+      { key: 'seqInicioTitulo',       label: '📝 Form Sequencial — Título Início', vars: '' },
+      { key: 'seqInicioDescricao',    label: '📝 Form Sequencial — Descrição Início', vars: '{user} {timeout}' },
+      { key: 'seqCanceladoMensagem',  label: '📝 Form Sequencial — Mensagem Cancelado', vars: '' },
+      { key: 'seqResumoTitulo',       label: '📝 Form Sequencial — Título do Resumo', vars: '' },
+      { key: 'transcriptTitulo',      label: '📄 Transcript — Título no canal',    vars: '' },
+      { key: 'transcriptDmTitulo',    label: '📄 Transcript — Título na DM',       vars: '' },
+      { key: 'transcriptDmDescricao', label: '📄 Transcript — Descrição na DM',    vars: '{user}' },
+    ];
+
+    const select = this.select(user, fieldDefs.map(f => ({
+      label: f.label.slice(0, 100),
+      value: f.key,
+      description: m[f.key] ? '✏️ Personalizada' : '— Padrão da Ayami',
+    })), 'Escolher mensagem para editar', async (i) => {
+      return this._editarMensagem(i, user, panelId, fieldDefs.find(f => f.key === i.data.values[0]));
+    });
+
+    const btnResetAll = this.btn(user, '🧹 Restaurar Todas ao Padrão', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).mensagensConfig = {};
+      await fd.save();
+      return this.mensagensMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const statusList = fieldDefs
+      .map(f => `${m[f.key] ? '✏️' : '⚪'} ${f.label}`)
+      .join('\n');
+
+    const blocks = [
+      cv2Text(
+        `# 💬 Mensagens ${this._e('carinho')}\n` +
+        `Deixa tudo com a sua cara! O que não mexer, eu cuido~\n\n${statusList}`
+      ),
+      cv2Divider(),
+      row(select),
+      row(btnResetAll, btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.pink }));
+  }
+
+  async _editarMensagem(interaction, user, panelId, fieldDef) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const atual = panel.mensagensConfig?.[fieldDef.key] || '';
 
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Editar Título do Modal',
+      title: fieldDef.label.slice(0, 45),
       components: [{
         type: 1,
         components: [{
-          type:      4,
-          custom_id: 'title',
-          label:     'Novo Título',
-          style:     1,
-          required:  true,
-          max_length: 45,
-          value:     panel.modalConfig?.title || ''
+          type: 4, custom_id: 'texto',
+          label: `Texto${fieldDef.vars ? ` (vars: ${fieldDef.vars})` : ''}`.slice(0, 45),
+          style: 2, required: false, max_length: 1000,
+          value: atual,
+          placeholder: 'Deixe vazio para usar o texto padrão da Ayami',
         }]
       }],
-      funcao: async (modalInteraction, client, fields) => {
-        const panelAtual = this.getPanel(guild, panelId);
-        if (!panelAtual.modalConfig) panelAtual.modalConfig = { enabled: false, title: '', fields: [] };
-        panelAtual.modalConfig.title = fields.title;
-        await this.save(guild);
+      funcao: async (mi, _, fields) => {
+        const fd = await this._getGuildDoc(mi.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.mensagensConfig = fp.mensagensConfig || {};
+        const val = fields.texto?.trim();
+        fp.mensagensConfig[fieldDef.key] = val || null;
+        await fd.save();
 
-        await DiscordRequest(
-          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-          { method: 'POST', body: { type: 6 } }
-        );
-
-        return this.modalMenu(modalInteraction, guild, panelId, user);
+        await this.client.interactions._callback(mi, { type: 6 });
+        return this.mensagensMenu(mi, user, panelId);
       }
     });
 
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  async setModalSendMode(interaction, guild, panelId, user) {
-    await this.deferUpdate(interaction);
-    const panel = this.getPanel(guild, panelId);
-    panel.modalConfig.sendMode = panel.modalConfig.sendMode === 0 ? 1 : 0;
-    await this.save(guild);
-    return this.modalMenu(interaction, guild, panelId, user);
-  }
+  /* ═══════════════════════════════════════
+     SELECT MENU HUB
 
-  async setModalLogChannel(interaction, guild, panelId, user) {
-    await this.deferUpdate(interaction);
-    await this.followUpEphemeral(interaction, { content: 'Envie o canal de log (menção ou ID)' });
+     Cada opção do select carrega sua PRÓPRIA configuração
+     embutida (staff, nome do ticket, modal, form sequencial,
+     embed de boas-vindas) — SEM precisar criar outro painel.
+     Clicar numa opção abre um sub-painel só dela.
+  ═══════════════════════════════════════ */
 
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
+  async selectHubMenu(interaction, user, panelId, opts = {}) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const cfg   = panel.selectMenuConfig || { enabled: false, options: [] };
 
-    const id = this.extractId(msg.content);
-    if (!id) return this.followUpEphemeral(interaction, { content: '❌ Canal inválido' });
-
-    const panel = this.getPanel(guild, panelId);
-    if (!panel.modalConfig) panel.modalConfig = { enabled: false, title: 'Formulário do Ticket', sendMode: 0, logChannelId: null, fields: [] };
-    panel.modalConfig.logChannelId = id;
-    await this.save(guild);
-
-    this.followUpEphemeral(interaction, { content: '✅ Canal de log configurado!' });
-    return this.panelMenu(interaction, guild, panelId, user);
-  }
-
-  async removeLastField(interaction, guild, panelId, user) {
-    await this.deferUpdate(interaction);
-    const panel = this.getPanel(guild, panelId);
-    if (!panel.modalConfig?.fields?.length) return this.modalMenu(interaction, guild, panelId, user);
-    panel.modalConfig.fields.pop();
-    await this.save(guild);
-    return this.modalMenu(interaction, guild, panelId, user);
-  }
-
-  /* ═══════════════════════════════════════════
-     NOVO: MENU DE CARGOS AUTOMÁTICOS
-     ═══════════════════════════════════════════ */
-
-  async autoRoleMenu(interaction, guild, panelId, user) {
-    const panel   = this.getPanel(guild, panelId);
-    const premium = await this.isPremium(guild.guildId);
-
-    if (!premium) {
-      return this.followUpEphemeral(interaction, { content: '🔒 Cargos automáticos são exclusivos premium.' });
-    }
-
-    if (!panel.autoRoleConfig) {
-      panel.autoRoleConfig = { enabled: false, roles: [] };
-    }
-
-    const status   = panel.autoRoleConfig.enabled ? '🟢 Ativado' : '🔴 Desativado';
-    const tipoMap  = { 0: 'Permanente', 1: 'Temporário', 2: 'Vinculado' };
-    const rolesStr = panel.autoRoleConfig.roles.length
-      ? panel.autoRoleConfig.roles
-          .map(r => `<@&${r.roleId}> — ${tipoMap[r.tipo]}${r.tipo === 1 ? ` (${Math.floor(r.duration / 60000)}min)` : ''}`)
-          .join('\n')
-      : 'Nenhum';
-
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       '🏷️ Cargos Automáticos',
-        description: `Status: ${status}\n\n**Cargos configurados:**\n${rolesStr}`
-      }],
-      components: [
-        this.row(
-          this.btn(user, 'Ativar/Desativar', 3, async (i) => {
-            await this.deferUpdate(i);
-            panel.autoRoleConfig.enabled = !panel.autoRoleConfig.enabled;
-            await this.save(guild);
-            return this.autoRoleMenu(i, guild, panelId, user);
-          }),
-          this.btn(user, '➕ Adicionar Cargo', 1, i => this._addAutoRole(i, guild, panelId, user)),
-          this.btn(user, '🗑️ Remover Último',  4, async (i) => {
-            await this.deferUpdate(i);
-            if (panel.autoRoleConfig.roles?.length) panel.autoRoleConfig.roles.pop();
-            await this.save(guild);
-            return this.autoRoleMenu(i, guild, panelId, user);
-          })
-        ),
-        this.row(
-          this.btn(user, '⬅️ Voltar', 2, async (i) => {
-            await this.deferUpdate(i);
-            return this.panelMenu(i, guild, panelId, user);
-          })
-        )
-      ]
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Select Hub' : '▶️ Ativar Select Hub', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.enabled = !fp.selectMenuConfig.enabled;
+      await fd.save();
+      return this.selectHubMenu(i, user, panelId);
     });
+
+    const btnPlaceholder = this.btn(user, '✏️ Texto do Select', 2, async (i) => {
+      const resp = await this._ask(i, `${this._e('pensando')} Qual o texto exibido no select menu (placeholder)?`);
+      if (resp === null) return;
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).selectMenuConfig.placeholder = resp.trim().slice(0, 100);
+      await fd.save();
+      return this.selectHubMenu(i, user, panelId);
+    });
+
+    const btnAddOption = this.btn(user, '➕ Criar Opção', 1, async (i) => {
+      return this._selectAddOption(i, user, panelId);
+    }, { disabled: (cfg.options?.length || 0) >= 25 });
+
+    const components = [];
+
+    if (cfg.options?.length) {
+      const editSel = this.select(user, cfg.options.map(o => ({
+        label: `⚙️ ${o.label}`.slice(0, 100),
+        value: o.optionId,
+        description: 'Configurar staff, modal, form e embed desta opção',
+      })), '⚙️ Configurar uma opção existente', async (i) => {
+        await this.deferUpdate(i);
+        return this.selectOptionMenu(i, user, panelId, i.data.values[0]);
+      });
+      components.push(row(editSel));
+    }
+
+    const btnRemOption = this.btn(user, '🗑️ Remover Última Opção', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      this._findPanel(fd, panelId).selectMenuConfig.options.pop();
+      await fd.save();
+      return this.selectHubMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const optionsList = cfg.options?.length
+      ? cfg.options.map((o, i) => {
+          const completude = [
+            o.cargosStaff?.length ? '👥' : null,
+            o.embedBoasVindas ? '🎨' : null,
+            o.modalConfig?.enabled ? '📋' : null,
+            o.seqQuestionsConfig?.enabled ? '📝' : null,
+          ].filter(Boolean).join(' ') || '—';
+          return `\`${i + 1}.\` ${o.emoji || '▪️'} **${o.label}** ${completude}`;
+        }).join('\n')
+      : '_Nenhuma opção criada_';
+
+    const blocks = [
+      cv2Text(
+        `# 🧩 Select Menu ${this._e('animada')}\n` +
+        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
+        `Em vez de um botão só, mostro várias opções de atendimento!\n` +
+        `Cada uma com seu próprio staff, modal e formulário ${this._e('feliz')}\n\n` +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n\n` +
+        `**Opções (${cfg.options?.length || 0}/25):**\n${optionsList}`
+      ),
+      cv2Divider(),
+      row(btnToggle, btnPlaceholder),
+      row(btnAddOption, btnRemOption),
+      ...components,
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  async _addAutoRole(interaction, guild, panelId, user) {
-    // usa modal para capturar roleId + tipo + duração
+  async _selectAddOption(interaction, user, panelId) {
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Adicionar Cargo Automático',
+      title: 'Nova Opção do Select',
       components: [
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'role_id',
-            label:       'ID ou Menção do Cargo',
-            style:       1,
-            required:    true,
-            max_length:  100,
-            placeholder: '@Cargo ou 123456789012345678'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'tipo',
-            label: 'Tipo: 0=P 1=T 2=V',
-            style:       1,
-            required:    true,
-            max_length:  1,
-            placeholder: 'Tipo (0=Permanente | 1=Temporário | 2=Vinculado)'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'duration',
-            label:       'Duração em minutos (apenas para Temporário)',
-            style:       1,
-            required:    false,
-            max_length:  10,
-            placeholder: '60'
-          }]
-        }
+        { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Nome da opção', style: 1, required: true, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'description', label: 'Descrição (opcional)', style: 1, required: false, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'emoji', label: 'Emoji (opcional)', style: 1, required: false, max_length: 50 }] },
       ],
-      funcao: async (modalInteraction, client, fields) => {
-        const roleId = fields.role_id?.match(/\d{17,19}/)?.[0];
+      funcao: async (mi, _, fields) => {
+        const fd = await this._getGuildDoc(mi.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.selectMenuConfig = fp.selectMenuConfig || { enabled: true, options: [] };
+        fp.selectMenuConfig.options = fp.selectMenuConfig.options || [];
 
-        if (!roleId) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ ID de cargo inválido.', flags: 64 } } }
-          );
-        }
-
-        const tipo = Number(fields.tipo);
-        if (![0, 1, 2].includes(tipo)) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Tipo inválido. Use 0, 1 ou 2.', flags: 64 } } }
-          );
-        }
-
-        let duration = null;
-        if (tipo === 1) {
-          const mins = Number(fields.duration);
-          if (!mins || mins <= 0) {
-            return DiscordRequest(
-              `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-              { method: 'POST', body: { type: 4, data: { content: '❌ Duração inválida para cargo temporário.', flags: 64 } } }
-            );
-          }
-          duration = mins * 60_000;
-        }
-
-        const panelAtual = this.getPanel(guild, panelId);
-        if (!panelAtual.autoRoleConfig) panelAtual.autoRoleConfig = { enabled: false, roles: [] };
-        if (panelAtual.autoRoleConfig.roles.length >= 10) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Limite de 10 cargos automáticos atingido.', flags: 64 } } }
-          );
-        }
-
-        panelAtual.autoRoleConfig.roles.push({ roleId, tipo, duration });
-        await this.save(guild);
-
-        await DiscordRequest(
-          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-          { method: 'POST', body: { type: 6 } }
-        );
-
-        await this.followUpEphemeral(modalInteraction, { content: `✅ Cargo <@&${roleId}> adicionado!` });
-        return this.autoRoleMenu(modalInteraction, guild, panelId, user);
-      }
-    });
-
-    return this.client.interactions.showModal(interaction, modal);
-  }
-
-  /* ═══════════════════════════════════════════
-     NOVO: MENU DE TRANSCRIPT
-     ═══════════════════════════════════════════ */
-
-  async transcriptMenu(interaction, guild, panelId, user) {
-    const panel = this.getPanel(guild, panelId);
-
-    if (!panel.transcriptConfig) {
-      panel.transcriptConfig = { enabled: false, channelId: null, format: 'html', sendToUser: false };
-    }
-
-    const cfg    = panel.transcriptConfig;
-    const status = cfg.enabled ? '🟢 Ativado' : '🔴 Desativado';
-
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       '📄 Configuração de Transcript',
-        description: `Status: ${status}\n` +
-                     `Canal: ${cfg.channelId ? `<#${cfg.channelId}>` : 'Não definido'}\n` +
-                     `Formato: ${cfg.format?.toUpperCase() || 'HTML'}\n` +
-                     `Enviar ao usuário: ${cfg.sendToUser ? 'Sim' : 'Não'}`
-      }],
-      components: [
-        this.row(
-          this.btn(user, 'Ativar/Desativar', 3, async (i) => {
-            await this.deferUpdate(i);
-            panel.transcriptConfig.enabled = !panel.transcriptConfig.enabled;
-            await this.save(guild);
-            return this.transcriptMenu(i, guild, panelId, user);
-          }),
-          this.btn(user, 'Canal de Transcript', 1, async (i) => {
-            await this.deferUpdate(i);
-            return this._setTranscriptChannel(i, guild, panelId, user);
-          })
-        ),
-        this.row(
-          this.btn(user, 'Alternar Formato (HTML/TXT)', 2, async (i) => {
-            await this.deferUpdate(i);
-            panel.transcriptConfig.format = panel.transcriptConfig.format === 'html' ? 'txt' : 'html';
-            await this.save(guild);
-            return this.transcriptMenu(i, guild, panelId, user);
-          }),
-          this.btn(user, 'Enviar DM ao Usuário', 2, async (i) => {
-            await this.deferUpdate(i);
-            panel.transcriptConfig.sendToUser = !panel.transcriptConfig.sendToUser;
-            await this.save(guild);
-            return this.transcriptMenu(i, guild, panelId, user);
-          })
-        ),
-        this.row(
-          this.btn(user, '⬅️ Voltar', 2, async (i) => {
-            await this.deferUpdate(i);
-            return this.panelMenu(i, guild, panelId, user);
-          })
-        )
-      ]
-    });
-  }
-
-  async _setTranscriptChannel(interaction, guild, panelId, user) {
-    await this.followUpEphemeral(interaction, { content: 'Envie o canal de transcript (menção ou ID)' });
-
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
-
-    const id = this.extractId(msg.content);
-    if (!id) return this.followUpEphemeral(interaction, { content: '❌ Canal inválido' });
-
-    const panel = this.getPanel(guild, panelId);
-    panel.transcriptConfig.channelId = id;
-    await this.save(guild);
-
-    this.followUpEphemeral(interaction, { content: `✅ Canal de transcript definido como <#${id}>` });
-    return this.transcriptMenu(interaction, guild, panelId, user);
-  }
-
-  /* ═══════════════════════════════════════════
-     NOVO: MENU DE FORMULÁRIO SEQUENCIAL
-     ═══════════════════════════════════════════ */
-
-  async seqFormMenu(interaction, guild, panelId, user) {
-    const panel   = this.getPanel(guild, panelId);
-    const premium = await this.isPremium(guild.guildId);
-
-    if (!premium) {
-      return this.followUpEphemeral(interaction, { content: '🔒 Formulário sequencial é exclusivo premium.' });
-    }
-
-    if (!panel.seqQuestionsConfig) {
-      panel.seqQuestionsConfig = { enabled: false, sendMode: 0, logChannelId: null, timeout: 120_000, questions: [] };
-    }
-
-    const cfg    = panel.seqQuestionsConfig;
-    const status = cfg.enabled ? '🟢 Ativado' : '🔴 Desativado';
-
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       '📋 Formulário Sequencial (Chat)',
-        description: `Status: ${status}\n` +
-                     `Perguntas: ${cfg.questions.length}\n` +
-                     `Modo: ${cfg.sendMode === 0 ? '📨 Ticket' : '📂 Log'}\n` +
-                     `Log: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : 'Não definido'}\n` +
-                     `Timeout por resposta: ${Math.floor((cfg.timeout || 120_000) / 1000)}s`
-      }],
-      components: [
-        this.row(
-          this.btn(user, 'Ativar/Desativar', 3, async (i) => {
-            await this.deferUpdate(i);
-            panel.seqQuestionsConfig.enabled = !panel.seqQuestionsConfig.enabled;
-            await this.save(guild);
-            return this.seqFormMenu(i, guild, panelId, user);
-          }),
-          this.btn(user, '➕ Adicionar Pergunta', 1, i => this._addSeqQuestion(i, guild, panelId, user)),
-          this.btn(user, '🗑️ Remover Última',     4, async (i) => {
-            await this.deferUpdate(i);
-            if (cfg.questions?.length) cfg.questions.pop();
-            await this.save(guild);
-            return this.seqFormMenu(i, guild, panelId, user);
-          })
-        ),
-        this.row(
-          this.btn(user, 'Modo de Envio', 2, async (i) => {
-            await this.deferUpdate(i);
-            cfg.sendMode = cfg.sendMode === 0 ? 1 : 0;
-            await this.save(guild);
-            return this.seqFormMenu(i, guild, panelId, user);
-          }),
-          this.btn(user, 'Canal de Log', 1, async (i) => {
-            await this.deferUpdate(i);
-            return this._setSeqLogChannel(i, guild, panelId, user);
-          })
-        ),
-        this.row(
-          this.btn(user, '⬅️ Voltar', 2, async (i) => {
-            await this.deferUpdate(i);
-            return this.panelMenu(i, guild, panelId, user);
-          })
-        )
-      ]
-    });
-  }
-
-  async _addSeqQuestion(interaction, guild, panelId, user) {
-    const panel = this.getPanel(guild, panelId);
-
-    if (panel.seqQuestionsConfig.questions.length >= 10) {
-      return this.followUpEphemeral(interaction, { content: '❌ Limite de 10 perguntas atingido.' });
-    }
-
-    const modal = this.client.interactions.createModal({
-      user,
-      title: 'Adicionar Pergunta Sequencial',
-      components: [
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'label',
-            label:       'Pergunta',
-            style:       1,
-            required:    true,
-            max_length:  200,
-            placeholder: 'Ex: Qual é o seu problema?'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'placeholder',
-            label:       'Dica de resposta (opcional)',
-            style:       1,
-            required:    false,
-            max_length:  200,
-            placeholder: 'Ex: Descreva detalhadamente...'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'tipo',
-            label:       'Tipo (text | number | yesno)',
-            style:       1,
-            required:    true,
-            max_length:  10,
-            placeholder: 'text'
-          }]
-        }
-      ],
-      funcao: async (modalInteraction, client, fields) => {
-        const label = fields.label?.trim();
-        if (!label) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Pergunta inválida.', flags: 64 } } }
-          );
-        }
-
-        const tiposValidos = ['text', 'number', 'yesno', 'attachment', 'select'];
-        const tipo = tiposValidos.includes(fields.tipo?.trim()) ? fields.tipo.trim() : 'text';
-
-        const panelAtual = this.getPanel(guild, panelId);
-        panelAtual.seqQuestionsConfig.questions.push({
-          id:          'q_' + Date.now(),
-          label,
-          tipo,
-          required:    true,
-          placeholder: fields.placeholder?.trim() || '',
-          options:     [],
-          maxLength:   2000
-        });
-
-        await this.save(guild);
-
-        await DiscordRequest(
-          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-          { method: 'POST', body: { type: 6 } }
-        );
-
-        return this.seqFormMenu(modalInteraction, guild, panelId, user);
-      }
-    });
-
-    return this.client.interactions.showModal(interaction, modal);
-  }
-
-  async _setSeqLogChannel(interaction, guild, panelId, user) {
-    await this.followUpEphemeral(interaction, { content: 'Envie o canal de log do formulário (menção ou ID)' });
-
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
-
-    const id = this.extractId(msg.content);
-    if (!id) return this.followUpEphemeral(interaction, { content: '❌ Canal inválido' });
-
-    const panel = this.getPanel(guild, panelId);
-    panel.seqQuestionsConfig.logChannelId = id;
-    await this.save(guild);
-
-    this.followUpEphemeral(interaction, { content: `✅ Canal de log definido como <#${id}>` });
-    return this.seqFormMenu(interaction, guild, panelId, user);
-  }
-
-  /* ═══════════════════════════════════════════
-     NOVO: MENU SELECT MENU HUB
-     ═══════════════════════════════════════════ */
-
-  async selectHubMenu(interaction, guild, panelId, user) {
-    const panel = this.getPanel(guild, panelId);
-
-    if (!panel.selectMenuConfig) {
-      panel.selectMenuConfig = { enabled: false, placeholder: 'Selecione o tipo de atendimento', options: [] };
-    }
-
-    const cfg    = panel.selectMenuConfig;
-    const status = cfg.enabled ? '🟢 Ativado' : '🔴 Desativado';
-    const opts   = cfg.options.length
-      ? cfg.options.map((o, i) => `${i + 1}. **${o.label}** → painel \`${o.panelId}\``).join('\n')
-      : 'Nenhuma opção';
-
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title:       '🎛️ Select Menu Hub',
-        description: `Status: ${status}\n` +
-                     `Placeholder: ${cfg.placeholder}\n\n` +
-                     `**Opções:**\n${opts}`
-      }],
-      components: [
-        this.row(
-          this.btn(user, 'Ativar/Desativar', 3, async (i) => {
-            await this.deferUpdate(i);
-            panel.selectMenuConfig.enabled = !panel.selectMenuConfig.enabled;
-            await this.save(guild);
-            return this.selectHubMenu(i, guild, panelId, user);
-          }),
-          this.btn(user, '➕ Adicionar Opção', 1, i => this._addSelectOption(i, guild, panelId, user)),
-          this.btn(user, '🗑️ Remover Última',  4, async (i) => {
-            await this.deferUpdate(i);
-            if (cfg.options?.length) cfg.options.pop();
-            await this.save(guild);
-            return this.selectHubMenu(i, guild, panelId, user);
-          })
-        ),
-        this.row(
-          this.btn(user, 'Editar Placeholder', 2, async (i) => {
-            await this.deferUpdate(i);
-            return this._setSelectPlaceholder(i, guild, panelId, user);
-          }),
-          this.btn(user, '⬅️ Voltar', 2, async (i) => {
-            await this.deferUpdate(i);
-            return this.panelMenu(i, guild, panelId, user);
-          })
-        )
-      ]
-    });
-  }
-
-  async _addSelectOption(interaction, guild, panelId, user) {
-    const panel = this.getPanel(guild, panelId);
-
-    if (panel.selectMenuConfig.options.length >= 25) {
-      return this.followUpEphemeral(interaction, { content: '❌ Limite de 25 opções atingido.' });
-    }
-
-    const modal = this.client.interactions.createModal({
-      user,
-      title: 'Adicionar Opção ao Select Menu',
-      components: [
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'label',
-            label:       'Label (máx. 25 caracteres)',
-            style:       1,
-            required:    true,
-            max_length:  25,
-            placeholder: 'Ex: Suporte Técnico'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'description',
-            label:       'Descrição (opcional, máx. 50 caracteres)',
-            style:       1,
-            required:    false,
-            max_length:  50,
-            placeholder: 'Ex: Para problemas técnicos'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'emoji',
-            label:       'Emoji (opcional)',
-            style:       1,
-            required:    false,
-            max_length:  10,
-            placeholder: '🎫'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type:        4,
-            custom_id:   'panel_id',
-            label:       'ID do Painel de destino',
-            style:       1,
-            required:    true,
-            max_length:  100,
-            placeholder: 'Ex: panel_1234567890'
-          }]
-        }
-      ],
-      funcao: async (modalInteraction, client, fields) => {
-        const label   = fields.label?.trim();
-        const panelIdDest = fields.panel_id?.trim();
-
-        if (!label || !panelIdDest) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: '❌ Label e ID do painel são obrigatórios.', flags: 64 } } }
-          );
-        }
-
-        // verifica se o painel de destino existe
-        const destPanel = this.getPanel(guild, panelIdDest);
-        if (!destPanel) {
-          return DiscordRequest(
-            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: `❌ Painel \`${panelIdDest}\` não encontrado.`, flags: 64 } } }
-          );
-        }
-
-        const panelAtual = this.getPanel(guild, panelId);
-        panelAtual.selectMenuConfig.options.push({
-          label,
+        const optionId = this._uid();
+        fp.selectMenuConfig.options.push({
+          optionId,
+          label:       fields.label.trim(),
           description: fields.description?.trim() || '',
           emoji:       fields.emoji?.trim() || null,
-          panelId:     panelIdDest
+          cargosStaff: [],
+          ticketChatName: null,
+          embedBoasVindas: null,
+          modalConfig:        { enabled: false, fields: [] },
+          seqQuestionsConfig: { enabled: false, questions: [], timeout: 60000 },
         });
+        await fd.save();
 
-        await this.save(guild);
+        await this.client.interactions._callback(mi, { type: 6 });
 
-        await DiscordRequest(
-          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-          { method: 'POST', body: { type: 6 } }
-        );
-
-        return this.selectHubMenu(modalInteraction, guild, panelId, user);
+        // Abre direto o sub-painel da opção recém-criada — sem
+        // precisar de outro painelId, exatamente como pedido.
+        return this.selectOptionMenu(mi, user, panelId, optionId, {
+          successMsg: `${this._e('festa')} Opção **${fields.label.trim()}** criada! Configure-a abaixo.`
+        });
       }
     });
 
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  async _setSelectPlaceholder(interaction, guild, panelId, user) {
-    await this.followUpEphemeral(interaction, { content: 'Envie o novo placeholder do select menu:' });
+  /**
+   * Sub-painel de UMA opção do select. Tudo aqui vive dentro do
+   * próprio objeto da opção (panel.selectMenuConfig.options[i]) —
+   * não existe "outro painel" por trás disso.
+   */
+  async selectOptionMenu(interaction, user, panelId, optionId, opts = {}) {
+    const doc    = await this._getGuildDoc(interaction.guild_id);
+    const panel  = this._findPanel(doc, panelId);
+    const option = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
 
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); }
-    catch { return; }
+    if (!option) {
+      return this.followUpEphemeral(interaction, cv2Payload([cv2Text(`❌ Opção não encontrada.`)]));
+    }
 
-    const panel = this.getPanel(guild, panelId);
-    panel.selectMenuConfig.placeholder = msg.content.slice(0, 150);
-    await this.save(guild);
-
-    this.followUpEphemeral(interaction, { content: '✅ Placeholder atualizado!' });
-    return this.selectHubMenu(interaction, guild, panelId, user);
-  }
-
-  /* ═══════════════════════════════════════════
-     DELETE PANEL — sem alteração
-     ═══════════════════════════════════════════ */
-
-  async deletePanel(interaction, guild, panelId, user) {
-    guild.ticket = guild.ticket.filter(p => p.panelId !== panelId);
-    await this.save(guild);
-    return this.startSetup(interaction);
-  }
-
-  /* ═══════════════════════════════════════════
-     PERMISSÕES — sem alteração
-     ═══════════════════════════════════════════ */
-
-  async checkBotPermissions(interaction, panel) {
-    try {
-      const guildId = interaction.guild_id;
-
-      const guildPerms = await getPerm({ guildId, bot: true });
-
-      const baseChannelId = panel.tipoDeCriacao === 0
-        ? panel.categoriaId || interaction.channel_id
-        : interaction.channel_id;
-
-      const channelPerms = await getPerm({ guildId, channel: true, id: baseChannelId, bot: true });
-
-      const required = new Set();
-
-      if (panel.tipoDeCriacao === 0) {
-        required.add('VIEW_CHANNEL');
-        required.add('SEND_MESSAGES');
-        required.add('MANAGE_CHANNELS');
-      }
-
-      if (panel.tipoDeCriacao === 1) {
-        required.add('VIEW_CHANNEL');
-        required.add('SEND_MESSAGES');
-        required.add('CREATE_PUBLIC_THREADS');
-        required.add('SEND_MESSAGES_IN_THREADS');
-      }
-
-      if (panel.tipoDeCriacao === 2) {
-        required.add('VIEW_CHANNEL');
-        required.add('SEND_MESSAGES');
-        required.add('CREATE_PRIVATE_THREADS');
-        required.add('SEND_MESSAGES_IN_THREADS');
-        required.add('MANAGE_THREADS');
-      }
-
-      const missing = [];
-      for (const perm of required) {
-        if (!guildPerms.includes(perm) || !channelPerms.includes(perm)) {
-          missing.push(perm);
+    const btnEmbed = this.btn(user, option.embedBoasVindas ? '🎨 Editar Embed' : '✨ Criar Embed', 1, async (i) => {
+      return EmbedBuilderUI.open(i, this.client, {
+        user,
+        existingEmbed: option.embedBoasVindas,
+        title: `Embed de Boas-Vindas — ${option.label}`,
+        onDone: async (rootInteraction, embedResult) => {
+          const fd = await this._getGuildDoc(rootInteraction.guild_id);
+          const fp = this._findPanel(fd, panelId);
+          const fo = fp.selectMenuConfig.options.find(o => o.optionId === optionId);
+          fo.embedBoasVindas = embedResult;
+          await fd.save();
+          return this.selectOptionMenu(rootInteraction, user, panelId, optionId, {
+            successMsg: embedResult ? `${this._e('curtida')} Embed de boas-vindas atualizada!` : `${this._e('emduvida')} Embed removida.`
+          });
         }
+      });
+    });
+
+    const roleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: '👥 Adicionar cargo staff desta opção', max_values: 5 },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        const fo = fp.selectMenuConfig.options.find(o => o.optionId === optionId);
+        fo.cargosStaff = [...new Set([...(fo.cargosStaff || []), ...i.data.values])];
+        await fd.save();
+        return this.selectOptionMenu(i, user, panelId, optionId);
       }
+    });
 
-      return { ok: missing.length === 0, missing: this.formatPermissions(missing) };
+    const btnClearStaff = this.btn(user, '🧹 Limpar Staff', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).cargosStaff = [];
+      await fd.save();
+      return this.selectOptionMenu(i, user, panelId, optionId);
+    });
 
-    } catch (err) {
-      console.error('Erro ao verificar permissões:', err);
-      return { ok: false, missing: ['Erro ao verificar permissões'] };
+    const btnNome = this.btn(user, '✏️ Nome do Ticket', 2, async (i) => {
+      const resp = await this._ask(i, `${this._e('pensando')} Nome dos tickets criados por esta opção? Use \`{count}\` para o número.`);
+      if (resp === null) return;
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).ticketChatName = resp.trim().slice(0, 90);
+      await fd.save();
+      return this.selectOptionMenu(i, user, panelId, optionId);
+    });
+
+    const btnModal = this.btn(user, `📋 Modal (${option.modalConfig?.enabled ? 'Ativo' : 'Inativo'})`, 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.selectOptionModalMenu(i, user, panelId, optionId);
+    });
+
+    const btnSeqForm = this.btn(user, `📝 Form Sequencial (${option.seqQuestionsConfig?.enabled ? 'Ativo' : 'Inativo'})`, 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+    });
+
+    const btnDelete = this.btn(user, '🗑️ Excluir Opção', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options = fp.selectMenuConfig.options.filter(o => o.optionId !== optionId);
+      await fd.save();
+      return this.selectHubMenu(i, user, panelId, { successMsg: `${this._e('chorando')} Opção **${option.label}** excluída.` });
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.selectHubMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(
+        `# ${option.emoji || '⚙️'} ${option.label} ${this._e('feliz')}\n` +
+        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
+        `> 🎨 Embed: ${option.embedBoasVindas ? 'pronta!' : 'falta criar'}\n` +
+        `> 🛡️ Staff: ${option.cargosStaff?.length ? option.cargosStaff.map(r => `<@&${r}>`).join(', ') : 'ninguém ainda'}\n` +
+        `> 🏷️ Nome: \`${option.ticketChatName || panel.ticketChatName || 'ticket-{count}'}\``
+      ),
+      cv2Divider(),
+      row(btnEmbed, btnModal, btnSeqForm),
+      row(roleSel),
+      row(btnClearStaff, btnNome),
+      cv2Divider(),
+      row(btnDelete, btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  /* ── Modal embutido na opção ── */
+
+  async selectOptionModalMenu(interaction, user, panelId, optionId, opts = {}) {
+    const doc    = await this._getGuildDoc(interaction.guild_id);
+    const panel  = this._findPanel(doc, panelId);
+    const option = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
+    const cfg    = option.modalConfig || { enabled: false, fields: [] };
+
+    const fieldsList = cfg.fields?.length
+      ? cfg.fields.map((f, i) => `\`${i + 1}.\` **${f.label}** (${f.style === 2 ? 'parágrafo' : 'curto'})${f.required ? ' *obrigatório*' : ''}`).join('\n')
+      : '_Nenhum campo adicionado_';
+
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Modal' : '▶️ Ativar Modal', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).modalConfig.enabled = !cfg.enabled;
+      await fd.save();
+      return this.selectOptionModalMenu(i, user, panelId, optionId);
+    });
+
+    const btnTitulo = this.btn(user, '✏️ Título do Modal', 2, async (i) => {
+      const resp = await this._ask(i, `${this._e('pensando')} Título do modal desta opção?`);
+      if (resp === null) return;
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).modalConfig.title = resp.trim().slice(0, 45);
+      await fd.save();
+      return this.selectOptionModalMenu(i, user, panelId, optionId);
+    });
+
+    const btnAddField = this.btn(user, '➕ Adicionar Campo', 1, async (i) => {
+      return this._selectOptionModalAddField(i, user, panelId, optionId);
+    }, { disabled: (cfg.fields?.length || 0) >= 5 });
+
+    const btnRemField = this.btn(user, '🗑️ Remover Último Campo', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).modalConfig.fields.pop();
+      await fd.save();
+      return this.selectOptionModalMenu(i, user, panelId, optionId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.selectOptionMenu(i, user, panelId, optionId);
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 📋 Modal — ${option.label} ${this._e('feliz')}\n` +
+        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
+        `> Título: \`${cfg.title || 'Formulário de Atendimento'}\`\n\n` +
+        `**Campos (${cfg.fields?.length || 0}/5):**\n${fieldsList}`
+      ),
+      cv2Divider(),
+      row(btnToggle, btnTitulo),
+      row(btnAddField, btnRemField),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async _selectOptionModalAddField(interaction, user, panelId, optionId) {
+    const modal = this.client.interactions.createModal({
+      user,
+      title: 'Adicionar Campo do Modal',
+      components: [
+        { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Pergunta/Label do campo', style: 1, required: true, max_length: 45 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: 'Placeholder (opcional)', style: 1, required: false, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'style', label: 'Estilo: curto ou paragrafo', style: 1, required: true, max_length: 10, placeholder: 'curto' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatório? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
+      ],
+      funcao: async (mi, _, fields) => {
+        const fd = await this._getGuildDoc(mi.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        const fo = fp.selectMenuConfig.options.find(o => o.optionId === optionId);
+        fo.modalConfig = fo.modalConfig || { enabled: true, fields: [] };
+        fo.modalConfig.fields = fo.modalConfig.fields || [];
+        fo.modalConfig.fields.push({
+          customId:    this._uid(),
+          label:       fields.label.trim(),
+          placeholder: fields.placeholder?.trim() || '',
+          style:       (fields.style || '').toLowerCase().startsWith('par') ? 2 : 1,
+          required:    !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
+        });
+        await fd.save();
+
+        await this.client.interactions._callback(mi, { type: 6 });
+        return this.selectOptionModalMenu(mi, user, panelId, optionId, { successMsg: `${this._e('curtida')} Campo adicionado!` });
+      }
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
+  }
+
+  /* ── Form Sequencial embutido na opção (com tempo personalizável) ── */
+
+  async selectOptionSeqFormMenu(interaction, user, panelId, optionId, opts = {}) {
+    const doc    = await this._getGuildDoc(interaction.guild_id);
+    const panel  = this._findPanel(doc, panelId);
+    const option = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
+    const cfg    = option.seqQuestionsConfig || { enabled: false, questions: [], timeout: 60000 };
+    const timeoutSec = Math.round((cfg.timeout ?? 60000) / 1000);
+
+    const questionsList = cfg.questions?.length
+      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label}${q.required ? ' *obrigatória*' : ''}`).join('\n')
+      : '_Nenhuma pergunta adicionada_';
+
+    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Form' : '▶️ Ativar Form', cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).seqQuestionsConfig.enabled = !cfg.enabled;
+      await fd.save();
+      return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+    });
+
+    const btnAddQ = this.btn(user, '➕ Adicionar Pergunta', 1, async (i) => {
+      return this._selectOptionSeqAddQuestion(i, user, panelId, optionId);
+    }, { disabled: (cfg.questions?.length || 0) >= 10 });
+
+    const btnRemQ = this.btn(user, '🗑️ Remover Última', 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).seqQuestionsConfig.questions.pop();
+      await fd.save();
+      return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+    });
+
+    const timeoutSel = this.select(user, [
+      { label: '30 segundos',  value: '30'  },
+      { label: '1 minuto',     value: '60'  },
+      { label: '2 minutos',    value: '120' },
+      { label: '5 minutos',    value: '300' },
+      { label: '10 minutos',   value: '600' },
+      { label: '✏️ Personalizado (digitar)', value: 'custom' },
+    ], `⏱️ Tempo por pergunta — Atual: ${timeoutSec}s`, async (i) => {
+      if (i.data.values[0] === 'custom') {
+        const resp = await this._ask(i, `${this._e('pensando')} Quantos **segundos** para responder cada pergunta? *(5 a 600)*`);
+        if (resp === null) return;
+        const sec = parseInt(resp);
+        if (!sec || sec < 5 || sec > 600) {
+          await this.followUpEphemeral(i, cv2Payload([cv2Text(`${this._e('emduvida')} Valor inválido! Use entre 5 e 600 segundos.`)], { ephemeral: true }));
+          return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+        }
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.selectMenuConfig.options.find(o => o.optionId === optionId).seqQuestionsConfig.timeout = sec * 1000;
+        await fd.save();
+        return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+      }
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).seqQuestionsConfig.timeout = Number(i.data.values[0]) * 1000;
+      await fd.save();
+      return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.selectOptionMenu(i, user, panelId, optionId);
+    });
+
+    const sendModeSel = this.select(user, [
+      { label: '🎫 Só no ticket', value: '0', description: cfg.sendMode === 0 ? 'Selecionado' : undefined },
+      { label: '📋 Canal de log', value: '1', description: cfg.sendMode === 1 ? 'Selecionado' : undefined },
+    ], '📤 Onde mandar as respostas?', async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._findPanel(fd, panelId);
+      fp.selectMenuConfig.options.find(o => o.optionId === optionId).seqQuestionsConfig.sendMode = Number(i.data.values[0]);
+      await fd.save();
+      return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+    });
+
+    const logChSel = this.client.interactions.createChannelSelect({
+      user, data: { placeholder: '📋 Canal de log das respostas', channel_types: [0, 5] },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        fp.selectMenuConfig.options.find(o => o.optionId === optionId).seqQuestionsConfig.logChannelId = i.data.values[0];
+        await fd.save();
+        return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
+      }
+    });
+
+    const blocks = [
+      cv2Text(
+        `# 📝 Form Sequencial — ${option.label} ${this._e('animada')}\n` +
+        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
+        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
+        `> Tempo por pergunta: ${timeoutSec}s\n` +
+        `> Resumo vai pra: ${cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : '🎫 o próprio ticket'}\n\n` +
+        `**Perguntas (${cfg.questions?.length || 0}/10):**\n${questionsList}`
+      ),
+      cv2Divider(),
+      row(btnToggle, btnAddQ, btnRemQ),
+      row(timeoutSel),
+      row(sendModeSel),
+      ...(cfg.sendMode === 1 ? [row(logChSel)] : []),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async _selectOptionSeqAddQuestion(interaction, user, panelId, optionId) {
+    const modal = this.client.interactions.createModal({
+      user,
+      title: 'Adicionar Pergunta',
+      components: [
+        { type: 1, components: [{ type: 4, custom_id: 'text', label: 'Texto da pergunta', style: 2, required: true, max_length: 300 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatória? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
+      ],
+      funcao: async (mi, _, fields) => {
+        const fd = await this._getGuildDoc(mi.guild_id);
+        const fp = this._findPanel(fd, panelId);
+        const fo = fp.selectMenuConfig.options.find(o => o.optionId === optionId);
+        fo.seqQuestionsConfig = fo.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
+        fo.seqQuestionsConfig.questions = fo.seqQuestionsConfig.questions || [];
+        fo.seqQuestionsConfig.questions.push({
+          id:       this._uid(),
+          label:    fields.text.trim(),
+          required: !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
+        });
+        await fd.save();
+
+        await this.client.interactions._callback(mi, { type: 6 });
+        return this.selectOptionSeqFormMenu(mi, user, panelId, optionId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` });
+      }
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
+  }
+
+  /* ═══════════════════════════════════════
+     CRIAÇÃO DE TICKETS (runtime)
+  ═══════════════════════════════════════ */
+
+  /** Botão "Abrir Ticket" — painel sem select hub. */
+  async createFromButton(interaction) {
+    const data  = JSON.parse(interaction.data.custom_id);
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, data.p);
+    if (!panel) return this.reply(interaction, { content: '❌ Painel não encontrado.', flags: 64 });
+
+    return this._startTicketFlow(interaction, doc, panel, null);
+  }
+
+  /** Select Menu Hub — usuário escolheu uma opção. */
+  async createFromSelect(interaction) {
+    const data    = JSON.parse(interaction.data.custom_id);
+    const doc     = await this._getGuildDoc(interaction.guild_id);
+    const panel   = this._findPanel(doc, data.p);
+    if (!panel) return this.reply(interaction, { content: '❌ Painel não encontrado.', flags: 64 });
+
+    const optionId = interaction.data.values[0];
+    const option    = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
+    if (!option) return this.reply(interaction, { content: '❌ Opção não encontrada.', flags: 64 });
+
+    return this._startTicketFlow(interaction, doc, panel, option);
+  }
+
+  /**
+   * Fluxo de criação compartilhado entre botão único e select hub.
+   * `option` é null quando vem do botão (usa config do painel raiz);
+   * quando vem do select, mescla: staff/nome/modal/form/embed da
+   * OPÇÃO, e canal/categoria/tipo do PAINEL raiz.
+   */
+  async _startTicketFlow(interaction, doc, panel, option) {
+    const modalCfg = option?.modalConfig?.enabled ? option.modalConfig : (panel.modalConfig?.enabled ? panel.modalConfig : null);
+
+    if (modalCfg) {
+      return this._openTicketModal(interaction, panel, option, modalCfg);
     }
+
+    await this.deferUpdate(interaction);
+    return this._createTicketChannel(interaction, panel, option, {}, false);
   }
 
-  formatPermissions(perms = []) {
-    const translate = {
-      VIEW_CHANNEL:              'Ver Canal',
-      SEND_MESSAGES:             'Enviar Mensagens',
-      MANAGE_CHANNELS:           'Gerenciar Canais',
-      MANAGE_THREADS:            'Gerenciar Tópicos',
-      CREATE_PUBLIC_THREADS:     'Criar Tópicos Públicos',
-      CREATE_PRIVATE_THREADS:    'Criar Tópicos Privados',
-      SEND_MESSAGES_IN_THREADS:  'Enviar Mensagens em Tópicos',
-      MANAGE_ROLES:              'Gerenciar Cargos'
-    };
-    return perms.map(p => translate[p] || p);
+  async _openTicketModal(interaction, panel, option, modalCfg) {
+    const modal = this.client.interactions.createModal({
+      user:  interaction.member?.user?.id || interaction.user?.id,
+      title: modalCfg.title || 'Formulário de Atendimento',
+      components: (modalCfg.fields || []).slice(0, 5).map(f => ({
+        type: 1,
+        components: [{
+          type: 4, custom_id: f.customId, label: f.label.slice(0, 45),
+          style: f.style || 1, required: f.required ?? true,
+          placeholder: f.placeholder || undefined, max_length: 1000,
+        }]
+      })),
+      funcao: async (mi, _, fields) => {
+        // type 5 (defer de canal NOVO) — modal_submit não tem uma
+        // mensagem existente pra "atualizar" (type 6), é uma
+        // interação independente, igual um slash command.
+        await DiscordRequest(
+          `/interactions/${mi.id}/${mi.token}/callback`,
+          { method: 'POST', body: { type: 5, data: { flags: 64 } } }
+        );
+        return this._createTicketChannel(mi, panel, option, fields, true);
+      }
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
   }
 
-  async checkSendPanelPermissions(guildId, channelId) {
+  async _createTicketChannel(interaction, panel, option, modalAnswers, isModalFlow = false) {
+    const guildId = interaction.guild_id;
+    const userId  = interaction.member?.user?.id || interaction.user?.id;
+
+    // Recarrega do banco para evitar usar config desatualizada — o
+    // `panel` recebido como parâmetro foi capturado no início da
+    // interação e pode estar obsoleto se algo mudou nesse meio-tempo
+    // (ex: admin editando o painel enquanto o usuário preenchia o
+    // modal). A partir daqui, `fp` é a fonte de verdade.
+    const fresh = await this._getGuildDoc(guildId);
+    const fp    = this._findPanel(fresh, panel.panelId);
+    fp.contadorTicket = (fp.contadorTicket || 0) + 1;
+    const count = fp.contadorTicket;
+    await fresh.save();
+
+    // Se veio de uma opção do select, busca a mesma opção dentro do
+    // documento fresh (para refletir eventuais edições recentes nela também)
+    const fo = option ? fp.selectMenuConfig?.options?.find(o => o.optionId === option.optionId) : null;
+
+    const nameTemplate = fo?.ticketChatName || fp.ticketChatName || 'ticket-{count}';
+    const channelName  = nameTemplate.replaceAll('{count}', String(count)).slice(0, 90);
+
+    const staffRoles = fo?.cargosStaff?.length ? fo.cargosStaff : (fp.cargosStaff || []);
+
+    const permissionOverwrites = [
+      { id: guildId, deny: '1024' }, // @everyone: VIEW_CHANNEL deny
+      { id: userId,  allow: '3072' }, // criador: VIEW_CHANNEL + SEND_MESSAGES
+      ...staffRoles.map(roleId => ({ id: roleId, allow: '3072' })),
+    ];
+
+    const channel = await DiscordRequest(`/guilds/${guildId}/channels`, {
+      method: 'POST',
+      body: {
+        name: channelName,
+        type: 0,
+        parent_id: fp.categoriaId || undefined,
+        permission_overwrites: permissionOverwrites,
+        // Guarda o panelId no tópico do canal — assim o custom_id do
+        // botão Fechar pode ficar só com o channelId (sempre curto e
+        // dentro do limite de 100 chars do Discord, já que panelId é
+        // uma string livre escolhida pelo usuário e pode ser longa).
+        topic: `ticket:${panel.panelId}`,
+      }
+    });
+
+    // Auto-cargo (abrir) — fp.panelId é usado internamente para
+    // rastrear cargos "vinculados" (tipo 2) por ticket.
+    if (fp.autoRoleConfig?.enabled) {
+      await this.autoRoleManager.applyRoles({
+        guildId, userId, ticketId: channel.id, panel: fp
+      }).catch(err => console.error('[TicketSystem] Erro ao aplicar auto-cargo:', err));
+    }
+
+    // Mensagem "Ticket Criado" — personalizada
+    const tituloCriado = resolveMsg(fp, 'ticketCriadoTitulo', '🎫 Ticket Criado');
+    const descCriado    = resolveMsg(fp, 'ticketCriadoDescricao',
+      'Olá {user}! Sua solicitação foi recebida.\nUm membro da equipe responderá em breve.',
+      { userId }
+    );
+
+    const embedBoasVindas = fo?.embedBoasVindas || fp.painelPrincipal;
+
+    const respostasText = Object.keys(modalAnswers).length
+      ? Object.entries(modalAnswers).map(([k, v]) => `**${k}:** ${v}`).join('\n')
+      : null;
+
+    const fecharLabel = resolveMsg(fp, 'fecharBotaoLabel', 'Fechar Ticket');
+
+    await DiscordRequest(`/channels/${channel.id}/messages`, {
+      method: 'POST',
+      body: {
+        content: `<@${userId}>` + (staffRoles.length ? ` ${staffRoles.map(r => `<@&${r}>`).join(' ')}` : ''),
+        embeds: [
+          { title: tituloCriado, description: descCriado, color: 0x7C8FFF },
+          ...(embedBoasVindas ? [embedBoasVindas] : []),
+          ...(respostasText ? [{ title: resolveMsg(fp, 'modalRespostasTitulo', '📋 Respostas do Formulário'), description: respostasText, color: 0xFFD966 }] : []),
+        ],
+        components: [{
+          type: 1,
+          components: [{ type: 2, style: 4, label: fecharLabel, custom_id: JSON.stringify({ t: 'close_ticket_v2', ch: channel.id, u: userId }) }]
+        }]
+      }
+    });
+
+    // Form sequencial — personalizado
+    const seqCfg = fo?.seqQuestionsConfig?.enabled ? fo.seqQuestionsConfig : (fp.seqQuestionsConfig?.enabled ? fp.seqQuestionsConfig : null);
+    if (seqCfg) {
+      const seqManager = new SeqQuestionsManager(this.client);
+      seqManager.run({
+        panel:     { seqQuestionsConfig: seqCfg }, // run() espera panel.seqQuestionsConfig
+        channelId: channel.id,
+        userId,
+        messages: {
+          inicioTitulo:      resolveMsg(fp, 'seqInicioTitulo', '📋 Formulário de Atendimento'),
+          inicioDescricao:   resolveMsg(fp, 'seqInicioDescricao', 'Olá {user}! Vou te fazer algumas perguntas.\nVocê tem {timeout}s para responder cada uma.', { userId, timeout: Math.round((seqCfg.timeout ?? 60000) / 1000) }),
+          canceladoMensagem: resolveMsg(fp, 'seqCanceladoMensagem', '⚠️ Formulário encerrado.'),
+          resumoTitulo:      resolveMsg(fp, 'seqResumoTitulo', '✅ Respostas Recebidas'),
+        }
+      }).catch(err => console.error('[TicketSystem] Erro no form sequencial:', err));
+    }
+
+    const successMsg = `${this._e('feliz') || '✅'} Ticket criado em <#${channel.id}>!`;
+
+    if (isModalFlow) {
+      // Veio de modal_submit (defer type 5) — completa com PATCH @original.
+      return DiscordRequest(
+        `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
+        { method: 'PATCH', body: { content: successMsg } }
+      );
+    }
+
+    // Veio de botão/select direto (defer type 6) — manda uma mensagem nova.
+    return this.followUpEphemeral(interaction, { content: successMsg });
+  }
+
+  /* ─────────────────────────────────────── */
+
+  async closeTicket(interaction) {
+    const data      = JSON.parse(interaction.data.custom_id);
+    const closedBy  = interaction.member?.user?.id || interaction.user?.id; // quem clicou em fechar
+    const ownerId   = data.u || closedBy; // dono original do ticket (quem o abriu)
+
+    // O panelId não vai mais no custom_id (pode ser longo e estourar
+    // o limite de 100 chars do Discord) — recupera do tópico do canal,
+    // que foi gravado como "ticket:{panelId}" na criação.
+    let panelId = null;
     try {
-      const perms    = await getPerm({ guildId, channel: true, id: channelId, bot: true });
-      const required = ['VIEW_CHANNEL', 'SEND_MESSAGES', 'EMBED_LINKS'];
-      const missing  = required.filter(p => !perms.includes(p));
-      return { ok: missing.length === 0, missing: this.formatPermissions(missing) };
+      const channelInfo = await DiscordRequest(`/channels/${data.ch}`);
+      console.log('[DIAG-TRANSCRIPT] channelInfo.topic:', JSON.stringify(channelInfo?.topic));
+      panelId = channelInfo?.topic?.startsWith('ticket:') ? channelInfo.topic.slice('ticket:'.length) : null;
+      console.log('[DIAG-TRANSCRIPT] panelId resolvido:', panelId);
     } catch (err) {
-      console.error('Erro ao verificar permissões do painel:', err);
-      return { ok: false, missing: ['Erro ao verificar permissões'] };
+      console.error('[TicketSystem] Erro ao buscar tópico do canal para resolver panelId:', err);
     }
+
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = panelId ? this._findPanel(doc, panelId) : null;
+    console.log('[DIAG-TRANSCRIPT] panel encontrado?', !!panel, '| transcriptConfig:', JSON.stringify(panel?.transcriptConfig));
+
+    const fechandoMsg = resolveMsg(panel, 'fechandoMensagem', '⛔ Este ticket será fechado em 10 segundos...');
+
+    await this.reply(interaction, { content: fechandoMsg });
+
+    // Transcript
+    if (panel?.transcriptConfig?.enabled) {
+      console.log('[DIAG-TRANSCRIPT] transcriptConfig.enabled=true, channelId:', panel.transcriptConfig.channelId, '— chamando generate()...');
+      const transcriptManager = new TranscriptManager(this.client);
+      await transcriptManager.generate({
+        interaction, // interaction.channel_id == canal do ticket sendo fechado
+        panel,
+        closedBy,
+        messages: {
+          canalTitulo: resolveMsg(panel, 'transcriptTitulo', '📄 Transcript'),
+          dmTitulo:    resolveMsg(panel, 'transcriptDmTitulo', '📄 Seu Transcript'),
+          dmDescricao: resolveMsg(panel, 'transcriptDmDescricao', 'Aqui está o histórico do seu atendimento, {user}!', { userId: ownerId }),
+        }
+      }).then(() => console.log('[DIAG-TRANSCRIPT] generate() concluiu sem lançar erro'))
+        .catch(err => console.error('[TicketSystem] Erro ao gerar transcript:', err));
+    } else {
+      console.log('[DIAG-TRANSCRIPT] Transcript NÃO disparado — panel existe?', !!panel, '| enabled?', panel?.transcriptConfig?.enabled);
+    }
+
+    // Auto-cargo (fechar) — remove cargos "vinculados" (tipo 2) do
+    // DONO do ticket, se não houver outro ticket ativo sustentando.
+    if (panel?.autoRoleConfig?.enabled) {
+      await this.autoRoleManager.handleTicketClose({
+        guildId: interaction.guild_id, userId: ownerId, ticketId: data.ch
+      }).catch(err => console.error('[TicketSystem] Erro ao processar auto-cargo no fechamento:', err));
+    }
+
+    setTimeout(() => {
+      DiscordRequest(`/channels/${data.ch}`, { method: 'DELETE' }).catch(() => {});
+    }, 10_000);
   }
 }
 

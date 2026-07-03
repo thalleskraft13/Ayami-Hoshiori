@@ -341,17 +341,71 @@ const transcriptConfigSchema = new Schema({
   sendToUser: { type: Boolean, default: false  }
 }, { _id: false });
 
+/**
+ * Opção do Select Menu Hub — CONFIGURAÇÃO EMBUTIDA.
+ *
+ * Em vez de referenciar outro panelId (que exigia criar um segundo
+ * painel inteiro só para configurar uma opção do select), cada
+ * opção carrega sua PRÓPRIA configuração de:
+ *   - staff (cargos que veem o ticket desta opção)
+ *   - nome do ticket (template)
+ *   - modal personalizado
+ *   - formulário sequencial
+ *   - embed de boas-vindas (mostrada dentro do ticket criado)
+ *
+ * Categoria, canal de envio e tipo de criação (canal/thread) NÃO
+ * são configuráveis por opção — esses continuam vindo do painel
+ * raiz, já que todo o select hub é enviado num único canal.
+ */
 const selectMenuOptionSchema = new Schema({
-  label:       { type: String, required: true },
-  description: { type: String, default: ""   },
-  emoji:       { type: String, default: null },
-  panelId:     { type: String, required: true }
+  optionId:       { type: String, required: true }, // id interno único da opção
+  label:          { type: String, required: true },
+  description:    { type: String, default: ""   },
+  emoji:          { type: String, default: null },
+
+  cargosStaff:    { type: [String], default: [] },
+  ticketChatName: { type: String,  default: null },
+
+  embedBoasVindas: { type: Object, default: null }, // embed exibida dentro do ticket criado por esta opção
+
+  modalConfig:        { type: modalConfigSchema,        default: () => ({}) },
+  seqQuestionsConfig:  { type: seqQuestionsConfigSchema, default: () => ({}) }
 }, { _id: false });
 
 const selectMenuConfigSchema = new Schema({
   enabled:     { type: Boolean, default: false },
   placeholder: { type: String,  default: "Selecione o tipo de atendimento" },
   options:     { type: [selectMenuOptionSchema], default: [] }
+}, { _id: false });
+
+/**
+ * Mensagens personalizáveis do ticket — substitui os textos
+ * hardcoded espalhados pelo sistema. Cada campo aceita as variáveis
+ * {user} (menção), {id} (ID do usuário) e {count} (número do ticket)
+ * onde fizer sentido. Campos vazios/null caem no texto padrão.
+ */
+const ticketMensagensConfigSchema = new Schema({
+  // Embed mostrada dentro do canal/thread recém-criado
+  ticketCriadoTitulo:    { type: String, default: null }, // padrão: "🎫 Ticket Criado"
+  ticketCriadoDescricao: { type: String, default: null }, // padrão: mensagem atual
+
+  // Botão de fechar e confirmação de fechamento
+  fecharBotaoLabel:      { type: String, default: null }, // padrão: "Fechar Ticket"
+  fechandoMensagem:      { type: String, default: null }, // padrão: "⛔ Ticket será fechado em 10 segundos..."
+
+  // Modal personalizado (formulário por modal)
+  modalRespostasTitulo:  { type: String, default: null }, // padrão: "📋 Respostas do Formulário"
+
+  // Formulário sequencial (perguntas no chat)
+  seqInicioTitulo:       { type: String, default: null }, // padrão: "📋 Formulário de Atendimento"
+  seqInicioDescricao:    { type: String, default: null }, // padrão: mensagem atual (usa {user} e {timeout})
+  seqCanceladoMensagem:  { type: String, default: null }, // padrão: "⚠️ Formulário encerrado."
+  seqResumoTitulo:       { type: String, default: null }, // padrão: "✅ Respostas Recebidas"
+
+  // Transcript
+  transcriptTitulo:      { type: String, default: null }, // padrão: "📄 Transcript"
+  transcriptDmTitulo:    { type: String, default: null }, // padrão: "📄 Seu Transcript"
+  transcriptDmDescricao: { type: String, default: null }, // padrão: mensagem atual
 }, { _id: false });
 
 const ticketSchema = new Schema({
@@ -363,11 +417,12 @@ const ticketSchema = new Schema({
   ticketChatName:  { type: String, default: null  },
   contadorTicket:  { type: Number, default: 0     },
   tipoDeCriacao:   { type: Number, enum: [0, 1, 2], default: 0 },
-  modalConfig:         { type: modalConfigSchema,       default: () => ({}) },
-  autoRoleConfig:      { type: autoRoleConfigSchema,    default: () => ({}) },
+  modalConfig:         { type: modalConfigSchema,        default: () => ({}) },
+  autoRoleConfig:      { type: autoRoleConfigSchema,     default: () => ({}) },
   seqQuestionsConfig:  { type: seqQuestionsConfigSchema, default: () => ({}) },
-  transcriptConfig:    { type: transcriptConfigSchema,  default: () => ({}) },
-  selectMenuConfig:    { type: selectMenuConfigSchema,  default: () => ({}) }
+  transcriptConfig:    { type: transcriptConfigSchema,   default: () => ({}) },
+  selectMenuConfig:    { type: selectMenuConfigSchema,   default: () => ({}) },
+  mensagensConfig:     { type: ticketMensagensConfigSchema, default: () => ({}) }
 }, { _id: false });
 
 /* ─────────────────────────────────────────────
@@ -400,6 +455,7 @@ const guildSchema = new Schema({
   guildId:     { type: String, required: true, unique: true },
   premiumUser: { type: String, default: "0" },
   premiumTime: { type: Number, default: 0   },
+  premiumPlan: { type: String, default: null }, // seção 2: nova_estrela | lua_crescente | constellation
   ticket:      { type: [ticketSchema], default: [] },
 
   uidSend: {
@@ -446,9 +502,9 @@ const guildSchema = new Schema({
    EXPORTS
    ───────────────────────────────────────────── */
 
-const GuildModel            = model("Guild",     guildSchema);
-const PendingTempRoleModel  = model("PendingTempRole",  pendingTempRoleSchema);
-const ActiveLinkedRoleModel = model("ActiveLinkedRole", activeLinkedRoleSchema);
+const GuildModel            = model("Guild-Test",     guildSchema);
+const PendingTempRoleModel  = model("PendingTempRole-Test",  pendingTempRoleSchema);
+const ActiveLinkedRoleModel = model("ActiveLinkedRole-Test", activeLinkedRoleSchema);
 
 module.exports = {
   GuildDb: GuildModel,

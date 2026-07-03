@@ -201,7 +201,8 @@ class UidManager {
     guildId: interaction.guild_id,
     channel: true,
     id: guild.uidSend.channel,
-    bot: true
+    bot: true,
+    client: this.client
   });
 
     
@@ -283,7 +284,8 @@ class UidManager {
     guildId: interaction.guild_id,
     channel: true,
     id,
-    bot: true
+    bot: true,
+    client: this.client
   });
 
   const required = [

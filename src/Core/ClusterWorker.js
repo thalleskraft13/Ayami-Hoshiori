@@ -32,6 +32,12 @@ async function main() {
         // Repassa para o client resolver a Promise pendente
         client.emit('all_stats_response', msg);
     }
+
+    if (msg?.type === 'SET_PRESENCE') {
+        // Broadcast vindo do ClusterManager (seção 6) — aplica em todos os
+        // shards DESTE cluster.
+        client.setPresence('all', msg.opts ?? {});
+    }
 });
     
     client.once('ready', () => {

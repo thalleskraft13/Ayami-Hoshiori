@@ -28,6 +28,13 @@ const userSchema = new Schema({
     default: 0
   },
 
+  // Seção 2: qual dos 3 planos (Nova Estrela/Lua Crescente/Constellation)
+  // essa assinatura é. Substitui o antigo modelo flat (só um boolean).
+  premium_plan: {
+    type: String,
+    default: null
+  },
+
   premium_guild_limit: {
     type: Number,
     default: 1

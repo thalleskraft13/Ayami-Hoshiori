@@ -209,7 +209,27 @@ if (parsed?.t === 'auth_deny')      return this.client.giveaway.handleAuthRespon
                 return await this.client.ticketSystem.close(interaction)
                     .catch((err) => this._replyError(interaction, err, 'Ticket Close'));
             }
-            
+
+            // ── Sistema de Tickets V2 (Components V2) ──
+            // Botão único: custom_id = {"t":"create_ticket_select","p":panelId}
+            if (parsed?.t === 'create_ticket_select' && parsed?.p) {
+                return await this.client.ticketSystem.createFromButton(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket V2 Create (Button)'));
+            }
+
+            // Select Hub: custom_id = {"t":"ticket_select_hub","p":panelId}, e o
+            // VALOR escolhido pelo usuário é o optionId puro (não precisa ser JSON).
+            if (parsed?.t === 'ticket_select_hub' && parsed?.p) {
+                return await this.client.ticketSystem.createFromSelect(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket V2 Create (Select)'));
+            }
+
+            // Fechar ticket: custom_id = {"t":"close_ticket_v2","p":panelId,"ch":channelId,"u":ownerId}
+            if (parsed?.t === 'close_ticket_v2') {
+                return await this.client.ticketSystem.closeTicket(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket V2 Close'));
+            }
+
             if (parsed?.t === 'hub_select') {
   const selectedValue = interaction.data?.values?.[0];
   if (!selectedValue) return;

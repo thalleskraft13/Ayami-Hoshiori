@@ -70,6 +70,17 @@ class ClusterManager {
         );
     }
 
+    /**
+     * broadcast de presence pra TODOS os clusters (não só os shards
+     * de um cluster — isso já existia via setPresence(shardId, opts)/"all").
+     * Réplica do mesmo padrão de IPC já usado por GET_STATS/STATS_RESPONSE.
+     */
+    setPresenceAll(opts) {
+        for (const [, { worker }] of this._clusters) {
+            worker.postMessage({ type: 'SET_PRESENCE', opts });
+        }
+    }
+
     // ─── Private ──────────────────────────────────────────────────────────────
 
     _requestStats(clusterId, worker) {
@@ -122,6 +133,13 @@ class ClusterManager {
     });
     return;
 }
+
+        if (msg?.type === 'REQUEST_SET_PRESENCE') {
+            // Um worker (onde o comando rodou) pede pro ClusterManager (thread
+            // principal) replicar a presence pra TODOS os clusters.
+            this.setPresenceAll(msg.opts);
+            return;
+        }
 
         if (msg?.type === 'log') {
             console.log(`[Cluster ${clusterId}]`, msg.data);

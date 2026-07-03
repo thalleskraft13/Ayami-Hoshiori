@@ -287,6 +287,19 @@ class GuildManager {
             roles:    new Map(),
             emojis:   new Map(),
         };
+
+        // Seção 5 (correção): guilds que o Discord já informou como "minhas"
+        // no payload de READY de cada shard. GUILD_CREATE pra uma dessas é
+        // resync/reconexão; GUILD_CREATE pra uma guildId FORA dessa lista é
+        // entrada nova de verdade. Muito mais confiável do que checar se já
+        // existe config no banco (isso quebra ao testar sair/entrar de novo
+        // no mesmo servidor, já que a config antiga continua salva).
+        this._sessionGuildIds = new Set();
+    }
+
+    /** Chamado em cada READY de shard (ver DiscordGatewayClient#_onReady). */
+    markSessionGuilds(guildIds) {
+        for (const id of guildIds) this._sessionGuildIds.add(id);
     }
 
 
@@ -319,6 +332,18 @@ class GuildManager {
         for (const m   of data.members  ?? []) this._upsertMember(data.id, m);
         for (const r   of data.roles    ?? []) this._upsertRole(data.id, r);
         for (const e   of data.emojis   ?? []) this._upsertEmoji(data.id, e);
+
+        // Seção 5: se essa guildId já veio no READY da sessão atual, é
+        // resync/reconexão — ignora e consome a marca. Senão, é entrada
+        // nova de verdade.
+        if (this._sessionGuildIds.has(data.id)) {
+            this._sessionGuildIds.delete(data.id);
+        } else {
+            require('./ServerLogManager.js').handleGuildCreate(data).catch(err =>
+                console.error('[ServerLog] Erro não tratado em handleGuildCreate:', err)
+            );
+        }
+
         return guild;
     }
 
@@ -334,6 +359,12 @@ class GuildManager {
             return;
         }
         this.cache.guilds.delete(data.id);
+
+        // Seção 5: só loga como "saída" quando NÃO é outage do Discord
+        // (o `unavailable: true` acima já cobre o caso de instabilidade).
+        require('./ServerLogManager.js').handleGuildDelete(data).catch(err =>
+            console.error('[ServerLog] Erro não tratado em handleGuildDelete:', err)
+        );
     }
 
 

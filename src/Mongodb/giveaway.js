@@ -148,4 +148,4 @@ GiveawaySchema.index({ guildId: 1, status: 1 });
 GiveawaySchema.index({ endsAt: 1, status: 1 });
 GiveawaySchema.index({ 'participants.userId': 1 });
 
-module.exports = mongoose.models.Giveaway || mongoose.model('Giveaway', GiveawaySchema);
+module.exports = mongoose.models.Giveaway || mongoose.model('Giveaway-Test', GiveawaySchema);

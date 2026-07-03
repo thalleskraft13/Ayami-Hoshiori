@@ -13,6 +13,13 @@ const keySchema = new Schema({
     required: true
   },
 
+  // Seção 2: qual plano essa key concede quando type === "USER"
+  // (nova_estrela | lua_crescente | constellation). Ignorado pra type GUILD.
+  plan: {
+    type: String,
+    default: "constellation"
+  },
+
   duration: {
     type: Number,
     required: true

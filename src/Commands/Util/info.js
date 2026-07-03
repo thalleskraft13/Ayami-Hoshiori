@@ -17,9 +17,10 @@ const BANNER_URL = 'https://cdn.discordapp.com/attachments/1439343766505783407/1
 
 /** Versões do sistema atual — categoria "Versões". */
 const SYSTEM_VERSIONS = [
-  { label: 'Ayami',         value: '2.4' },
+  { label: 'Ayami',         value: '3.0' },
   { label: 'Logic Builder', value: '2.0' },
-  { label: 'Gacha',         value: '1.3' },
+  { label: 'Logic Script',  value: '1.0-BETA'
+  { label: 'Gacha',         value: '1.4' },
   { label: 'Discord API',   value: 'V10' },
 ];
 
@@ -90,7 +91,11 @@ module.exports = {
       return `${d}d ${h}h ${m}m ${s}s`;
     };
 
-    const guilds = await DiscordRequest("/users/@me/guilds", { method: "GET" });
+    // antes usava DiscordRequest("/users/@me/guilds"), que só
+    // devolve as guilds visíveis PRA ESSE TOKEN dentro da página default da
+    // API (paginado, até 200 por chamada) — não reflete o total real do bot
+    // multi-cluster. Agora agrega o cache real de cada cluster via IPC.
+    const guilds = await client.getAllGuilds();
     const totalGuilds = guilds.length;
 
     const buildBlocks = async (page) => {
@@ -116,7 +121,7 @@ module.exports = {
           ),
           cv2Divider(),
           cv2Text(
-            `> 🌐 **Servidores (na shard):** \`${totalGuilds}\`\n` +
+            `> 🌐 **Servidores (total cluster):** \`${totalGuilds}\`\n` +
             `> 👥 **Usuários (DB):** \`${totalUsersDB}\`\n\n` +
             `> ⏳ **Uptime:** \`${uptime}\`\n` +
             `> 🟢 **Node:** \`${process.version}\``

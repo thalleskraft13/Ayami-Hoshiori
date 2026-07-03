@@ -1,12 +1,15 @@
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const {GuildDb} = require("../../Mongodb/guild.js");
 const PremiumKey = require("../../Mongodb/premiumKey.js");
+const { getPlan, isValidPlan, DEFAULT_PLAN } = require("./PremiumPlans.js");
 
 class PremiumManager {
 
-  async addUserPremium(userId, dias) {
+  
+  async addUserPremium(userId, dias, planId = DEFAULT_PLAN) {
 
     const tempoMs = dias * 86400000;
+    const plan = isValidPlan(planId) ? planId : DEFAULT_PLAN;
 
     let user = await UserGlobalDb.findOne({ userId });
 
@@ -20,35 +23,62 @@ class PremiumManager {
     else
       user.premium = agora + tempoMs;
 
+    // Se já tinha um plano melhor ativo, não rebaixa por engano (ex:
+    // resgatar uma key de Nova Estrela enquanto já é Constellation).
+    const planoAtual = user.premium_plan && isValidPlan(user.premium_plan) ? getPlan(user.premium_plan) : null;
+    const planoNovo = getPlan(plan);
+    if (!planoAtual || planoNovo.order >= planoAtual.order) {
+      user.premium_plan = plan;
+    }
+
     await user.save();
 
     return {
       status: true,
-      expireAt: user.premium
+      expireAt: user.premium,
+      plan: user.premium_plan
     };
   }
 
-  async getUserPremium(userId) {
+  /**
+   * "função ponte": resolve tudo que depende do PLANO do
+   * usuário (não só se tem premium ou não). É a fonte única de verdade
+   * pra limites/benefícios; `getUserPremium()` abaixo é mantido como
+   * wrapper fino por cima dela, pra não quebrar os call sites existentes
+   * que só olham `.status`/`.tempo`/`.expireAt`.
+   */
+  async getUserPlan(userId) {
 
     const user = await UserGlobalDb.findOne({ userId });
 
     if (!user || user.premium === 0)
-      return { status: false };
+      return { status: false, planId: null, plan: null };
 
     const agora = Date.now();
 
     if (user.premium > agora) {
+      const planId = isValidPlan(user.premium_plan) ? user.premium_plan : DEFAULT_PLAN;
       return {
         status: true,
         tempo: user.premium - agora,
-        expireAt: user.premium
+        expireAt: user.premium,
+        planId,
+        plan: getPlan(planId)
       };
     }
 
     user.premium = 0;
+    user.premium_plan = null;
     await user.save();
 
-    return { status: false };
+    return { status: false, planId: null, plan: null };
+  }
+
+  // Mantido por compatibilidade — mesmo formato de retorno de antes
+  // (status/tempo/expireAt), só que agora por baixo dos panos passa pela
+  // função ponte `getUserPlan()`.
+  async getUserPremium(userId) {
+    return this.getUserPlan(userId);
   }
 
   async addGuildPremium(guildId, userId) {
@@ -56,17 +86,21 @@ class PremiumManager {
     const user = await UserGlobalDb.findOne({ userId });
     if (!user) return { status: false, motivo: "Usuário não encontrado" };
 
-    const premium = await this.getUserPremium(userId);
+    const premium = await this.getUserPlan(userId);
     if (!premium.status)
       return { status: false, motivo: "Sem premium ativo" };
 
     if (!user.premium_guilds)
       user.premium_guilds = [];
 
-    if (user.premium_guilds.length >= user.premium_guild_limit) {
+
+    // mais de um número flat igual pra todo mundo.
+    const limite = premium.plan.guildLimit;
+
+    if (user.premium_guilds.length >= limite) {
       return {
         status: false,
-        motivo: `Limite atingido (${user.premium_guild_limit})`
+        motivo: `Limite do plano ${premium.plan.name} atingido (${limite})`
       };
     }
 
@@ -79,6 +113,7 @@ class PremiumManager {
 
     guild.premiumUser = userId;
     guild.premiumTime = expireAt;
+    guild.premiumPlan = premium.planId; // servidor herda o plano de quem ativou
 
     await guild.save();
 
@@ -101,7 +136,7 @@ class PremiumManager {
     };
   }
 
-  async addGuildPremiumDirect(guildId, dias) {
+  async addGuildPremiumDirect(guildId, dias, planId = DEFAULT_PLAN) {
 
     let guild = await GuildDb.findOne({ guildId });
 
@@ -115,6 +150,8 @@ class PremiumManager {
       guild.premiumTime += tempoMs;
     else
       guild.premiumTime = agora + tempoMs;
+
+    guild.premiumPlan = isValidPlan(planId) ? planId : DEFAULT_PLAN;
 
     await guild.save();
 
@@ -137,16 +174,21 @@ class PremiumManager {
 
       guild.premiumUser = null;
       guild.premiumTime = 0;
+      guild.premiumPlan = null;
       await guild.save();
 
       return { status: false };
     }
 
+    const planId = isValidPlan(guild.premiumPlan) ? guild.premiumPlan : DEFAULT_PLAN;
+
     return {
       status: true,
       tempo: guild.premiumTime - agora,
       expireAt: guild.premiumTime,
-      userId: guild.premiumUser
+      userId: guild.premiumUser,
+      planId,
+      plan: getPlan(planId)
     };
   }
 
@@ -160,6 +202,7 @@ class PremiumManager {
 
     guild.premiumUser = null;
     guild.premiumTime = 0;
+    guild.premiumPlan = null;
 
     await guild.save();
 
@@ -201,12 +244,12 @@ class PremiumManager {
     if (key.type === "USER") {
 
       const dias = key.duration / 86400000;
-      await this.addUserPremium(userId, dias);
+      await this.addUserPremium(userId, dias, key.plan);
 
     } else if (key.type === "GUILD") {
 
       const dias = key.duration / 86400000;
-      await this.addGuildPremiumDirect(guildId, dias);
+      await this.addGuildPremiumDirect(guildId, dias, key.plan);
     }
 
     key.used = true;
@@ -215,10 +258,11 @@ class PremiumManager {
 
     await key.save();
 
-    return { status: true };
+    return { status: true, plan: getPlan(key.plan) };
   }
 
-  async createKey(type, dias) {
+  
+  async createKey(type, dias, planId = DEFAULT_PLAN) {
 
     const crypto = require("crypto");
 
@@ -227,6 +271,7 @@ class PremiumManager {
     await PremiumKey.create({
       code,
       type,
+      plan: isValidPlan(planId) ? planId : DEFAULT_PLAN,
       duration: dias * 86400000
     });
 

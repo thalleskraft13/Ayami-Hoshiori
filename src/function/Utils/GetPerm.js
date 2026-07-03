@@ -1,3 +1,5 @@
+'use strict';
+
 const DiscordRequest = require("../DiscordRequest.js");
 
 const ALL_PERMISSIONS = {
@@ -60,50 +62,74 @@ function bitfieldToArray(bitfield) {
   return perms;
 }
 
-async function getPerm({ channel = false, id, guildId, bot = false }) {
+/**
+ * Resolve as permissões efetivas de um membro (ou do bot) num servidor/canal.
+ *
+ *  Qiando um `client`
+ * (DiscordGatewayClient) é passado, os dados são lidos via `client.guilds`
+ * (GuildManager) — que já mantém cache em memória atualizado pelo gateway —
+ * em vez de bater direto na API REST do Discord a cada chamada.
+ *
+ * Retrocompatível: se `client` não for passado, cai de volta pro
+ * comportamento antigo (DiscordRequest puro), então nenhum call site quebra
+ * enquanto a migração dos demais arquivos não é concluída.
+ *
+ * @param {object}  opts
+ * @param {boolean} [opts.channel=false] Se true, também resolve overwrites do canal `id`.
+ * @param {string}  opts.id              ID do usuário (ou do canal, se `channel`+`bot`).
+ * @param {string}  opts.guildId         ID do servidor.
+ * @param {boolean} [opts.bot=false]     Se true, resolve as permissões do próprio bot.
+ * @param {import('../DiscordGatewayClient.js')} [opts.client] Instância do client (recomendado).
+ */
+async function getPerm({ channel = false, id, guildId, bot = false, client = null }) {
+
+  const useCache = !!client?.guilds;
 
   const userId = bot
-    ? (await DiscordRequest(`/users/@me`)).id
+    ? (useCache ? client.clientId : (await DiscordRequest(`/users/@me`)).id)
     : id;
 
-  
-  const member = await DiscordRequest(
-    `/guilds/${guildId}/members/${userId}`
-  );
+  const member = useCache
+    ? await client.guilds.fetchMember(guildId, userId)
+    : await DiscordRequest(`/guilds/${guildId}/members/${userId}`);
 
-  
-  const guild = await DiscordRequest(`/guilds/${guildId}`);
-  if (guild.owner_id === userId) {
+  const guild = useCache
+    ? await client.guilds.fetch(guildId)
+    : await DiscordRequest(`/guilds/${guildId}`);
+
+  const ownerId = useCache ? guild.ownerId : guild.owner_id;
+  if (ownerId === userId) {
     return Object.keys(ALL_PERMISSIONS);
   }
 
-  
-  const roles = await DiscordRequest(`/guilds/${guildId}/roles`);
+  const roles = useCache
+    ? Array.from((await client.guilds.fetchRoles(guildId)).values()).map(r => ({ id: r.id, permissions: r.permissions }))
+    : await DiscordRequest(`/guilds/${guildId}/roles`);
 
-  
+  const memberRoles = useCache ? member.roles : member.roles;
+
   let permissions = BigInt(
     roles.find(r => r.id === guildId).permissions
   );
 
- 
-  for (const roleId of member.roles) {
+  for (const roleId of memberRoles) {
     const role = roles.find(r => r.id === roleId);
     if (role) {
       permissions |= BigInt(role.permissions);
     }
   }
 
-  
   if ((permissions & ALL_PERMISSIONS.ADMINISTRATOR) === ALL_PERMISSIONS.ADMINISTRATOR) {
     return Object.keys(ALL_PERMISSIONS);
   }
 
-  
   if (channel) {
 
-    const channelData = await DiscordRequest(`/channels/${id}`);
+    const channelData = useCache
+      ? await client.guilds.fetchChannel(id)
+      : await DiscordRequest(`/channels/${id}`);
 
-    const overwrites = channelData.permission_overwrites || [];
+    const overwrites = (useCache ? channelData.permissionOverwrites : channelData.permission_overwrites) || [];
 
     let allow = 0n;
     let deny = 0n;
@@ -117,7 +143,7 @@ async function getPerm({ channel = false, id, guildId, bot = false }) {
       }
 
       // role overwrite
-      if (member.roles.includes(overwrite.id)) {
+      if (memberRoles.includes(overwrite.id)) {
         allow |= BigInt(overwrite.allow);
         deny |= BigInt(overwrite.deny);
       }
@@ -137,3 +163,5 @@ async function getPerm({ channel = false, id, guildId, bot = false }) {
 }
 
 module.exports = getPerm;
+module.exports.ALL_PERMISSIONS = ALL_PERMISSIONS;
+module.exports.bitfieldToArray = bitfieldToArray;

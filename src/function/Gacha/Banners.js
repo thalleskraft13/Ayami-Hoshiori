@@ -1,4 +1,5 @@
 const PremiumManager = require("../Utils/PremiumManager.js");
+const { BASE_FIVE_STAR_EXTRA_CHANCE } = require("../Utils/PremiumPlans.js");
 
 // ─── Pools de armas ───────────────────────────────────────────────────────────
 
@@ -332,8 +333,12 @@ class GachaSystem {
 
         // ── Pull extra premium ──
         if (fiveStarCount <= 1) {
-            const premium = await PremiumManager.getUserPremium(userData.userId);
-            const chanceExtra = premium.status ? (7 / 20) : (2 / 20);
+            const premium = await PremiumManager.getUserPlan(userData.userId);
+            // Seção 2: chance extra agora varia por PLANO, não é mais um
+            // valor flat igual pra qualquer premium.
+            const chanceExtra = premium.status
+                ? premium.plan.fiveStarExtraChance
+                : BASE_FIVE_STAR_EXTRA_CHANCE;
 
             if (this._chance(chanceExtra)) {
                 const extra = this._buildExtraPull(userData, bannerId);

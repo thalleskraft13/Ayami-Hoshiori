@@ -7,6 +7,7 @@ const ComponentBuilder = require("../../function/Messages/ComponentBuilder.js");
 const GachaSystem = require("../../function/Gacha/Banners.js");
 const config = require("../../function/Gacha/personagens.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
+const UserEconomy = require("../../function/Gacha/Economy.js");
 
 const gacha = new GachaSystem(config);
 const COST = 160;
@@ -135,6 +136,7 @@ async function executarPull(interaction, bannerId, amount, client) {
     );
   }
 
+  const saldoAntes = user.primogemas.atm;
   user.primogemas.atm -= custo;
 
   if (!Array.isArray(user.primogemas.transacoes))
@@ -149,11 +151,37 @@ async function executarPull(interaction, bannerId, amount, client) {
     date:        Date.now()
   });
 
+  // Seção 8: teto do array, mesma correção do Economy.js — senão cresce
+  // pra sempre pra quem gira muito.
+  if (user.primogemas.transacoes.length > 100) {
+    user.primogemas.transacoes = user.primogemas.transacoes.slice(-100);
+  }
+
   let results = amount === 1
     ? [gacha.pull(user, bannerId)]
     : await gacha.multi(user, bannerId, 10);
 
   await user.save();
+
+  // Seção 8: pull de gacha bypassava completamente o Economy.js — a moeda
+  // era gasta e os personagens concedidos sem NENHUM log (nem webhook, nem
+  // persistência). ⚠️ Assumido (conforme o prompt original) que o log de
+  // economia cobre moeda + personagens de gacha juntos, já que o gasto e a
+  // concessão acontecem na mesma ação.
+  UserEconomy.log({
+    userId:   userId,
+    action:   "banner_pull",
+    previous: saldoAntes,
+    amount:   custo,
+    current:  user.primogemas.atm,
+    bannerId,
+    characters: results.map(r => ({
+      item:        r.item,
+      tipo:        r.tipo,
+      novo:        !!r.inventario?.novo,
+      constelacao: r.inventario?.constelacao ?? 0,
+    })),
+  }).catch(err => console.error("[Banner] Falha ao logar pull de gacha:", err));
 
   const gif = getGif(results, amount);
 

@@ -83,7 +83,7 @@ module.exports = {
 
     if (adminOnly.includes(subcommand)) {
 
-      const perms = await getPerm({ id: user, guildId });
+      const perms = await getPerm({ id: user, guildId, client });
 
       if (!perms || !perms.includes("MANAGE_GUILD")) {
         return DiscordRequest(

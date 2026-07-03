@@ -234,7 +234,8 @@ class GenshinLeaksManager {
       guildId: interaction.guild_id,
       channel: true,
       id,
-      bot: true
+      bot: true,
+      client: this.client
     });
 
     const required = [

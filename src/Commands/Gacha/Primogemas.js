@@ -205,10 +205,13 @@ module.exports = {
           }
 
           /* Recompensa */
-          const premium = await PremiumManager.getUserPremium(authorId);
+          const premium = await PremiumManager.getUserPlan(authorId);
 
-          const min = premium.status ? 20 : 10;
-          const max = premium.status ? 50 : 20;
+          // Seção 2: o bônus agora escala com o PLANO (catálogo estático),
+          // não é mais um valor flat igual pra qualquer premium.
+          const multiplier = premium.status ? premium.plan.dailyMultiplier : 1;
+          const min = Math.round(10 * multiplier);
+          const max = Math.round(20 * multiplier);
 
           const giros = Math.floor(Math.random() * (max - min + 1)) + min;
           const totalReward = giros * baseReward;
@@ -221,16 +224,30 @@ module.exports = {
               $set: { "primogemas.daily_tempo": newExpire },
               $push: {
                 "primogemas.transacoes": {
-                  type: "daily",
-                  value: totalReward,
-                  giros: giros,
-                  premium: premium.status,
-                  date: nowClick
+                  $each: [{
+                    type: "daily",
+                    value: totalReward,
+                    giros: giros,
+                    premium: premium.status,
+                    date: nowClick
+                  }],
+                  $slice: -100 // seção 8: teto do array, senão cresce pra sempre
                 }
               }
             },
             { new: true }
           );
+
+          // Seção 8: daily fazia $inc/$push direto no Mongo, sem passar pelo
+          // Economy.js — nenhum log era gerado. Agora loga via o helper
+          // estático (só documenta a mudança, o saldo já foi alterado acima).
+          await UserEconomy.log({
+            userId:   authorId,
+            action:   "daily",
+            previous: updated.primogemas.atm - totalReward,
+            amount:   totalReward,
+            current:  updated.primogemas.atm
+          }).catch(err => console.error("[Primogemas] Falha ao logar daily:", err));
 
           await client.missionManager.trackEvent(authorId, 'do_daily', 1, interaction.guild_id);
 
@@ -511,6 +528,15 @@ module.exports = {
           { $inc: { "primogemas.atm": -amount } }
         );
 
+        // Seção 8: essa doação pro bot também bypassava o Economy.js.
+        UserEconomy.log({
+          userId:   authorId,
+          action:   "remove",
+          previous: sender.primogemas.atm,
+          amount:   amount,
+          current:  sender.primogemas.atm - amount
+        }).catch(err => console.error("[Primogemas] Falha ao logar doação:", err));
+
         return await DiscordRequest(
           `/webhooks/${interaction.application_id}/${interaction.token}`,
           {
@@ -641,10 +667,13 @@ module.exports = {
             {
               $push: {
                 "primogemas.transacoes": {
-                  type: "transfer_send",
-                  to: targetId,
-                  value: amount,
-                  date: Date.now()
+                  $each: [{
+                    type: "transfer_send",
+                    to: targetId,
+                    value: amount,
+                    date: Date.now()
+                  }],
+                  $slice: -100 // seção 8: teto do array
                 }
               }
             }
@@ -655,14 +684,36 @@ module.exports = {
             {
               $push: {
                 "primogemas.transacoes": {
-                  type: "transfer_receive",
-                  from: authorId,
-                  value: amount,
-                  date: Date.now()
+                  $each: [{
+                    type: "transfer_receive",
+                    from: authorId,
+                    value: amount,
+                    date: Date.now()
+                  }],
+                  $slice: -100
                 }
               }
             }
           );
+
+          // Seção 8: transferência entre usuários também bypassava o
+          // Economy.js — nenhum log era gerado nem persistido. Loga os dois
+          // lados (quem enviou e quem recebeu).
+          UserEconomy.log({
+            userId:   authorId,
+            action:   "transfer_send",
+            previous: sender.primogemas.atm,
+            amount,
+            current:  sender.primogemas.atm - amount
+          }).catch(err => console.error("[Primogemas] Falha ao logar transferência (envio):", err));
+
+          UserEconomy.log({
+            userId:   targetId,
+            action:   "transfer_receive",
+            previous: receiver.primogemas.atm,
+            amount,
+            current:  receiver.primogemas.atm + amount
+          }).catch(err => console.error("[Primogemas] Falha ao logar transferência (recebimento):", err));
 
           return await DiscordRequest(
             `/interactions/${i.id}/${i.token}/callback`,
