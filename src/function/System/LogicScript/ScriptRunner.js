@@ -186,6 +186,18 @@ class ScriptRunner {
         events.push(data.channel_id ? 'voiceJoin' : 'voiceLeave'); break;
       case 'INTERACTION_CREATE':
         if (data.type === 3) {
+          // Não disparar buttonClick/selectMenu pra cliques que já são de
+          // outro dono: tickets, giveaway, flow_trigger, birthday, e os
+          // botões/menus TEMPORÁRIOS do próprio LogicScript (custom_id
+          // "temp_...", criados via Button().onClick()/SelectMenu().onClick()
+          // — esses já são resolvidos direto pelo InteractionManager, então
+          // dispatchar aqui de novo seria rodar a interação duas vezes).
+          // Sem esse filtro, TODO clique de botão/menu em QUALQUER lugar da
+          // guild disparava os handlers on(buttonClick)/on(selectMenu) de
+          // TODOS os scripts — esse era o bug: LogicScript "brigando" com o
+          // InteractionManager por cima da mesma interação.
+          const customId = data.data?.custom_id;
+          if (this.client.interactions?.isReservedCustomId(customId)) break;
           if (data.data?.component_type === 2) events.push('buttonClick');
           if (data.data?.component_type === 3) events.push('selectMenu');
         }

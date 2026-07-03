@@ -676,20 +676,73 @@ class Interpreter {
   /* ══════════════════════════════════════
      UI BUILDERS
      ══════════════════════════════════════ */
+  /**
+   * Gera um custom_id "neutro" pra componentes que nunca foram ligados a
+   * nada (nem setCustomId, nem onClick). Não é registrado em lugar nenhum
+   * de propósito: clicar nele simplesmente não faz nada (Discord mostra
+   * "essa interação falhou"), em vez de mentir dizendo que "expirou" como
+   * acontecia antes.
+   */
+  _looseId(prefix) {
+    return `ls_${prefix}_` + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  /**
+   * Resolve o parâmetro `user` de onClick()/opts.user:
+   *  - true      → restringe ao usuário que disparou o evento atual (ctx.userId)
+   *  - string/obj → id explícito (ou objeto com .id)
+   *  - undefined → sem restrição (qualquer um pode clicar)
+   */
+  _resolveInteractionOwner(user) {
+    if (user === true) return this.discordCtx.userId ?? undefined;
+    if (user && typeof user === 'object') return user.id ?? undefined;
+    if (user === undefined || user === null) return undefined;
+    return String(user);
+  }
+
   _makeButton() {
-    const data = { type: 2, style: 1, label: 'Botão', custom_id: 'btn_' + Date.now() };
+    const data = { type: 2, style: 1, label: 'Botão', custom_id: this._looseId('btn') };
+    const self = this;
     const obj  = {
       _type: 'button', _data: data,
       setLabel:    v => { data.label = String(v); return obj; },
       setStyle:    v => { const s = { Primary:1,Secondary:2,Success:3,Danger:4,Link:5,primary:1,secondary:2,success:3,danger:4,link:5 }; data.style = s[v] ?? Number(v) ?? 1; return obj; },
+
+      /** Interação PERMANENTE: id fixo escolhido pelo autor do script.
+       *  Nunca expira; é tratada por on(buttonClick)/on(selectMenu),
+       *  comparando interaction.customId dentro do handler. Continua
+       *  funcionando mesmo depois de a Ayami reiniciar. */
       setCustomId: v => { data.custom_id = String(v); return obj; },
+
+      /** Interação TEMPORÁRIA: registra o botão de verdade no
+       *  InteractionManager (mesmo cache com TTL usado pelo resto do bot).
+       *  `fn` é chamada com o objeto de interação assim que o botão for
+       *  clicado. Expira sozinha (padrão 10min) e some do cache.
+       *  opts: { user: true|id, ttl: ms } */
+      onClick: (fn, opts = {}) => {
+        if (typeof fn !== 'function') {
+          throw new RuntimeError('Button().onClick() espera uma função como argumento.');
+        }
+        if (!self.client?.interactions) {
+          throw new RuntimeError('Interações temporárias indisponíveis (InteractionManager não carregado).');
+        }
+        const built = self.client.interactions.createButton({
+          user:  self._resolveInteractionOwner(opts.user),
+          tempo: opts.ttl ? Number(opts.ttl) : undefined,
+          data:  { style: data.style, label: data.label },
+          funcao: async (interaction) => { await fn(self._buildInteractionObj(interaction)); },
+        });
+        data.custom_id = built.custom_id;
+        return obj;
+      },
+
       setEmoji:    e => { data.emoji = typeof e === 'string' ? { name: e } : e; return obj; },
       setDisabled: v => { data.disabled = Boolean(v); return obj; },
-      setURL:      v => { data.url = String(v); data.style = 5; return obj; },
+      setURL:      v => { data.url = String(v); data.style = 5; delete data.custom_id; return obj; },
       // Legado
       label:    v => { data.label = String(v); return obj; },
       style:    v => obj.setStyle(v),
-      customId: v => { data.custom_id = String(v); return obj; },
+      customId: v => obj.setCustomId(v),
       emoji:    e => obj.setEmoji(e),
       disabled: v => { data.disabled = Boolean(v); return obj; },
     };
@@ -697,10 +750,38 @@ class Interpreter {
   }
 
   _makeSelectMenu() {
-    const data = { type: 3, custom_id: 'menu_' + Date.now(), options: [], placeholder: 'Selecione...' };
+    const data = { type: 3, custom_id: this._looseId('menu'), options: [], placeholder: 'Selecione...' };
+    const self = this;
     const obj  = {
       _type: 'selectmenu', _data: data,
-      setCustomId:    v => { data.custom_id = String(v); return obj; },
+
+      /** Interação PERMANENTE — ver Button().setCustomId(). */
+      setCustomId: v => { data.custom_id = String(v); return obj; },
+
+      /** Interação TEMPORÁRIA — ver Button().onClick(). `fn` recebe o
+       *  objeto de interação (com .values contendo as opções escolhidas). */
+      onClick: (fn, opts = {}) => {
+        if (typeof fn !== 'function') {
+          throw new RuntimeError('SelectMenu().onClick() espera uma função como argumento.');
+        }
+        if (!self.client?.interactions) {
+          throw new RuntimeError('Interações temporárias indisponíveis (InteractionManager não carregado).');
+        }
+        const built = self.client.interactions.createSelect({
+          user:  self._resolveInteractionOwner(opts.user),
+          tempo: opts.ttl ? Number(opts.ttl) : undefined,
+          data:  {
+            placeholder: data.placeholder,
+            min_values:  data.min_values,
+            max_values:  data.max_values,
+            options:     data.options,
+          },
+          funcao: async (interaction) => { await fn(self._buildInteractionObj(interaction)); },
+        });
+        data.custom_id = built.custom_id;
+        return obj;
+      },
+
       setPlaceholder: v => { data.placeholder = String(v); return obj; },
       setMinValues:   v => { data.min_values = Number(v); return obj; },
       setMaxValues:   v => { data.max_values = Number(v); return obj; },
