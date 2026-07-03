@@ -72,7 +72,7 @@ function row(...components) {
 
 module.exports = {
   data: {
-    name: "botinfo",
+    name: "ayami-info",
     description: "Informações detalhadas do bot"
   },
 
