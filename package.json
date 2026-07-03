@@ -1,0 +1,29 @@
+{
+  "name": "Arlecchino",
+  "version": "1.0.2",
+  "description": "A Node.js Discord bot that provides Genshin Impact character data, build recommendations, and interactive commands.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "discord",
+    "discord bot",
+    "genshin impact",
+    "gacha"
+  ],
+  "author": "Thalles Rennan",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@discordjs/rest": "^2.6.1",
+    "@discordjs/ws": "^2.0.4",
+    "dotenv": "^17.4.2",
+    "env": "^0.0.2",
+    "fs": "^0.0.1-security",
+    "mongoose": "^9.4.1",
+    "ms": "^2.1.3",
+    "path": "^0.12.7",
+    "util": "^0.12.5"
+  }
+}
