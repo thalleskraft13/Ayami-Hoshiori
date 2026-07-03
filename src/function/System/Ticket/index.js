@@ -1774,7 +1774,7 @@ class TicketSystem {
     }
 
     // Veio de botão/select direto (defer type 6) — manda uma mensagem nova.
-    return this.followUpEphemeral(interaction, { content: successMsg });
+    return this.followUpEphemeral(interaction, { content: successMsg,flags: 64});
   }
 
   /* ─────────────────────────────────────── */
