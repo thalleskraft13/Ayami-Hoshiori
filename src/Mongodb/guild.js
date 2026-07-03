@@ -502,9 +502,9 @@ const guildSchema = new Schema({
    EXPORTS
    ───────────────────────────────────────────── */
 
-const GuildModel            = model("Guild-Test",     guildSchema);
-const PendingTempRoleModel  = model("PendingTempRole-Test",  pendingTempRoleSchema);
-const ActiveLinkedRoleModel = model("ActiveLinkedRole-Test", activeLinkedRoleSchema);
+const GuildModel            = model("Guild",     guildSchema);
+const PendingTempRoleModel  = model("PendingTempRole",  pendingTempRoleSchema);
+const ActiveLinkedRoleModel = model("ActiveLinkedRole", activeLinkedRoleSchema);
 
 module.exports = {
   GuildDb: GuildModel,

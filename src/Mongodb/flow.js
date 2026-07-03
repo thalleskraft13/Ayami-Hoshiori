@@ -336,13 +336,13 @@ const UserVarModel = model('UserVar', userVarSchema);
 
 
 module.exports = {
-  FlowModel:          model('Flow-Test',          flowSchema),
-  CustomCommandModel: model('CustomCommand-Test', customCommandSchema),
-  PersistentVarModel: model('PersistentVar-Test', persistentVarSchema),
-  FlowRunLogModel:    model('FlowRunLog-Test',    flowRunLogSchema),
-  UserVarModel: model("userVarSchema-Test", userVarSchema),
-  LibraryFlowModel:    model('LibraryFlow-Test',    libraryFlowSchema),
-  LibraryRatingModel:  model('LibraryRating-Test',  libraryRatingSchema),
-  CreatorProfileModel: model('CreatorProfile-Test', creatorProfileSchema),
-  LibraryInstallModel: model('LibraryInstall-Test', libraryInstallSchema),
+  FlowModel:          model('Flow',          flowSchema),
+  CustomCommandModel: model('CustomCommand', customCommandSchema),
+  PersistentVarModel: model('PersistentVar', persistentVarSchema),
+  FlowRunLogModel:    model('FlowRunLog',    flowRunLogSchema),
+  UserVarModel: model("userVarSchema", userVarSchema),
+  LibraryFlowModel:    model('LibraryFlow',    libraryFlowSchema),
+  LibraryRatingModel:  model('LibraryRating',  libraryRatingSchema),
+  CreatorProfileModel: model('CreatorProfile', creatorProfileSchema),
+  LibraryInstallModel: model('LibraryInstall', libraryInstallSchema),
 };
