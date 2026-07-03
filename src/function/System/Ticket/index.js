@@ -144,6 +144,16 @@ class TicketSystem {
   }
 
   async _ask(interaction, question, opts = {}) {
+    // Correção: a interação precisa ser reconhecida ANTES de mandar um
+    // follow-up (POST /webhooks/.../{token}) — senão o Discord ainda não
+    // criou o "webhook" da interação e a chamada abaixo falha com
+    // 404 "Unknown Webhook", derrubando a interação inteira pro usuário
+    // ("a interação falhou"), mesmo o bot respondendo depois.
+    // deferUpdate (type 6) reconhece SEM alterar a mensagem do painel,
+    // então @original continua apontando pro painel — o editOriginal()
+    // que roda depois de receber a resposta continua funcionando normal.
+    await this.deferUpdate(interaction);
+
     await this.followUpEphemeral(interaction, cv2Payload([
       cv2Text(question),
       cv2Divider(),
@@ -1774,7 +1784,7 @@ class TicketSystem {
     }
 
     // Veio de botão/select direto (defer type 6) — manda uma mensagem nova.
-    return this.followUpEphemeral(interaction, { content: successMsg,flags: 64});
+    return this.followUpEphemeral(interaction, { content: successMsg,flags:64});
   }
 
   /* ─────────────────────────────────────── */
