@@ -179,35 +179,6 @@ class InteractionManager {
 
 
     /**
-     * Retorna true se o customId já pertence a um sistema interno conhecido
-     * (tickets, giveaway, flow_trigger/CV2, cache temp_ do próprio
-     * InteractionManager, etc). Usado pelo LogicScript (ScriptRunner) para
-     * NÃO disparar 'buttonClick'/'selectMenu' em cima de botões que não são
-     * dele — evitando o "broadcast" indevido que causava handlers de script
-     * rodando para cliques de botões de outros sistemas.
-     *
-     * @param {string} customId
-     * @returns {boolean}
-     */
-    isReservedCustomId(customId) {
-        if (!customId) return false;
-        if (customId.startsWith('temp_')) return true;
-        if (customId === 'close_ticket' || customId === 'birthday_register_btn') return true;
-
-        const parsed = this._tryParseJson(customId);
-        if (parsed && typeof parsed === 'object') {
-            const RESERVED_T = new Set([
-                'giveaway_join', 'auth_approve', 'auth_deny', 'create_ticket',
-                'create_ticket_select', 'ticket_select_hub', 'close_ticket_v2',
-                'hub_select', 'flow_trigger', 'cv2_select',
-            ]);
-            if (RESERVED_T.has(parsed.t)) return true;
-        }
-
-        return false;
-    }
-
-    /**
      * Handle a MESSAGE_COMPONENT interaction (buttons and select menus).
      * Preserves full compatibility with the JSON custom_id routing system.
      *
@@ -217,7 +188,16 @@ class InteractionManager {
       //console.log(interaction)
         const customId = interaction.data?.custom_id;
         if (!customId) return;
-        
+
+        // Seção "Modals no LogicScript": um botão PERMANENTE do LogicScript
+        // (Button().setCustomId(...)) não fica registrado em lugar nenhum
+        // aqui — é tratado só dentro de on(buttonClick), que roda ANTES
+        // deste método (ver DiscordGatewayClient#_handleDispatch). Sem essa
+        // checagem, todo clique nesse tipo de botão caía no fallback lá
+        // embaixo (_replyUnavailable) tentando responder uma interação que
+        // o script já tinha respondido — sempre falhando em silêncio, só
+        // gastando uma chamada à API do Discord à toa a cada clique.
+        if (interaction._lsResponded) return;
 
         try {
 
@@ -312,22 +292,6 @@ if (interaction.data?.custom_id === "birthday_register_btn") {
   return this.client.birthdayManager.handleButtonRegister(interaction);
 }
 
-
-            // A partir daqui só sobram dois casos possíveis:
-            //  1) customId começa com "temp_" → foi criado por createButton()/
-            //     createSelect() (cache em memória com TTL), seja por um
-            //     sistema interno ou por uma interação TEMPORÁRIA de
-            //     LogicScript (Button().onClick(fn) / SelectMenu().onClick(fn)).
-            //     Esses têm dono aqui no InteractionManager.
-            //  2) qualquer outro customId não reconhecido → não é nosso.
-            //     Antes disso caía direto no "_replyUnavailable" mesmo sem
-            //     nunca ter passado por aqui — isso incluía toda interação
-            //     PERMANENTE criada via LogicScript (Button().setCustomId(v)),
-            //     que é tratada pelo ScriptRunner via on(buttonClick)/
-            //     on(selectMenu). Responder "expirou" pra esses casos era o
-            //     bug: a interação nunca existiu no nosso cache pra começo
-            //     de conversa, então não faz sentido dizer que expirou.
-            if (!customId.startsWith('temp_')) return;
 
             const entry = this._cache.get(customId);
 

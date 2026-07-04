@@ -87,6 +87,15 @@ class TaskManager {
         await task.save();
         return;
       }
+
+      // schedule("HH:MM", ..., { recorrente: true }) do LogicScript —
+      // já recalculou executeAt/status pra amanhã dentro do execute()
+      // acima. "a cada X" (dailyAt ausente) continua caindo no repeat/
+      // repeatDelay genérico logo abaixo, normalmente.
+      if (task.tipo === 'logicscript_message' && task.dados?.dailyAt) {
+        await task.save();
+        return;
+      }
       
       
 
@@ -122,6 +131,29 @@ class TaskManager {
       case 'scheduled_trigger':
         await this.handleScheduledTrigger(task);
         break;
+
+      // schedule()/scheduleDaily do LogicScript — ver Interpreter.js
+      case 'logicscript_message': {
+        const { channelId, texto, dailyAt } = task.dados;
+        await DiscordRequest(`/channels/${channelId}/messages`, {
+          method: 'POST',
+          body:   { content: texto }
+        }).catch(err => console.error('[TaskManager] logicscript_message error:', err));
+
+        // "todo dia às HH:MM" — recalcula pra amanhã no mesmo horário
+        // (mesmo padrão de birthday_check/scheduled_trigger). Recorrência
+        // por intervalo simples ("a cada 2h") já é coberta pelo mecanismo
+        // genérico repeat/repeatDelay logo abaixo, em run().
+        if (dailyAt) {
+          const next = new Date();
+          next.setDate(next.getDate() + 1);
+          next.setHours(dailyAt.hour, dailyAt.minute ?? 0, 0, 0);
+          task.executeAt = next;
+          task.status    = 'pending';
+        }
+        break;
+      }
+
         case 'giveaway_end': {
   const { giveawayId } = task.dados;
   if (this.client.giveawayScheduler) {

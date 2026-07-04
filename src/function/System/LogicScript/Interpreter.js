@@ -7,9 +7,15 @@
    - EmbedBuilder estilo discord.js (new EmbedBuilder())
    - Embeds em sendMessage, reply, followUp, etc.
    - Contexto de prefixo injetado automaticamente
+   - (novo) schedule()/cancelSchedule()/listSchedules() —
+     agendamento persistido via TaskManager (delay, "1h", "HH:MM",
+     com ou sem recorrência)
+   - (novo) cooldown()/cooldownRestante() — usando db.user() já existente
    ═══════════════════════════════════════════ */
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const msLib          = require('ms');
+const TaskModel       = require('../../../Mongodb/tarefas.js');
 
 /**
  * Aceita tanto um ID puro (`"123456789012345678"`) quanto uma menção
@@ -285,6 +291,90 @@ class Interpreter {
       await new Promise(r => setTimeout(r, n));
     });
 
+    /* ── Agendamento (schedule) ──
+       Reaproveita o TaskManager que já existe (mesma infra de lembrete,
+       birthday_check, etc) — persiste no Mongo, sobrevive a restart. */
+    G.define('schedule', async (tempo, channel, texto, opts = {}) => {
+      if (!this.client?.taskManager) {
+        throw new RuntimeError('Agendamento indisponível (TaskManager não carregado).');
+      }
+
+      const chId = typeof channel === 'object' ? channel?.id : extractId(String(channel ?? ctx.channelId));
+      const parsed = this._parseTime(tempo);
+      const recorrente = !!opts?.recorrente;
+
+      const dados = { guildId: ctx.guildId, channelId: chId, texto: this._str(texto) };
+      let repeat = false, repeatDelay = null;
+
+      if (recorrente) {
+        repeat = true;
+        if (parsed.clockTime) {
+          // "todo dia às HH:MM" — se autogerencia dentro do TaskManager,
+          // recalculando pra amanhã no mesmo horário a cada execução
+          // (ver case 'logicscript_message' no TaskManager.js).
+          dados.dailyAt = parsed.clockTime;
+        } else {
+          // "a cada X" — usa o mecanismo genérico de repeat/repeatDelay
+          // que o TaskManager já aplica pra qualquer tipo de task.
+          repeatDelay = parsed.delayMs;
+        }
+      }
+
+      const task = await this.client.taskManager.create({
+        tipo:  'logicscript_message',
+        delay: parsed.delayMs,
+        dados,
+        repeat,
+        repeatDelay,
+      });
+
+      return task.taskId;
+    });
+
+    G.define('cancelSchedule', async jobId => {
+      if (!this.client?.taskManager) return false;
+      return this.client.taskManager.cancel(String(jobId));
+    });
+
+    G.define('listSchedules', async () => {
+      const tasks = await TaskModel.find({
+        tipo:   'logicscript_message',
+        'dados.guildId': ctx.guildId,
+        status: 'pending',
+      }).lean();
+
+      return tasks.map(t => ({
+        id:         t.taskId,
+        channelId:  t.dados?.channelId,
+        texto:      t.dados?.texto,
+        executeAt:  t.executeAt?.getTime?.() ?? null,
+        recorrente: !!t.repeat,
+      }));
+    });
+
+    /* ── Cooldown (por usuário, por guild) ──
+       Usa o mesmo db.user() de baixo nível — não precisa de collection
+       nova, guarda o timestamp de expiração como mais uma chave do usuário. */
+    G.define('cooldown', async (chave, tempo) => {
+      if (!this.db) return true; // sem banco configurado, nunca bloqueia
+      const { delayMs } = this._parseTime(tempo);
+      const key = `_cooldown_${chave}`;
+      const expiraEm = await this.db.getUser(ctx.guildId, ctx.userId, key);
+      const now = Date.now();
+      if (expiraEm && now < Number(expiraEm)) return false;
+      await this.db.setUser(ctx.guildId, ctx.userId, key, now + delayMs);
+      return true;
+    });
+
+    G.define('cooldownRestante', async (chave) => {
+      if (!this.db) return 0;
+      const key = `_cooldown_${chave}`;
+      const expiraEm = await this.db.getUser(ctx.guildId, ctx.userId, key);
+      if (!expiraEm) return 0;
+      const restante = Number(expiraEm) - Date.now();
+      return restante > 0 ? restante : 0;
+    });
+
     /* ── Prefixo ── */
     G.define('PREFIX', ctx.prefix ?? '!');
 
@@ -300,6 +390,9 @@ class Interpreter {
 
     /* ── SelectMenu ── */
     G.define('SelectMenu', () => this._makeSelectMenu());
+
+    /* ── Modal ── */
+    G.define('Modal', () => this._makeModal());
 
     /* ── Objetos Discord ── */
     G.define('getUser',        async () => this._buildUserObj(ctx.userId));
@@ -324,6 +417,40 @@ class Interpreter {
 
     /* ── Banco de dados ── */
     G.define('db', this._buildDbObj());
+  }
+
+  /* ══════════════════════════════════════
+     PARSER DE TEMPO — número (ms), duração ("1h"/"30m"/"10s"/"2d")
+     ou horário fixo ("10:20"). Usado por schedule()/cooldown().
+     ══════════════════════════════════════ */
+  _parseTime(tempo) {
+    if (typeof tempo === 'number') return { delayMs: tempo, clockTime: null };
+
+    const s = String(tempo).trim();
+
+    // Formato "HH:MM" — horário fixo do dia
+    const clockMatch = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(s);
+    if (clockMatch) {
+      const hour   = Number(clockMatch[1]);
+      const minute = Number(clockMatch[2]);
+      const delayMs = this.client?.taskManager
+        ? this.client.taskManager._msAteHorario(hour, minute)
+        : (() => {
+            const now = new Date();
+            const alvo = new Date();
+            alvo.setHours(hour, minute, 0, 0);
+            if (alvo <= now) alvo.setDate(alvo.getDate() + 1);
+            return alvo - now;
+          })();
+      return { delayMs, clockTime: { hour, minute } };
+    }
+
+    // Formato de duração ("1h", "30m", "10s", "2d") via lib `ms`
+    const parsedMs = msLib(s);
+    if (typeof parsedMs !== 'number' || Number.isNaN(parsedMs)) {
+      throw new RuntimeError(`Formato de tempo inválido: '${tempo}' (use ms, "1h"/"30m"/"10s" ou "HH:MM")`);
+    }
+    return { delayMs: parsedMs, clockTime: null };
   }
 
   /* ══════════════════════════════════════
@@ -682,13 +809,43 @@ class Interpreter {
       user:     async () => self._buildUserObj(interaction.member?.user?.id ?? interaction.user?.id),
       reply: async (content, opts = {}) => {
         const data = buildMessageBody(content, opts);
+        interaction._lsResponded = true;
         return DiscordRequest(`/interactions/${id}/${token}/callback`, { method: 'POST', body: { type: 4, data } });
       },
       update: async (content, opts = {}) => {
         const data = buildMessageBody(content, opts);
+        interaction._lsResponded = true;
         return DiscordRequest(`/interactions/${id}/${token}/callback`, { method: 'POST', body: { type: 7, data } });
       },
-      defer:    async (ephemeral) => DiscordRequest(`/interactions/${id}/${token}/callback`, { method: 'POST', body: { type: 5, data: { flags: ephemeral ? 64 : 0 } } }),
+      defer:    async (ephemeral) => {
+        interaction._lsResponded = true;
+        return DiscordRequest(`/interactions/${id}/${token}/callback`, { method: 'POST', body: { type: 5, data: { flags: ephemeral ? 64 : 0 } } });
+      },
+      /**
+       * Abre um Modal (formulário popup) em resposta a essa interação.
+       * `modal` é o objeto retornado por Modal()...onSubmit(fn) — precisa
+       * ter passado por onSubmit() antes, senão não tem handler nenhum
+       * registrado pra tratar o envio.
+       *
+       * Limitação do Discord: só funciona em resposta a uma interação já
+       * existente (buttonClick, selectMenu) — não dá pra abrir modal a
+       * partir de on(command), que é baseado em mensagem comum, sem
+       * token de interação.
+       */
+      showModal: async (modal) => {
+        if (!modal?._data?.custom_id) {
+          throw new RuntimeError('showModal() precisa de um Modal() que já passou por .onSubmit(fn).');
+        }
+        if (!self.client?.interactions) {
+          throw new RuntimeError('Modais indisponíveis (InteractionManager não carregado).');
+        }
+        interaction._lsResponded = true;
+        return self.client.interactions.showModal(interaction, {
+          custom_id:  modal._data.custom_id,
+          title:      modal._data.title,
+          components: modal._data.components,
+        });
+      },
       edit:     async (content, opts = {}) => {
         const body = buildMessageBody(content, opts);
         return DiscordRequest(`/webhooks/${appId}/${token}/messages/@original`, { method: 'PATCH', body });
@@ -823,6 +980,77 @@ class Interpreter {
       minValues:   v => obj.setMinValues(v),
       maxValues:   v => obj.setMaxValues(v),
       addOption:   (label, value, desc, emoji) => obj.addOptions({ label, value, description: desc, emoji }),
+    };
+    return obj;
+  }
+
+  /**
+   * Modal (formulário popup). Só pode ser aberto via
+   * `interaction.showModal(modal)` — dentro de on(buttonClick)/on(selectMenu)
+   * — nunca a partir de on(command), que não tem interação de verdade por
+   * trás (é só uma mensagem comum).
+   */
+  _makeModal() {
+    const data = { title: 'Formulário', components: [] };
+    const self = this;
+    const obj  = {
+      _type: 'modal', _data: data,
+
+      setTitle: v => { data.title = String(v).slice(0, 45); return obj; },
+
+      /**
+       * Adiciona um campo de texto.
+       * opts: { style: 'short'|'long', placeholder, required, minLength, maxLength, value }
+       * `style: 'short'` (padrão) é uma linha; `'long'` é um parágrafo.
+       */
+      addTextInput: (customId, label, opts = {}) => {
+        const STYLE = { short: 1, long: 2 };
+        data.components.push({
+          type: 1,
+          components: [{
+            type:        4,
+            custom_id:   String(customId),
+            label:       String(label).slice(0, 45),
+            style:       STYLE[opts.style] ?? 1,
+            placeholder: opts.placeholder ? String(opts.placeholder).slice(0, 100) : undefined,
+            required:    opts.required ?? true,
+            min_length:  opts.minLength !== undefined ? Number(opts.minLength) : undefined,
+            max_length:  opts.maxLength !== undefined ? Number(opts.maxLength) : undefined,
+            value:       opts.value !== undefined ? String(opts.value) : undefined,
+          }],
+        });
+        return obj;
+      },
+
+      /**
+       * Registra quem trata o envio do formulário (mesmo InteractionManager
+       * usado por Button/SelectMenu — cache com TTL, expira sozinho).
+       * `fn(interaction, fields)` — `fields` é um objeto com o valor de
+       * cada campo, indexado pelo customId dado em addTextInput().
+       * opts: { user: true|id, ttl: ms }
+       */
+      onSubmit: (fn, opts = {}) => {
+        if (typeof fn !== 'function') {
+          throw new RuntimeError('Modal().onSubmit() espera uma função como argumento.');
+        }
+        if (!data.components.length) {
+          throw new RuntimeError('Modal() precisa de pelo menos um addTextInput() antes de onSubmit().');
+        }
+        if (!self.client?.interactions) {
+          throw new RuntimeError('Modais indisponíveis (InteractionManager não carregado).');
+        }
+        const built = self.client.interactions.createModal({
+          user:       self._resolveInteractionOwner(opts.user),
+          tempo:      opts.ttl ? Number(opts.ttl) : undefined,
+          title:      data.title,
+          components: data.components,
+          funcao: async (interaction, client, fields) => {
+            await fn(self._buildInteractionObj(interaction), fields);
+          },
+        });
+        data.custom_id = built.custom_id;
+        return obj; // segue sendo o "modal pronto" pra interaction.showModal(modal)
+      },
     };
     return obj;
   }
