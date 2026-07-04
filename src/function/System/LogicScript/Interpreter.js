@@ -11,6 +11,23 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
+/**
+ * Aceita tanto um ID puro (`"123456789012345678"`) quanto uma menção
+ * do Discord (`<#id>` canal, `<@&id>` cargo, `<@id>`/`<@!id>` usuário)
+ * e sempre devolve só o ID numérico como string.
+ *
+ * Existe porque o autocomplete do editor (#canal, @cargo, dentro de
+ * strings) insere a menção pronta — sem isso, quem copia/cola o
+ * resultado do autocomplete em getChannel()/addRole()/etc. receberia
+ * um ID "sujo" que a API do Discord rejeitaria.
+ */
+function extractId(raw) {
+  if (raw == null) return raw;
+  const s = String(raw).trim();
+  const m = /^<(?:#|@[!&]?)(\d+)>$/.exec(s);
+  return m ? m[1] : s;
+}
+
 class ReturnSignal  { constructor(v) { this.value = v; } }
 class BreakSignal   {}
 class ContinueSignal {}
@@ -286,20 +303,20 @@ class Interpreter {
 
     /* ── Objetos Discord ── */
     G.define('getUser',        async () => this._buildUserObj(ctx.userId));
-    G.define('getChannel',     async (id) => this._buildChannelObj(id ?? ctx.channelId));
+    G.define('getChannel',     async (id) => this._buildChannelObj(extractId(id) ?? ctx.channelId));
     G.define('getGuild',       async () => this._buildGuildObj(ctx.guildId));
     G.define('getInteraction', () => this._buildInteractionObj(ctx.interaction));
     G.define('getMessage',     () => this._buildMessageObj(ctx.message));
 
     /* ── sendMessage ── */
     G.define('sendMessage', async (channel, content, opts) => {
-      const chId = typeof channel === 'object' ? channel?.id : String(channel ?? ctx.channelId);
+      const chId = typeof channel === 'object' ? channel?.id : extractId(String(channel ?? ctx.channelId));
       return this._sendToChannel(chId, content, opts);
     });
 
     /* ── sendDM ── */
     G.define('sendDM', async (user, content, opts) => {
-      const uid = typeof user === 'object' ? user?.id : String(user);
+      const uid = typeof user === 'object' ? user?.id : extractId(String(user));
       const dm  = await DiscordRequest('/users/@me/channels', { method: 'POST', body: { recipient_id: uid } }).catch(() => null);
       if (!dm?.id) return null;
       return this._sendToChannel(dm.id, content, opts);
@@ -313,6 +330,7 @@ class Interpreter {
      ENVIO DE MENSAGEM (centralizado)
      ══════════════════════════════════════ */
   async _sendToChannel(channelId, content, opts = {}) {
+    channelId = extractId(channelId);
     if (!channelId) return null;
 
     // Segurança: canal deve pertencer à guild
@@ -595,6 +613,7 @@ class Interpreter {
   }
 
   async _buildUserObj(userId) {
+    userId = extractId(userId);
     if (!userId) return null;
     const user   = await DiscordRequest(`/users/${userId}`).catch(() => null);
     const member = await DiscordRequest(`/guilds/${this.discordCtx.guildId}/members/${userId}`).catch(() => null);
@@ -610,8 +629,8 @@ class Interpreter {
       isBot:       user?.bot ?? false,
       permissions: member?.permissions,
       send:        async (c, o) => self._sendToChannel(`@dm:${userId}`, c, o),
-      addRole:     async id => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${id}`, { method: 'PUT' }),
-      removeRole:  async id => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${id}`, { method: 'DELETE' }),
+      addRole:     async id => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${extractId(id)}`, { method: 'PUT' }),
+      removeRole:  async id => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${extractId(id)}`, { method: 'DELETE' }),
       timeout:     async ms => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'PATCH', body: { communication_disabled_until: new Date(Date.now() + ms).toISOString() } }),
       removeTimeout: async () => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'PATCH', body: { communication_disabled_until: null } }),
       ban:         async reason => DiscordRequest(`/guilds/${self.discordCtx.guildId}/bans/${userId}`, { method: 'PUT', body: { reason } }),
@@ -620,6 +639,7 @@ class Interpreter {
   }
 
   async _buildChannelObj(channelId) {
+    channelId = extractId(channelId);
     if (!channelId) return null;
     const ch   = await DiscordRequest(`/channels/${channelId}`).catch(() => null);
     const self = this;
