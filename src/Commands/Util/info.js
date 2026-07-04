@@ -19,7 +19,7 @@ const BANNER_URL = 'https://cdn.discordapp.com/attachments/1439343766505783407/1
 const SYSTEM_VERSIONS = [
   { label: 'Ayami',         value: '3.0' },
   { label: 'Logic Builder', value: '2.0' },
-  { label: 'Logic Script',  value: '1.0-BETA'
+  { label: 'Logic Script',  value: '1.0-BETA'},
   { label: 'Gacha',         value: '1.4' },
   { label: 'Discord API',   value: 'V10' },
 ];
