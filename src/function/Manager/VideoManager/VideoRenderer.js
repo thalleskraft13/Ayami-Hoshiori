@@ -101,6 +101,14 @@ class VideoRenderer {
             // Sempre roda, mesmo em caso de erro, para nunca deixar lixo em /tmp
             // nem imagens penduradas na memória da instância do template.
             try { await template.dispose?.(); } catch {}
+
+            // Força uma coleta de lixo completa, se o processo tiver sido
+            // iniciado com `--expose-gc` (ex.: `node --expose-gc index.js`).
+            // Sem essa flag, `global.gc` não existe e isso é um no-op seguro.
+            // Isso ajuda o V8 a devolver memória ao SO mais rápido depois do
+            // pico do render, em vez de deixar o RSS "preso" no nível do pico
+            // até o próximo GC automático.
+            global.gc?.();
         }
     }
 }

@@ -183,6 +183,7 @@ class VideoManager {
             return frames;
         } finally {
             try { await template.dispose?.(); } catch {}
+            global.gc?.(); // no-op sem `node --expose-gc`
         }
     }
 }
