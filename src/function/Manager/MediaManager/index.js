@@ -17,15 +17,15 @@
 
 const path         = require('path');
 const ImageManager = require('./ImageManager');
-const VideoManager = require('../VideoManager/VideoManager');
+const VideoProcessManager = require('../VideoManager/VideoProcessManager');
 
 // ─── Singletons ───────────────────────────────────────────────────────────────
 
 /** @type {ImageManager} */
 let _image = null;
 
-/** @type {VideoManager} */
-let _video = null;
+/** @type {VideoProcessManager} */
+let _videoPool = null;
 
 function _getImage() {
     if (!_image) {
@@ -35,12 +35,12 @@ function _getImage() {
     return _image;
 }
 
-function _getVideo() {
-    if (!_video) {
+function _getVideoPool() {
+    if (!_videoPool) {
         const root = path.resolve(__dirname, '../../../../');
-        _video = new VideoManager({ root });
+        _videoPool = new VideoProcessManager({ root });
     }
-    return _video;
+    return _videoPool;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -60,12 +60,12 @@ const MediaManager = {
      */
     async init(options = {}) {
         if (options.root) {
-            _image = new ImageManager(options);
-            _video = new VideoManager(options);
+            _image     = new ImageManager(options);
+            _videoPool = new VideoProcessManager(options);
         }
         await Promise.all([
             _getImage().init(),
-            _getVideo().init(),
+            _getVideoPool().listTemplates(), // esquenta + valida os templates de vídeo no boot
         ]);
     },
 
@@ -97,6 +97,8 @@ const MediaManager = {
     Video: {
         /**
          * Render a video/gif template → Buffer.
+         * Roda num processo filho isolado — não trava a thread principal
+         * do bot enquanto o vídeo está sendo gerado.
          *
          * @param {object} options
          * @param {string} options.Template - Template name.
@@ -109,20 +111,16 @@ const MediaManager = {
          * });
          */
         async Render(options) {
-            return _getVideo().render(options);
+            return _getVideoPool().render(options);
         },
 
-        /** @returns {string[]} */
-        listTemplates() {
-            return _getVideo().listTemplates();
-        },
-
-         async renderFrames(options) {
-            return _getVideo().renderFrames(options);
+        /** @returns {Promise<string[]>} */
+        async listTemplates() {
+            return _getVideoPool().listTemplates();
         },
 
         stats() {
-            return _getVideo().stats();
+            return _getVideoPool().stats();
         },
     },
 
@@ -139,7 +137,7 @@ const MediaManager = {
     stats() {
         return {
             image: _getImage().stats(),
-            video: _getVideo().stats(),
+            video: _getVideoPool().stats(),
         };
     },
 
