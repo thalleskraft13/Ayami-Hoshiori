@@ -1,10 +1,11 @@
 'use strict';
 
+const path      = require('path');
 const BaseVideo = require('../BaseVideo');
 const FFmpeg    = require('../FFmpeg');
 const { chromaKeyGreen } = require('../chromaKeyVideo');
 
-// ── Debug: mostra marcadores de posição nos frames ────────────────────────────
+
 const DEBUG = true;
 
 class HenryDangerTemplate extends BaseVideo {
@@ -20,10 +21,11 @@ class HenryDangerTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl1, avatarBuffer } = data;
 
-        if (!this._baseFrames) {
+
+        if (!this._baseFramesDir) {
             const videoPath = context.assets.videos.get('henrydanger');
             if (!videoPath) throw new Error('[HenryDanger] Asset "henrydanger" não encontrado em videos/.');
-            this._baseFrames = await FFmpeg.extractFrames(videoPath, 20);
+            this._baseFramesDir = await FFmpeg.extractFramesToDir(videoPath, 20);
             this.constructor._audioSourcePath = videoPath;
         }
 
@@ -48,8 +50,10 @@ class HenryDangerTemplate extends BaseVideo {
             if (DEBUG) _drawDebug(ctx, coords, slot, frameIndex);
         }
 
-        // Frame base + chroma key
-        const baseFrame = await loadImage(this._baseFrames[frameIndex % this._baseFrames.length]);
+        // Frame base + chroma key — carrega direto do disco, 1 frame por vez.
+        const { dir, files } = this._baseFramesDir;
+        const baseFramePath  = path.join(dir, files[frameIndex % files.length]);
+        const baseFrame      = await loadImage(baseFramePath);
         const bgCanvas  = canvasModule.createCanvas(W, H);
         const bgCtx     = bgCanvas.getContext('2d');
         bgCtx.drawImage(baseFrame, 0, 0, W, H);
@@ -61,6 +65,14 @@ class HenryDangerTemplate extends BaseVideo {
         }
 
         return canvas.toBuffer('image/png');
+    }
+
+    // Chamado automaticamente pelo VideoRenderer ao final do render
+    // (sucesso ou erro) — apaga o diretório de frames extraídos do disco.
+    dispose() {
+        FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
+        this._baseFramesDir = null;
+        this._avatarImg = null;
     }
 }
 

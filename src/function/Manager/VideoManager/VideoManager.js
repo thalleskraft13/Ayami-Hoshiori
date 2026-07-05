@@ -25,7 +25,11 @@ class VideoManager {
      */
     constructor(options = {}) {
         this._root        = options.root        ?? process.cwd();
-        this._concurrency = options.concurrency ?? 2; // videos are heavier than images
+        // Vídeo é a operação mais pesada do bot (ffmpeg + canvas por frame).
+        // Mesmo com os templates otimizados para não carregar frames em RAM,
+        // 2 renders simultâneos ainda dobram o uso de CPU/memória do processo.
+        // Suba isso só se tiver margem de RAM/CPU sobrando e testar sob carga.
+        this._concurrency = options.concurrency ?? 1;
 
         const publicDir      = path.join(this._root, 'src', 'public', 'media');
         const templatesDir   = path.join(__dirname, 'Templates');
@@ -133,37 +137,54 @@ class VideoManager {
         if (!this._ready) throw new Error('[VideoManager] Call init() before rendering.');
     }
 
+    /**
+     * Renderiza cada frame e retorna o array de Buffers PNG (sem encodar
+     * em vídeo/gif). Útil para debug/inspeção de um template frame a frame.
+     *
+     * ⚠️ Diferente de `render()`, este método mantém TODOS os frames de
+     * saída na RAM ao mesmo tempo (não há como devolver um array de
+     * frames sem isso). Por isso ele passa pela mesma fila com
+     * concorrência limitada usada por `render()`, e sempre libera os
+     * recursos do template (`dispose()`) ao final — mesmo em caso de
+     * erro — para não deixar diretórios temporários (ex.: frames base
+     * extraídos via `FFmpeg.extractFramesToDir`) vazando em /tmp.
+     */
     async renderFrames(options) {
         this._assertReady();
- 
+
         const { Template, ...data } = options;
         if (!Template) throw new Error('[VideoManager] options.Template is required.');
- 
+
         const name          = Template.toLowerCase();
         const TemplateClass = this._templates.get(name);
- 
+
         if (!TemplateClass) {
             throw new Error(
                 `[VideoManager] Template "${name}" not found. ` +
                 `Available: ${[...this._templates.keys()].join(', ') || '(none)'}`
             );
         }
- 
+
+        return this._queue.add(() => this._doRenderFrames(TemplateClass, data));
+    }
+
+    async _doRenderFrames(TemplateClass, data) {
         const meta        = TemplateClass.meta;
         const totalFrames = Math.ceil(meta.fps * meta.duration);
-        const template     = new TemplateClass();
-        const context       = this._buildContext();
- 
-        const frames = [];
-        for (let i = 0; i < totalFrames; i++) {
-            const frame = await template.renderFrame(i, totalFrames, data, context);
-            frames.push(frame);
+        const template    = new TemplateClass();
+        const context     = this._buildContext();
+
+        try {
+            const frames = [];
+            for (let i = 0; i < totalFrames; i++) {
+                const frame = await template.renderFrame(i, totalFrames, data, context);
+                frames.push(frame);
+            }
+            return frames;
+        } finally {
+            try { await template.dispose?.(); } catch {}
         }
- 
-        return frames;
     }
- 
-      
 }
 
 module.exports = VideoManager;

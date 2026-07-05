@@ -122,6 +122,20 @@ class BaseVideo {
         const buffer = await context.avatar.fetch(url, size);
         return context.loadImage(buffer);
     }
+
+    /**
+     * Chamado pelo `VideoRenderer` uma única vez, ao final do render
+     * (sucesso ou erro) — sempre, garantido por `finally`. Use para
+     * liberar qualquer recurso retido pela instância do template entre
+     * frames, como diretórios temporários criados por
+     * `FFmpeg.extractFramesToDir()`.
+     *
+     * Não lança erro por padrão; subclasses devem sobrescrever se
+     * precisarem limpar algo.
+     *
+     * @returns {void|Promise<void>}
+     */
+    dispose() {}
 }
 
 module.exports = BaseVideo;

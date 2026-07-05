@@ -74,7 +74,7 @@ class VideoRenderer {
             // ── Encoda ────────────────────────────────────────────────────────
             // FFmpeg recebe o diretório já populado (frameDir) em vez de um
             // array de Buffers, e cuida de limpar frameDir ao final.
-            return audio
+            return await (audio
                 ? FFmpeg.encodeWithAudio({
                     frameDir, frameCount: totalFrames, audio,
                     fps:    meta.fps,
@@ -88,13 +88,19 @@ class VideoRenderer {
                     width:  meta.width,
                     height: meta.height,
                     format: meta.format ?? 'gif',
-                  });
+                  }));
 
         } catch (err) {
             // Se falhar antes de chegar no FFmpeg (que limpa frameDir sozinho
             // em seu `finally`), limpamos aqui pra não deixar lixo em /tmp.
             try { fs.rmSync(frameDir, { recursive: true, force: true }); } catch {}
             throw err;
+        } finally {
+            // Libera qualquer recurso retido pelo template entre frames
+            // (ex.: diretório de frames extraídos via FFmpeg.extractFramesToDir).
+            // Sempre roda, mesmo em caso de erro, para nunca deixar lixo em /tmp
+            // nem imagens penduradas na memória da instância do template.
+            try { await template.dispose?.(); } catch {}
         }
     }
 }

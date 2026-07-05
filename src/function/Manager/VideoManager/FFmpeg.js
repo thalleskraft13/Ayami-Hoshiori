@@ -153,6 +153,15 @@ class FFmpeg {
     /**
      * Extrai todos os frames de um vídeo como Buffers PNG.
      *
+     * ⚠️ Carrega TODOS os frames na RAM de uma vez (um Buffer por frame).
+     * Para vídeos longos ou em alta resolução isso pode causar picos de
+     * memória enormes (ex.: 360 frames a partir de um vídeo 1080p podem
+     * passar de 500MB-1GB facilmente). Sempre que os frames forem usados
+     * como "fundo" que se repete ao longo de várias chamadas de
+     * `renderFrame` (caso dos templates de vídeo), prefira
+     * `extractFramesToDir()` abaixo, que mantém os frames no disco e
+     * carrega apenas 1 por vez.
+     *
      * @param {string} videoPath
      * @param {number} [fps]
      * @returns {Promise<Buffer[]>}
@@ -178,6 +187,58 @@ class FFmpeg {
         } finally {
             try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
         }
+    }
+
+    /**
+     * Extrai todos os frames de um vídeo para um diretório temporário no
+     * disco, SEM carregar nenhum deles na RAM. Retorna o diretório e a
+     * lista de nomes de arquivo (já ordenados), para o chamador carregar
+     * (`loadImage(path)`) um frame por vez, conforme precisa.
+     *
+     * O chamador é responsável por apagar o diretório quando terminar,
+     * chamando `FFmpeg.cleanupFrameDir(dir)` (ex.: no `dispose()` do
+     * template).
+     *
+     * @param {string} videoPath
+     * @param {number} [fps]
+     * @returns {Promise<{ dir: string, files: string[], count: number }>}
+     */
+    static async extractFramesToDir(videoPath, fps = null) {
+        const dir = path.join(os.tmpdir(), `ayami_extract_${randomUUID()}`);
+        fs.mkdirSync(dir, { recursive: true });
+
+        try {
+            const fpsArg = fps ? ['-vf', `fps=${fps}`] : [];
+
+            await FFmpeg._run([
+                '-i', videoPath,
+                ...fpsArg,
+                path.join(dir, 'frame_%06d.png')
+            ]);
+
+            const files = fs.readdirSync(dir).filter(f => f.endsWith('.png')).sort();
+
+            if (!files.length) {
+                throw new Error(`[FFmpeg] Nenhum frame extraído de: ${videoPath}`);
+            }
+
+            return { dir, files, count: files.length };
+
+        } catch (err) {
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+            throw err;
+        }
+    }
+
+    /**
+     * Remove um diretório de frames criado por `extractFramesToDir()`.
+     * Seguro de chamar múltiplas vezes / com diretório inexistente.
+     *
+     * @param {string} dir
+     */
+    static cleanupFrameDir(dir) {
+        if (!dir) return;
+        try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
     }
 
     /**

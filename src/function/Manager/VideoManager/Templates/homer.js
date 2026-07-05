@@ -1,5 +1,6 @@
 'use strict';
 
+const path      = require('path');
 const BaseVideo = require('../BaseVideo');
 const FFmpeg     = require('../FFmpeg');
 const { chromaKeyGreen } = require('../chromaKeyVideo');
@@ -27,12 +28,12 @@ class HomerTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl, avatarBuffer } = data;
 
-        // ── Carrega o vídeo base de fundo verde (uma vez só) ───────────────
-        if (!this._baseFrames) {
+
+        if (!this._baseFramesDir) {
             const videoPath = context.assets.videos.get('homer');
             if (!videoPath) throw new Error('[Homer] Asset "homer" não encontrado em videos/.');
 
-            this._baseFrames = await FFmpeg.extractFrames(videoPath, 15);
+            this._baseFramesDir = await FFmpeg.extractFramesToDir(videoPath, 15);
 
             // Expõe o caminho do vídeo para o VideoRenderer extrair o áudio
             this.constructor._audioSourcePath = videoPath;
@@ -52,9 +53,10 @@ class HomerTemplate extends BaseVideo {
             ctx.drawImage(img, 300, 0, 400, 500);
         }
 
-        // ── 2. Frame do vídeo verde em canvas separado ────────────────────
-        const baseIndex = frameIndex % this._baseFrames.length;
-        const baseFrame = await loadImage(this._baseFrames[baseIndex]);
+        // ── 2. Frame do vídeo verde em canvas separado (carrega do disco) ──
+        const { dir, files } = this._baseFramesDir;
+        const baseIndex = frameIndex % files.length;
+        const baseFrame = await loadImage(path.join(dir, files[baseIndex]));
 
         const bgCanvas = canvasModule.createCanvas(W, H);
         const bgCtx    = bgCanvas.getContext('2d');
@@ -67,6 +69,13 @@ class HomerTemplate extends BaseVideo {
         ctx.drawImage(bgCanvas, 0, 0);
 
         return canvas.toBuffer('image/png');
+    }
+
+    // Chamado automaticamente pelo VideoRenderer ao final do render
+    // (sucesso ou erro) — apaga o diretório de frames extraídos do disco.
+    dispose() {
+        FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
+        this._baseFramesDir = null;
     }
 }
 

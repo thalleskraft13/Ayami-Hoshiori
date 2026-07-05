@@ -1,5 +1,6 @@
 'use strict';
 
+const path      = require('path');
 const BaseVideo = require('../BaseVideo');
 const FFmpeg     = require('../FFmpeg');
 const { chromaKeyGreen } = require('../chromaKeyVideo');
@@ -18,12 +19,12 @@ class WhatTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl, avatarBuffer } = data;
 
-        // ── Carrega o vídeo base de fundo verde (uma vez só) ───────────────
-        if (!this._baseFrames) {
-            const videoPath = context.assets.videos.get('what');
-            if (!videoPath) throw new Error('[Asset  não encontrado em videos/.');
 
-            this._baseFrames = await FFmpeg.extractFrames(videoPath, 15);
+        if (!this._baseFramesDir) {
+            const videoPath = context.assets.videos.get('what');
+            if (!videoPath) throw new Error('[What] Asset "what" não encontrado em videos/.');
+
+            this._baseFramesDir = await FFmpeg.extractFramesToDir(videoPath, 15);
 
             // Expõe o caminho do vídeo para o VideoRenderer extrair o áudio
             this.constructor._audioSourcePath = videoPath;
@@ -35,46 +36,30 @@ class WhatTemplate extends BaseVideo {
         const canvas = canvasModule.createCanvas(W, H);
         const ctx    = canvas.getContext('2d');
 
-       
-        const baseIndex = frameIndex % this._baseFrames.length;
-        const baseFrame = await loadImage(this._baseFrames[frameIndex % this._baseFrames.length]);
+        // Frame base — carrega direto do disco, 1 frame por vez.
+        const { dir, files } = this._baseFramesDir;
+        const baseFrame = await loadImage(path.join(dir, files[frameIndex % files.length]));
 
-        if (frameIndex < 21){
-             if (avatarUrl || avatarBuffer) {
-                const img = avatarBuffer
-                    ? await loadImage(avatarBuffer)
-                    : await loadImage(await context.avatar.fetch(avatarUrl, W));
-             ctx.drawImage(img, 0, 0, W, H);
-           }
+        // Avatar decodificado uma única vez e reaproveitado em todos os
+        // frames (antes: era baixado do cache e decodificado de novo em
+        // cada um dos ~86 frames).
+        if (!this._avatarImg && (avatarUrl || avatarBuffer)) {
+            this._avatarImg = avatarBuffer
+                ? await loadImage(avatarBuffer)
+                : await loadImage(await context.avatar.fetch(avatarUrl, W));
         }
 
-        if (frameIndex < 56 && frameIndex > 21){
-             if (avatarUrl || avatarBuffer) {
-                const img = avatarBuffer
-                    ? await loadImage(avatarBuffer)
-                    : await loadImage(await context.avatar.fetch(avatarUrl, W));
-             ctx.drawImage(img, 100, 0, 570, 300);
-           }
+        if (this._avatarImg) {
+            if (frameIndex < 21) {
+                ctx.drawImage(this._avatarImg, 0, 0, W, H);
+            } else if (frameIndex < 56) {
+                ctx.drawImage(this._avatarImg, 100, 0, 570, 300);
+            } else if (frameIndex < 57) {
+                ctx.drawImage(this._avatarImg, 160, 0, 400, 270);
+            } else if (frameIndex < 86) {
+                ctx.drawImage(this._avatarImg, 210, 0, 350, 250);
+            }
         }
-
-          if (frameIndex < 57 && frameIndex > 55){
-             if (avatarUrl || avatarBuffer) {
-                const img = avatarBuffer
-                    ? await loadImage(avatarBuffer)
-                    : await loadImage(await context.avatar.fetch(avatarUrl, W));
-             ctx.drawImage(img, 160, 0, 400, 270);
-           }
-        }
-
-          if (frameIndex < 86 && frameIndex > 56){
-             if (avatarUrl || avatarBuffer) {
-                const img = avatarBuffer
-                    ? await loadImage(avatarBuffer)
-                    : await loadImage(await context.avatar.fetch(avatarUrl, W));
-             ctx.drawImage(img, 210, 0, 350, 250);
-           }
-        }
-   
 
         const bgCanvas = canvasModule.createCanvas(W, H);
         const bgCtx    = bgCanvas.getContext('2d');
@@ -87,6 +72,14 @@ class WhatTemplate extends BaseVideo {
         ctx.drawImage(bgCanvas, 0, 0);
 
         return canvas.toBuffer('image/png');
+    }
+
+    // Chamado automaticamente pelo VideoRenderer ao final do render
+    // (sucesso ou erro) — apaga o diretório de frames extraídos do disco.
+    dispose() {
+        FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
+        this._baseFramesDir = null;
+        this._avatarImg = null;
     }
 }
 
