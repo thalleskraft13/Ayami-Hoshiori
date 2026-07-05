@@ -5,7 +5,7 @@ const BaseVideo = require('../BaseVideo');
 const FFmpeg    = require('../FFmpeg');
 const { chromaKeyGreen } = require('../chromaKeyVideo');
 
-
+// ── Debug: mostra marcadores de posição nos frames ────────────────────────────
 const DEBUG = true;
 
 class HenryDangerTemplate extends BaseVideo {
@@ -21,7 +21,9 @@ class HenryDangerTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl1, avatarBuffer } = data;
 
-
+        // ── Frames do vídeo base ficam no disco, nunca todos na RAM ────────
+        // (antes: FFmpeg.extractFrames carregava ~360 PNGs como Buffers de
+        // uma vez só, o que causava o pico de memória no render de vídeo).
         if (!this._baseFramesDir) {
             const videoPath = context.assets.videos.get('henrydanger');
             if (!videoPath) throw new Error('[HenryDanger] Asset "henrydanger" não encontrado em videos/.');
@@ -59,12 +61,15 @@ class HenryDangerTemplate extends BaseVideo {
         bgCtx.drawImage(baseFrame, 0, 0, W, H);
         chromaKeyGreen(bgCtx, W, H, 160, false);
         ctx.drawImage(bgCanvas, 0, 0);
+        _freeCanvas(bgCanvas); // já foi copiado pro canvas principal, libera logo
 
         if (DEBUG && slot) {
             _drawDebugOver(ctx, _calcCoords(slot), slot, frameIndex);
         }
 
-        return canvas.toBuffer('image/png');
+        const buffer = canvas.toBuffer('image/png');
+        _freeCanvas(canvas); // idem — já temos o Buffer, não precisa mais do canvas nativo
+        return buffer;
     }
 
     // Chamado automaticamente pelo VideoRenderer ao final do render
@@ -192,6 +197,24 @@ function _drawPerspective(ctx, canvasModule, img, { topoEsq, topDir, baixEsq }) 
     ctx.setTransform(1, sX, sY, 1, topoEsq.x, topoEsq.y);
     ctx.drawImage(tmp, 0, 0, tW, tH);
     ctx.restore();
+
+    // Libera a memória nativa do canvas temporário imediatamente. O V8 não
+    // sente pressão de heap por causa desse objeto (o wrapper JS é minúsculo,
+    // o buffer de pixels é nativo/Cairo), então sem isso ele fica esperando
+    // um GC que pode demorar — e com 1 canvas desses por frame, 360 frames
+    // seguidos acumulam memória nativa bem mais rápido do que o V8 percebe.
+    _freeCanvas(tmp);
+}
+
+/**
+ * Zera as dimensões do canvas para forçar o Cairo a liberar o buffer de
+ * pixels nativo na hora, em vez de esperar o GC do V8 coletar o wrapper JS.
+ *
+ * @param {import('canvas').Canvas} canvas
+ */
+function _freeCanvas(canvas) {
+    if (!canvas) return;
+    try { canvas.width = 0; canvas.height = 0; } catch {}
 }
 
 // ─── Debug ────────────────────────────────────────────────────────────────────

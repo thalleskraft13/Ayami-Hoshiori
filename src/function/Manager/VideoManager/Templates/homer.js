@@ -28,7 +28,9 @@ class HomerTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl, avatarBuffer } = data;
 
-
+        // ── Frames do vídeo base de fundo verde ficam no disco, nunca ──────
+        // todos na RAM (antes: extractFrames carregava tudo como Buffers,
+        // causando o pico de memória no render de vídeo).
         if (!this._baseFramesDir) {
             const videoPath = context.assets.videos.get('homer');
             if (!videoPath) throw new Error('[Homer] Asset "homer" não encontrado em videos/.');
@@ -67,8 +69,11 @@ class HomerTemplate extends BaseVideo {
 
         // ── 4. Compõe por cima ──────────────────────────────────────────────
         ctx.drawImage(bgCanvas, 0, 0);
+        _freeCanvas(bgCanvas);
 
-        return canvas.toBuffer('image/png');
+        const buffer = canvas.toBuffer('image/png');
+        _freeCanvas(canvas);
+        return buffer;
     }
 
     // Chamado automaticamente pelo VideoRenderer ao final do render
@@ -77,6 +82,19 @@ class HomerTemplate extends BaseVideo {
         FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
         this._baseFramesDir = null;
     }
+}
+
+/**
+ * Zera as dimensões do canvas para forçar o Cairo a liberar o buffer de
+ * pixels nativo na hora, em vez de esperar o GC do V8 coletar o wrapper JS
+ * (o V8 não sente pressão de heap por causa desse objeto — o wrapper é
+ * pequeno, o buffer de pixels é nativo e fica fora da contagem do V8).
+ *
+ * @param {import('canvas').Canvas} canvas
+ */
+function _freeCanvas(canvas) {
+    if (!canvas) return;
+    try { canvas.width = 0; canvas.height = 0; } catch {}
 }
 
 module.exports = HomerTemplate;
