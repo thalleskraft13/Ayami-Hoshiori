@@ -34,7 +34,7 @@ const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessag
 const { LanguageManager } = require('./Manager/LanguageManager');
 const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
 const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
-
+const MediaManager = require('./Manager/MediaManager');
 
 const EventEmitter = require('events');
 
@@ -118,6 +118,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.guilds = new GuildManager(this);
         this.blacklist = new BlacklistManager(this); // seção 3 — carregado após o Mongo conectar (ver _connectMongo)
         this.emoji = require("../public/emojis.js")
+        this.MediaManager = MediaManager;
 
         this._reconnectAttempts = 0;
         this._isReconnecting    = false;
@@ -488,7 +489,7 @@ async _onReactionAdd(d) {
     // esse shard já tinha antes desse READY — GUILD_CREATE pra uma dessas
     // logo em seguida é resync, não entrada nova.
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
-
+     await this.MediaManager.init()
     await this._loadCommands();
   //  await this._connectMongo(); // todos conectam
     const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
