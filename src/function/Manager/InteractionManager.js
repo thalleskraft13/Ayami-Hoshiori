@@ -505,6 +505,55 @@ async _replyError(interaction, err, context = 'Erro interno') {
 }
 
 
+    /**
+     * Indica se um custom_id já pertence a um sistema interno (tickets,
+     * giveaway, flows CV2, aniversário, ou componentes TEMPORÁRIOS do
+     * próprio LogicScript registrados via _register/cache "temp_...").
+     *
+     * Usado pelo ScriptRunner para decidir se deve ou não disparar
+     * on(buttonClick)/on(selectMenu) pro LogicScript: se o id for
+     * "reservado", quem trata é o próprio InteractionManager (ou outro
+     * subsistema), então o script não deve rodar de novo por cima.
+     *
+     * Custom ids PERMANENTES criados por Button().setCustomId(...) no
+     * LogicScript (ex: "botlist_add_bot") NÃO são reservados — eles
+     * precisam continuar disparando on(buttonClick) normalmente.
+     *
+     * @param {string} customId
+     * @returns {boolean}
+     */
+    isReservedCustomId(customId) {
+        if (!customId) return false;
+
+        // Componentes temporários do próprio LogicScript (Button().onClick(),
+        // SelectMenu().onClick(), Modal()) — já resolvidos via cache.
+        if (customId.startsWith('temp_')) return true;
+
+        // Ids fixos usados por outros subsistemas internos.
+        if (customId === 'close_ticket') return true;
+        if (customId === 'birthday_register_btn') return true;
+
+        // Ids em formato JSON usados por outros subsistemas internos.
+        const parsed = this._tryParseJson(customId);
+        if (parsed?.t) {
+            const reservedTypes = [
+                'giveaway_join',
+                'auth_approve',
+                'auth_deny',
+                'create_ticket',
+                'create_ticket_select',
+                'ticket_select_hub',
+                'close_ticket_v2',
+                'hub_select',
+                'flow_trigger',
+                'cv2_select',
+            ];
+            if (reservedTypes.includes(parsed.t)) return true;
+        }
+
+        return false;
+    }
+
     _isExpired(entry) {
         return Date.now() > entry.expires;
     }
