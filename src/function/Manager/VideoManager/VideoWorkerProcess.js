@@ -25,28 +25,37 @@ const VideoManager = require('./VideoManager');
 process.once('message', async (msg) => {
     const { Template, data, root } = msg || {};
 
+    let response;
     try {
         const manager = new VideoManager({ root });
         await manager.init();
 
         const buffer = await manager.render({ Template, ...data });
 
-        process.send({ ok: true, buffer });
+        response = { ok: true, buffer };
     } catch (err) {
-        process.send({ ok: false, error: err?.message ?? String(err) });
-    } finally {
-        // Encerra sempre, com sucesso ou erro — é isso que garante a RAM
-        // sendo devolvida ao SO na hora, o ponto principal de existir este
-        // processo separado.
-        process.exit(0);
+        response = { ok: false, error: err?.message ?? String(err) };
     }
+
+    // `process.send()` é assíncrono — ele só enfileira a mensagem pra ser
+    // escrita no pipe do IPC, não garante que ela já foi entregue. Chamar
+    // `process.exit()` logo em seguida (sem esperar essa confirmação) corre
+    // o risco de matar o processo com a mensagem ainda na fila de saída, e
+    // o pai nunca chega a recebê-la (só vê o processo encerrar). Por isso
+    // só encerramos dentro do callback, depois que o envio é confirmado.
+    process.send(response, () => {
+        process.exit(0);
+    });
 });
 
 // Segurança extra: se algo além do render em si explodir de forma inesperada
 // (ex. erro fora do try/catch acima), ainda tentamos avisar o pai antes de
 // morrer, em vez de deixar o processo pendurado sem resposta.
 process.on('uncaughtException', (err) => {
-    try { process.send({ ok: false, error: err?.message ?? String(err) }); } catch {}
-    process.exit(1);
+    try {
+        process.send({ ok: false, error: err?.message ?? String(err) }, () => process.exit(1));
+    } catch {
+        process.exit(1);
+    }
 });
 
