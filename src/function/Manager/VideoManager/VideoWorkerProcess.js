@@ -50,9 +50,3 @@ process.on('uncaughtException', (err) => {
     process.exit(1);
 });
 
-// Failsafe: nunca deveria disparar (o pai manda a mensagem imediatamente
-// após o fork), mas evita um processo zumbi caso o IPC falhe silenciosamente.
-setTimeout(() => {
-    try { process.send({ ok: false, error: '[VideoWorkerProcess] Nenhuma mensagem recebida do processo pai.' }); } catch {}
-    process.exit(1);
-}, 15_000).unref();

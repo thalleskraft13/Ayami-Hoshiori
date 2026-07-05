@@ -31,12 +31,15 @@ class VideoProcessManager {
      * @param {object} [options]
      * @param {string} [options.root]          - Project root (mesmo passado ao VideoManager).
      * @param {number} [options.concurrency=1] - Max de processos filhos de render simultâneos.
-     * @param {number} [options.timeout=100000] - Timeout (ms) por render antes de matar o processo filho.
+     * @param {number} [options.timeout=240000] - Timeout (ms) por render antes de matar o processo filho.
+     *   Padrão de 4min: alguns templates levam de 1 a 3min dependendo do vídeo
+     *   base e da carga do host — o timeout precisa de margem acima disso,
+     *   ou vai matar renders legítimos que só estavam demorando mais.
      */
     constructor(options = {}) {
         this._root        = options.root ?? process.cwd();
         this._concurrency = options.concurrency ?? 1;
-        this._timeoutMs   = options.timeout ?? 100_000;
+        this._timeoutMs   = options.timeout ?? 240_000;
         this._workerPath  = path.join(__dirname, 'VideoWorkerProcess.js');
 
         // Timeout da Queue fica um pouco acima do timeout do processo filho:

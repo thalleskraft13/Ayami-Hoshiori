@@ -37,7 +37,7 @@ class VideoManager {
         this._loader = new Loader({ publicDir, templatesDir });
         this._fonts  = new Fonts();
         this._avatar = new Avatar({ cache: new Cache({ ttl: 600_000, name: 'VideoAvatarCache' }) });
-        this._queue  = new Queue({ concurrency: this._concurrency, timeout: 120_000 }); // 2min timeout
+        this._queue  = new Queue({ concurrency: this._concurrency, timeout: 240_000 }); // 4min — alguns templates levam até ~3min dependendo do vídeo base/carga do host
 
         /** @type {Map<string, Function>} */
         this._templates = new Map();
