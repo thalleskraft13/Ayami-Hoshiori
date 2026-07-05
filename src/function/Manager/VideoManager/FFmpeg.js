@@ -14,10 +14,19 @@ const { randomUUID } = require('crypto');
 class FFmpeg {
 
     /**
-     * Encode an array of PNG frame Buffers into a video/gif Buffer (no audio).
+     * Encode PNG frames into a video/gif Buffer (no audio).
+     *
+     * Accepts either:
+     *   - `frames`: a pre-built Buffer[] (original behavior — FFmpeg creates the
+     *     tmp dir and writes each frame to disk itself), or
+     *   - `frameDir` + `frameCount`: a directory where the caller has *already*
+     *     written `frame_000000.png … frame_NNNNNN.png` (streaming mode — used
+     *     by VideoRenderer so frames never pile up as Buffers in memory).
      *
      * @param {object}   options
-     * @param {Buffer[]} options.frames
+     * @param {Buffer[]} [options.frames]
+     * @param {string}   [options.frameDir]
+     * @param {number}   [options.frameCount]
      * @param {number}   options.fps
      * @param {number}   options.width
      * @param {number}   options.height
@@ -28,6 +37,8 @@ class FFmpeg {
     static async encode(options) {
         const {
             frames,
+            frameDir,
+            frameCount,
             fps,
             width,
             height,
@@ -35,18 +46,21 @@ class FFmpeg {
             extraArgs = [],
         } = options;
 
-        if (!frames?.length) throw new Error('[FFmpeg] No frames provided.');
-
-        const tmpDir    = path.join(os.tmpdir(), `ayami_${randomUUID()}`);
+        const ownsDir = !frameDir;
+        const tmpDir  = frameDir ?? path.join(os.tmpdir(), `ayami_${randomUUID()}`);
         const outputExt = format === 'gif' ? 'gif' : format === 'webm' ? 'webm' : 'mp4';
         const outputPath = path.join(tmpDir, `output.${outputExt}`);
 
         try {
-            fs.mkdirSync(tmpDir, { recursive: true });
-
-            for (let i = 0; i < frames.length; i++) {
-                const framePath = path.join(tmpDir, `frame_${String(i).padStart(6, '0')}.png`);
-                fs.writeFileSync(framePath, frames[i]);
+            if (ownsDir) {
+                if (!frames?.length) throw new Error('[FFmpeg] No frames provided.');
+                fs.mkdirSync(tmpDir, { recursive: true });
+                for (let i = 0; i < frames.length; i++) {
+                    const framePath = path.join(tmpDir, `frame_${String(i).padStart(6, '0')}.png`);
+                    fs.writeFileSync(framePath, frames[i]);
+                }
+            } else if (!frameCount) {
+                throw new Error('[FFmpeg] frameCount is required when using frameDir.');
             }
 
             const args = FFmpeg._buildArgs({
@@ -65,8 +79,13 @@ class FFmpeg {
     /**
      * Encode frames + mixa um áudio externo no resultado final.
      *
+     * Accepts either `frames` (Buffer[], original behavior) or `frameDir` +
+     * `frameCount` (frames already written to disk by the caller) — see `encode()`.
+     *
      * @param {object}   options
-     * @param {Buffer[]} options.frames
+     * @param {Buffer[]} [options.frames]
+     * @param {string}   [options.frameDir]
+     * @param {number}   [options.frameCount]
      * @param {Buffer|null} options.audio - Buffer de áudio (AAC). null = sem áudio.
      * @param {number}   options.fps
      * @param {number}   options.width
@@ -75,22 +94,25 @@ class FFmpeg {
      * @returns {Promise<Buffer>}
      */
     static async encodeWithAudio(options) {
-        const { frames, audio, fps, width, height, format = 'mp4' } = options;
+        const { frames, frameDir, frameCount, audio, fps, width, height, format = 'mp4' } = options;
 
-        if (!frames?.length) throw new Error('[FFmpeg] No frames provided.');
-
-        const tmpDir     = path.join(os.tmpdir(), `ayami_${randomUUID()}`);
+        const ownsDir = !frameDir;
+        const tmpDir     = frameDir ?? path.join(os.tmpdir(), `ayami_${randomUUID()}`);
         const audioPath  = path.join(tmpDir, 'audio_in.aac');
         const outputPath = path.join(tmpDir, `output.${format}`);
 
         try {
-            fs.mkdirSync(tmpDir, { recursive: true });
-
-            for (let i = 0; i < frames.length; i++) {
-                fs.writeFileSync(
-                    path.join(tmpDir, `frame_${String(i).padStart(6, '0')}.png`),
-                    frames[i]
-                );
+            if (ownsDir) {
+                if (!frames?.length) throw new Error('[FFmpeg] No frames provided.');
+                fs.mkdirSync(tmpDir, { recursive: true });
+                for (let i = 0; i < frames.length; i++) {
+                    fs.writeFileSync(
+                        path.join(tmpDir, `frame_${String(i).padStart(6, '0')}.png`),
+                        frames[i]
+                    );
+                }
+            } else if (!frameCount) {
+                throw new Error('[FFmpeg] frameCount is required when using frameDir.');
             }
 
             if (audio) fs.writeFileSync(audioPath, audio);
