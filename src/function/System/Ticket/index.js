@@ -1697,9 +1697,9 @@ class TicketSystem {
     const staffRoles = fo?.cargosStaff?.length ? fo.cargosStaff : (fp.cargosStaff || []);
 
     const permissionOverwrites = [
-      { id: guildId, deny: '1024' }, // @everyone: VIEW_CHANNEL deny
-      { id: userId,  allow: '3072' }, // criador: VIEW_CHANNEL + SEND_MESSAGES
-      ...staffRoles.map(roleId => ({ id: roleId, allow: '3072' })),
+      { id: guildId, type: 0, deny: '1024' },              // @everyone (cargo): VIEW_CHANNEL deny
+      { id: userId,  type: 1, allow: '3072' },              // criador (membro): VIEW_CHANNEL + SEND_MESSAGES
+      ...staffRoles.map(roleId => ({ id: roleId, type: 0, allow: '3072' })), // staff (cargo)
     ];
 
     const channel = await DiscordRequest(`/guilds/${guildId}/channels`, {

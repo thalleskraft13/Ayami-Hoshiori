@@ -114,6 +114,22 @@ const MediaManager = {
             return _getVideoPool().render(options);
         },
 
+        /**
+         * Renderiza cada frame de um template e devolve o array de Buffers
+         * PNG (sem encodar em vídeo/gif) — pra editar/inspecionar frame a
+         * frame. Também roda num processo filho isolado, mas ainda assim
+         * mantém todos os frames de saída na RAM de uma vez (não tem como
+         * devolver um array sem isso) — use como ferramenta pontual, não
+         * como caminho principal de geração.
+         *
+         * @param {object} options
+         * @param {string} options.Template
+         * @returns {Promise<Buffer[]>}
+         */
+        async renderFrames(options) {
+            return _getVideoPool().renderFrames(options);
+        },
+
         /** @returns {Promise<string[]>} */
         async listTemplates() {
             return _getVideoPool().listTemplates();

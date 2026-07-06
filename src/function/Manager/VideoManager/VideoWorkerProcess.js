@@ -16,23 +16,29 @@
  *     sem depender do V8 decidir liberar heap/nativo depois.
  *
  * Protocolo (via IPC do `child_process`):
- *   pai  → filho:  { Template, data, root }
- *   filho → pai:   { ok: true,  buffer }   | { ok: false, error }
+ *   pai  → filho:  { mode: 'render' | 'renderFrames', Template, data, root }
+ *   filho → pai:   { ok: true,  buffer }              (mode: 'render')
+ *                | { ok: true,  frames: Buffer[] }    (mode: 'renderFrames')
+ *                | { ok: false, error }
  */
 
 const VideoManager = require('./VideoManager');
 
 process.once('message', async (msg) => {
-    const { Template, data, root } = msg || {};
+    const { mode = 'render', Template, data, root } = msg || {};
 
     let response;
     try {
         const manager = new VideoManager({ root });
         await manager.init();
 
-        const buffer = await manager.render({ Template, ...data });
-
-        response = { ok: true, buffer };
+        if (mode === 'renderFrames') {
+            const frames = await manager.renderFrames({ Template, ...data });
+            response = { ok: true, frames };
+        } else {
+            const buffer = await manager.render({ Template, ...data });
+            response = { ok: true, buffer };
+        }
     } catch (err) {
         response = { ok: false, error: err?.message ?? String(err) };
     }

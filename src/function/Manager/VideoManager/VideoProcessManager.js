@@ -39,7 +39,7 @@ class VideoProcessManager {
     constructor(options = {}) {
         this._root        = options.root ?? process.cwd();
         this._concurrency = options.concurrency ?? 1;
-        this._timeoutMs   = options.timeout ?? 240_000;
+        this._timeoutMs   = options.timeout ?? 480_000;
         this._workerPath  = path.join(__dirname, 'VideoWorkerProcess.js');
 
         // Timeout da Queue fica um pouco acima do timeout do processo filho:
@@ -82,7 +82,41 @@ class VideoProcessManager {
             );
         }
 
-        return this._queue.add(() => this._renderInChildProcess(name, data));
+        return this._queue.add(() => this._runInChildProcess('render', name, data));
+    }
+
+    /**
+     * Renderiza cada frame de um template e retorna o array de Buffers PNG
+     * (sem encodar em vídeo/gif) — útil pra editar/inspecionar frame a
+     * frame. Roda no mesmo processo filho isolado que `render()`, então
+     * não trava a thread principal nem deixa a memória usada por esse
+     * modo debug presa no processo do bot depois.
+     *
+     * ⚠️ Diferente de `render()`, este método devolve TODOS os frames de
+     * uma vez — não tem como retornar um array sem manter todos eles na
+     * memória do processo filho (e depois na sua, ao receber). Para vídeos
+     * longos isso ainda pode ser um Buffer grande; use com moderação /
+     * pontualmente, não como caminho principal de geração.
+     *
+     * @param {object} options
+     * @param {string} options.Template
+     * @returns {Promise<Buffer[]>}
+     */
+    async renderFrames(options) {
+        const { Template, ...data } = options;
+        if (!Template) throw new Error('[VideoProcessManager] options.Template is required.');
+
+        const name = Template.toLowerCase();
+
+        const available = await this.listTemplates();
+        if (!available.includes(name)) {
+            throw new Error(
+                `[VideoProcessManager] Template "${name}" not found. ` +
+                `Available: ${available.join(', ') || '(none)'}`
+            );
+        }
+
+        return this._queue.add(() => this._runInChildProcess('renderFrames', name, data));
     }
 
     /** @returns {Promise<string[]>} */
@@ -109,15 +143,16 @@ class VideoProcessManager {
      * Faz o fork, manda os dados, espera a resposta via IPC, e garante que
      * o processo filho sempre morra — mesmo em caso de timeout ou erro.
      *
+     * @param {'render'|'renderFrames'} mode
      * @param {string} Template
      * @param {object} data
-     * @returns {Promise<Buffer>}
+     * @returns {Promise<Buffer|Buffer[]>}
      */
-    _renderInChildProcess(Template, data) {
+    _runInChildProcess(mode, Template, data) {
         return new Promise((resolve, reject) => {
             const child = fork(this._workerPath, [], {
                 cwd:           this._root,
-                serialization: 'advanced', // permite Buffer nativo ida e volta pelo IPC
+                serialization: 'advanced', // permite Buffer nativo (e arrays deles) ida e volta pelo IPC
             });
 
             let settled = false;
@@ -138,10 +173,16 @@ class VideoProcessManager {
 
             child.once('message', (msg) => {
                 settle(() => {
-                    if (msg?.ok) {
-                        resolve(Buffer.isBuffer(msg.buffer) ? msg.buffer : Buffer.from(msg.buffer));
-                    } else {
+                    if (!msg?.ok) {
                         reject(new Error(msg?.error || `[VideoProcessManager] Render "${Template}" falhou no processo filho.`));
+                        return;
+                    }
+
+                    if (mode === 'renderFrames') {
+                        const frames = (msg.frames || []).map(f => Buffer.isBuffer(f) ? f : Buffer.from(f));
+                        resolve(frames);
+                    } else {
+                        resolve(Buffer.isBuffer(msg.buffer) ? msg.buffer : Buffer.from(msg.buffer));
                     }
                 });
                 try { child.kill(); } catch {}
@@ -157,7 +198,7 @@ class VideoProcessManager {
                 )));
             });
 
-            child.send({ Template, data, root: this._root });
+            child.send({ mode, Template, data, root: this._root });
         });
     }
 }

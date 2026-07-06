@@ -4,6 +4,17 @@ const TaskModel      = require("../../Mongodb/tarefas.js");
 const { GuildDb }    = require("../../Mongodb/guild.js");
 const { randomUUID } = require("crypto");
 const DiscordRequest = require("../DiscordRequest.js");
+const LogChannelManager = require("./LogChannelManager.js");
+
+const LOG_CHANNEL_TAREFAS = '1523640821629583441';
+
+const LOG_COLOR = {
+  criada:     0x5865F2, // azul
+  iniciada:   0xFEE75C, // amarelo
+  sucesso:    0x57F287, // verde
+  erro:       0xED4245, // vermelho
+  finalizada: 0x95A5A6, // cinza
+};
 
 class TaskManager {
 
@@ -11,6 +22,40 @@ class TaskManager {
     this.client    = client;
     this.interval  = null;
     this.batchSize = 10;
+  }
+
+  /* ═══════════════════════════════════════════
+     LOG HELPER
+     ═══════════════════════════════════════════ */
+
+  /**
+   * Envia um embed de log pro canal de tarefas. Fire-and-forget — nunca
+   * lança erro, nunca atrasa quem chamou (LogChannelManager já cuida disso).
+   * @param {string} stage  'criada' | 'iniciada' | 'sucesso' | 'erro' | 'finalizada'
+   * @param {object} task   Documento da task (precisa de taskId e tipo)
+   * @param {object} [extraFields]  Campos extras do embed (ex: erro, agendamento)
+   */
+  _logTask(stage, task, extraFields = []) {
+    const titles = {
+      criada:     '🆕 Task criada',
+      iniciada:   '▶️ Task iniciada',
+      sucesso:    '✅ Task executada com sucesso',
+      erro:       '❌ Erro ao executar task',
+      finalizada: '🏁 Task finalizada',
+    };
+
+    LogChannelManager.send(LOG_CHANNEL_TAREFAS, {
+      embeds: [{
+        title: titles[stage] ?? stage,
+        color: LOG_COLOR[stage] ?? 0x95A5A6,
+        fields: [
+          { name: 'Tipo', value: `\`${task?.tipo ?? 'desconhecido'}\``, inline: true },
+          { name: 'ID',   value: `\`${task?.taskId ?? '—'}\``, inline: true },
+          ...extraFields,
+        ],
+        timestamp: new Date().toISOString(),
+      }],
+    });
   }
 
   /* ═══════════════════════════════════════════
@@ -68,8 +113,12 @@ class TaskManager {
      ═══════════════════════════════════════════ */
 
   async run(task) {
+    this._logTask('iniciada', task);
+
     try {
       await this.execute(task);
+
+      this._logTask('sucesso', task);
 
       if (task.tipo === 'scheduled_trigger') {
         await task.save();
@@ -104,12 +153,18 @@ class TaskManager {
         task.status    = 'pending';
       } else {
         task.status = 'executed';
+        this._logTask('finalizada', task);
       }
 
       await task.save();
 
     } catch (err) {
       console.error('[TaskManager] Run error:', err);
+
+      this._logTask('erro', task, [
+        { name: 'Erro', value: `\`\`\`${(err?.message ?? String(err)).slice(0, 900)}\`\`\`` },
+      ]);
+
       try {
         task.status = 'pending';
         await task.save();
@@ -271,6 +326,11 @@ class TaskManager {
       repeat,
       repeatDelay
     });
+
+    this._logTask('criada', task, [
+      { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+    ]);
+
     return task;
   }
 
@@ -285,6 +345,11 @@ class TaskManager {
       repeat:      false,
       repeatDelay: null
     });
+
+    this._logTask('criada', task, [
+      { name: 'Guild',      value: `\`${guildId}\``, inline: true },
+      { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+    ]);
 
     return task;
   }
@@ -310,7 +375,7 @@ class TaskManager {
     executeAt.setDate(executeAt.getDate() + 1);
   }
 
-  return TaskModel.create({
+  const task = await TaskModel.create({
     taskId:      randomUUID(),
     tipo:        'birthday_check',
     executeAt,
@@ -318,6 +383,13 @@ class TaskManager {
     repeat:      false,
     repeatDelay: null
   });
+
+  this._logTask('criada', task, [
+    { name: 'Guild',      value: `\`${guildId}\``, inline: true },
+    { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+  ]);
+
+  return task;
 }
   /**
    * Agenda o reset semanal de missões de guilda.
@@ -330,13 +402,20 @@ class TaskManager {
       { $set: { status: 'cancelled' } }
     );
 
-    return TaskModel.create({
+    const task = await TaskModel.create({
       taskId:    randomUUID(),
       tipo:      'guild_mission_reset',
       executeAt: this._nextMonday(),
       dados:     { guildId },
       repeat:    false
     });
+
+    this._logTask('criada', task, [
+      { name: 'Guild',      value: `\`${guildId}\``, inline: true },
+      { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+    ]);
+
+    return task;
   }
 
   /* ═══════════════════════════════════════════

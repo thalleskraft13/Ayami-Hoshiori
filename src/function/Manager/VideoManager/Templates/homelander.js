@@ -5,28 +5,26 @@ const BaseVideo = require('../BaseVideo');
 const FFmpeg    = require('../FFmpeg');
 const { chromaKeyGreen } = require('../chromaKeyVideo');
 
-// ── Debug: mostra marcadores de posição nos frames ────────────────────────────
+
 const DEBUG = false;
 
-class HenryDangerTemplate extends BaseVideo {
+class HomerLanderTemplate extends BaseVideo {
 
-    static get templateName() { return 'henrydanger'; }
-    static get description()  { return 'Henry Danger — avatar na tela do tablet'; }
+    static get templateName() { return 'homerlander'; }
+    static get description()  { return 'HomerLand — avatar na tela'; }
 
     static get meta() {
-        return { fps: 20, width: 736, height: 414, duration: 18, format: 'mp4' };
+        return { fps: 20, width: 736, height: 414, duration: 20.7, format: 'mp4' };
     }
 
     async renderFrame(frameIndex, totalFrames, data, context) {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl1, avatarBuffer } = data;
 
-        // ── Frames do vídeo base ficam no disco, nunca todos na RAM ────────
-        // (antes: FFmpeg.extractFrames carregava ~360 PNGs como Buffers de
-        // uma vez só, o que causava o pico de memória no render de vídeo).
+    
         if (!this._baseFramesDir) {
-            const videoPath = context.assets.videos.get('henrydanger');
-            if (!videoPath) throw new Error('[HenryDanger] Asset "henrydanger" não encontrado em videos/.');
+            const videoPath = context.assets.videos.get('homelander');
+            if (!videoPath) throw new Error('[HomerLander] Asset "HomerLander" não encontrado em videos/.');
             this._baseFramesDir = await FFmpeg.extractFramesToDir(videoPath, 20);
             this.constructor._audioSourcePath = videoPath;
         }
@@ -37,8 +35,8 @@ class HenryDangerTemplate extends BaseVideo {
                 : await loadImage(await context.avatar.fetch(avatarUrl1, 512));
         }
 
-        const W = HenryDangerTemplate.meta.width;
-        const H = HenryDangerTemplate.meta.height;
+        const W = HomerLanderTemplate.meta.width;
+        const H = HomerLanderTemplate.meta.height;
 
         const canvas = canvasModule.createCanvas(W, H);
         const ctx    = canvas.getContext('2d');
@@ -65,6 +63,7 @@ class HenryDangerTemplate extends BaseVideo {
 
         if (DEBUG && slot) {
             _drawDebugOver(ctx, _calcCoords(slot), slot, frameIndex);
+            console.log("FRAME RENDERIZADA: " + frameIndex)
         }
 
         const buffer = canvas.toBuffer('image/png');
@@ -84,77 +83,27 @@ class HenryDangerTemplate extends BaseVideo {
 
 function _getSlot(frameIndex) {
 
-    // ── Frame 33–39 ───────────────────────────────────────────────────────
-    if (frameIndex > 31 && frameIndex < 40) return {
-        x: 0, y: 0,   // posição do canto sup esquerdo
-        w: 410, h: 300,  // largura e altura
+    
+    if (frameIndex > 46 && frameIndex < 107) return {
+        x: 360, y: 7,   // posição do canto sup esquerdo
+        w: 210, h: 215,  // largura e altura
         skewX: -0.15,    // inclinação horizontal
         skewY:  0.02,    // inclinação vertical
     };
-
-    // ── Frame 40–52 ───────────────────────────────────────────────────────
-    if (frameIndex > 39 && frameIndex < 50) return {
-        x: 0, y: 0,
-        w: 530, h: 440,
-        skewX: -0.15,
+    if (frameIndex > 106 && frameIndex < 140) return {
+        x: 300, y: 10,  
+        w: 400, h: 350, 
+        skewX: -0.15, 
+        skewY:  0.02,    
+    };
+     if (frameIndex > 283 && frameIndex < 367) return {
+        x: 0, y: 0,   
+        w: 800, h: 550, 
+        skewX: -0.15,    
         skewY:  0.02,
     };
 
-    // ── Frame 53–55 ───────────────────────────────────────────────────────
-    if (frameIndex > 49 && frameIndex < 56) return {
-        x: 0, y: 0,
-        w: 630, h: 520,
-        skewX: -0.10,
-        skewY:  0.00,
-    };
-
-    // ── Frame 56–61 ───────────────────────────────────────────────────────
-    if (frameIndex > 55 && frameIndex < 62) return {
-        x: 0, y: 0,
-        w: 630, h: 520,
-        skewX: -0.10,
-        skewY:  0.00,
-    };
-
-    // ── Frame 62–77 ───────────────────────────────────────────────────────
-    if (frameIndex > 61 && frameIndex < 78) return {
-        x: 0, y: 0,
-        w: 630, h: 525,
-        skewX: -0.10,
-        skewY:  0.00,
-    };
-
-    // ── Frame 189–213 ─────────────────────────────────────────────────────
-    if (frameIndex > 188 && frameIndex < 214) return {
-        x: 150, y: 40,
-         w: 380, h: 370,
-        skewX: -0.09,
-        skewY:  0.00,
-    };
-
-    // ── Frame 234–242 ─────────────────────────────────────────────────────
-    if (frameIndex > 233 && frameIndex < 255) return {
-         x: 0, y: 0,
-        w: 470, h: 380,
-        skewX: -0.06,
-        skewY:  0.00,
-    };
-
-    // ── Frame 255–260 ─────────────────────────────────────────────────────
-    if (frameIndex > 254 && frameIndex < 261) return {
-        x: 0, y: 0,
-        w: 760, h: 610,
-        skewX: -0.12,
-        skewY:  0.00,
-    };
-
-    // ── Frame 261–275 ─────────────────────────────────────────────────────
-    if (frameIndex > 260 && frameIndex < 276) return {
-        x: 0, y: 0,
-     w: 760, h: 610,
-        skewX: -0.12,
-        skewY:  0.00,
-    };
+   
 
     return null;
 }
@@ -282,4 +231,4 @@ function _drawDebugOver(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
     ctx.restore();
 }
 
-module.exports = HenryDangerTemplate;
+module.exports = HomerLanderTemplate;

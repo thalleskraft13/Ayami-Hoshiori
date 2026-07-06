@@ -491,6 +491,7 @@ async _onReactionAdd(d) {
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
      await this.MediaManager.init()
     await this._loadCommands();
+    await this.registerSlashCommands()
   //  await this._connectMongo(); // todos conectam
     const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
     

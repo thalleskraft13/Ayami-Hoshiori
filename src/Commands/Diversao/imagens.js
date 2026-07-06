@@ -127,6 +127,24 @@ module.exports = {
                     required: false,
                 }
             ]
+        },{
+            name: 'planomaligno',
+            description: 'Coloca o avatar ou uma imagem em plano maligno',
+            type: 1,
+            options: [
+                {
+                    name: 'usuario',
+                    description: 'Usuário cujo avatar será usado',
+                    type: 6,
+                    required: false,
+                },
+                {
+                    name: 'arquivo',
+                    description: 'Envie uma imagem PNG ou JPEG',
+                    type: 11,
+                    required: false,
+                }
+            ]
         }]
     },
 
@@ -146,6 +164,7 @@ module.exports = {
             if (subcommand === 'gohan') return await _gohan(interaction, client);
             if (subcommand === 'prisao') return await _prisao(interaction, client);
             if (subcommand === 'pinkiepie') return await _pinkiepie(interaction, client);
+            if (subcommand === 'planomaligno') return await _planomaligno(interaction, client);
         } catch (err) {
             console.error(`[imagem/${subcommand}]`, err);
             await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
@@ -602,6 +621,81 @@ async function _pinkiepie(interaction, client) {
         method: 'POST',
         files: [{
             name:        'pinkiepie.png',
+            data:        buffer,
+            contentType: 'image/png',
+        }],
+        body: {
+            content: `<@${interaction.member?.user?.id ?? interaction.user?.id}>`,
+        }
+    });
+}
+
+// ─── /imagem Plano Maligno ───────────────────────────────────────────────────────────
+
+async function _planomaligno(interaction, client) {
+    const opts = interaction.data.options[0].options ?? [];
+
+    const usuarioOpt = opts.find(o => o.name === 'usuario');
+    const arquivoOpt = opts.find(o => o.name === 'arquivo');
+
+    let avatarUrl    = null;
+    let avatarBuffer = null;
+
+    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
+    if (arquivoOpt) {
+        const attachmentId = arquivoOpt.value;
+        const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
+
+        if (!attachment) {
+            return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
+        }
+
+        // Valida extensão antes de baixar
+        const url = attachment.url;
+        if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
+            return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
+        }
+
+        // Valida tamanho declarado pelo Discord (em bytes)
+        if (attachment.size > 8_000_000) {
+            return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
+        }
+
+        // Baixa o arquivo como Buffer
+        const res    = await fetch(url);
+        const raw    = await res.arrayBuffer();
+        const buffer = Buffer.from(raw);
+
+        // Valida magic bytes — garante que é PNG ou JPEG de verdade
+        if (!_isValidImage(buffer)) {
+            return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
+        }
+
+        avatarBuffer = buffer;
+
+    } else if (usuarioOpt) {
+        const userId = usuarioOpt.value;
+        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        avatarUrl    = _getAvatarURL(user);
+
+    } else {
+        // Usa o avatar do autor da interação
+        const user = interaction.member?.user ?? interaction.user;
+        avatarUrl  = _getAvatarURL(user);
+    }
+
+    // ── Renderiza ─────────────────────────────────────────────────────────
+    const buffer = await client.MediaManager.Render({
+        Template:    'planomaligno',
+        avatarUrl,
+        avatarBuffer,
+    });
+
+    // ── Envia ─────────────────────────────────────────────────────────────
+    await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
+        method: 'POST',
+        files: [{
+            name:        'planomaligno.png',
             data:        buffer,
             contentType: 'image/png',
         }],
