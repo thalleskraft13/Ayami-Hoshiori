@@ -16,6 +16,9 @@
 const DiscordRequest = require('../../DiscordRequest.js');
 const msLib          = require('ms');
 const TaskModel       = require('../../../Mongodb/tarefas.js');
+const { safeRequest, SafeHttpError } = require('../../Utils/SafeHttp.js');
+const PremiumManager  = require('../../Utils/PremiumManager.js');
+const { getPlan }     = require('../../Utils/PremiumPlans.js');
 
 /**
  * Aceita tanto um ID puro (`"123456789012345678"`) quanto uma menção
@@ -238,8 +241,59 @@ class Interpreter {
     this._totalWait = 0;
     this._printLog  = [];   // buffer de saídas print() — usado pelo console do dashboard
 
+    // Contador de requisições HTTP desta execução (compartilhado entre
+    // todas as chamadas de http()/webhook() deste run — ver SafeHttp.js)
+    this._httpRequestCounter = { count: 0 };
+
+    // Cache do plano premium da guild (resolvido uma vez por execução,
+    // sob demanda — só quando algo que depende de plano é chamado).
+    this._planCache = null;
+
     this._globals   = new Environment();
     this._setupGlobals();
+  }
+
+  /* ══════════════════════════════════════
+     PREMIUM / LOGS
+     ══════════════════════════════════════ */
+
+  /** Resolve (e cacheia por execução) o plano premium da guild atual. */
+  async _getGuildPlan() {
+    if (this._planCache) return this._planCache;
+    const guildId = this.discordCtx.guildId;
+    let planId = null;
+    try {
+      const premium = await PremiumManager.getGuildPremium(guildId);
+      if (premium.status) planId = premium.planId;
+    } catch { /* sem premium ativo — segue com FREE */ }
+    this._planCache = getPlan(planId);
+    return this._planCache;
+  }
+
+  /** Lança um RuntimeError amigável se a guild não tiver o recurso do plano. */
+  async _requireLogicScriptFeature(feature, friendlyName) {
+    const plan = await this._getGuildPlan();
+    if (!plan.logicScript?.[feature]) {
+      throw new RuntimeError(
+        `${friendlyName} é um recurso Premium (a partir do plano 🌙 Lua Crescente). ` +
+        `Plano atual do servidor: ${plan.emoji} ${plan.name}. Veja /premium para assinar.`
+      );
+    }
+    return plan;
+  }
+
+  /**
+   * Registra uma ação no log da execução (mostrado no dashboard/`/logic script`).
+   * Só deve ser chamado para operações que de fato mudam algo ou saem pra
+   * rede (mensagem enviada/editada/apagada, ban/kick/timeout, cargo,
+   * canal, requisição HTTP não-GET, webhook) — NUNCA para leituras de
+   * cache (getUser/getChannel/getGuild/etc.), que não batem na API do
+   * Discord e não precisam de log (ver seção "Logs do Logic Script").
+   */
+  _logAction(tag, text) {
+    const line = `[${tag}] ${text}`;
+    this._printLog.push(line);
+    if (this._printLog.length > 200) this._printLog.shift();
   }
 
   /* ══════════════════════════════════════
@@ -415,6 +469,101 @@ class Interpreter {
       return this._sendToChannel(dm.id, content, opts);
     });
 
+    /* ── HTTP (GET/POST/PUT/PATCH/DELETE) ──
+       Premium: bloqueado no 🌟 Nova Estrela, liberado a partir do
+       🌙 Lua Crescente. Sempre passa pelo SafeHttp (rate limit, timeout,
+       limite de tamanho, bloqueio de localhost/IP privado, limite de
+       requisições por execução). */
+    const httpMethod = (method) => async (url, a, b) => {
+      await this._requireLogicScriptFeature('httpAccess', 'Requisições HTTP');
+
+      // get(url, opts) vs post/put/patch(url, body, opts)
+      const hasBody = !['GET', 'HEAD', 'DELETE'].includes(method);
+      const body    = hasBody ? a : undefined;
+      const opts    = hasBody ? (b ?? {}) : (a ?? {});
+
+      if (method !== 'GET' && method !== 'HEAD') {
+        this._logAction('HTTP', `${method} ${url}`);
+      }
+
+      try {
+        const res = await safeRequest(url, {
+          method,
+          headers: opts.headers,
+          body,
+          guildId: this.discordCtx.guildId,
+          requestCounter: this._httpRequestCounter,
+        });
+        return { ok: res.ok, status: res.status, headers: res.headers, body: res.json ?? res.text, json: res.json, text: res.text };
+      } catch (err) {
+        if (err instanceof SafeHttpError) throw new RuntimeError(err.message);
+        throw new RuntimeError(`Falha na requisição HTTP: ${err.message}`);
+      }
+    };
+
+    G.define('http', {
+      get:    httpMethod('GET'),
+      post:   httpMethod('POST'),
+      put:    httpMethod('PUT'),
+      patch:  httpMethod('PATCH'),
+      delete: httpMethod('DELETE'),
+    });
+
+    /* ── Webhook ──
+       Premium: bloqueado no 🌟 Nova Estrela, liberado (personalizado)
+       a partir do 🌙 Lua Crescente. */
+    G.define('webhook', {
+      send: async (url, content, opts = {}) => {
+        await this._requireLogicScriptFeature('webhookAccess', 'Webhooks');
+        this._logAction('WEBHOOK', `POST ${url}`);
+
+        const body = { username: opts.username, avatar_url: opts.avatarUrl };
+        if (content) body.content = String(content);
+        if (opts.embed) { const e = resolveEmbed(opts.embed); if (e) body.embeds = [e]; }
+
+        try {
+          const res = await safeRequest(url, {
+            method: 'POST',
+            body,
+            guildId: this.discordCtx.guildId,
+            requestCounter: this._httpRequestCounter,
+          });
+          return { ok: res.ok, status: res.status };
+        } catch (err) {
+          if (err instanceof SafeHttpError) throw new RuntimeError(err.message);
+          throw new RuntimeError(`Falha ao enviar webhook: ${err.message}`);
+        }
+      },
+    });
+
+    /* ── Executar Fluxo do Logic Builder por ID ──
+       Premium: bloqueado no 🌟 Nova Estrela, liberado a partir do
+       🌙 Lua Crescente. Usa o mesmo mecanismo interno do LogicEngine
+       (client.logicEngine), compartilhando o contexto atual (guild/canal/
+       usuário) com o fluxo executado. */
+    G.define('runFlow', async (flowId) => {
+      await this._requireLogicScriptFeature('canRunFlowById', 'Executar Fluxo do Logic Builder');
+
+      if (!flowId) throw new RuntimeError('runFlow() precisa do ID do fluxo.');
+      if (!this.client?.logicEngine) {
+        throw new RuntimeError('Logic Builder indisponível no momento.');
+      }
+
+      this._logAction('RUN_FLOW', `flowId=${flowId}`);
+
+      const result = await this.client.logicEngine.runFlowById(String(flowId), {
+        guildId:   this.discordCtx.guildId,
+        channelId: this.discordCtx.channelId,
+        userId:    this.discordCtx.userId,
+      }).catch(err => ({ ok: false, error: err.message }));
+
+      if (!result || result.ok === false) {
+        throw new RuntimeError(`Não foi possível executar o fluxo '${flowId}': ${result?.error ?? 'fluxo não encontrado'}`);
+      }
+
+      return { ok: true };
+    });
+
     /* ── Banco de dados ── */
     G.define('db', this._buildDbObj());
   }
@@ -465,6 +614,8 @@ class Interpreter {
       const ch = await DiscordRequest(`/channels/${channelId}`);
       if (ch?.guild_id && ch.guild_id !== this.discordCtx.guildId) return null;
     } catch { return null; }
+
+    this._logAction('MSG_SEND', `channel=${channelId}`);
 
     const body = buildMessageBody(content, opts);
     const msg  = await DiscordRequest(`/channels/${channelId}/messages`, { method: 'POST', body }).catch(() => null);
@@ -724,9 +875,13 @@ class Interpreter {
 
       edit: async (content, opts) => {
         const body = buildMessageBody(content, opts ?? {});
+        self._logAction('MSG_EDIT', `channel=${msg.channel_id} message=${msg.id}`);
         return DiscordRequest(`/channels/${msg.channel_id}/messages/${msg.id}`, { method: 'PATCH', body });
       },
-      delete: async () => DiscordRequest(`/channels/${msg.channel_id}/messages/${msg.id}`, { method: 'DELETE' }),
+      delete: async () => {
+        self._logAction('MSG_DELETE', `channel=${msg.channel_id} message=${msg.id}`);
+        return DiscordRequest(`/channels/${msg.channel_id}/messages/${msg.id}`, { method: 'DELETE' });
+      },
       reply:  async (content, opts) => {
         const body = buildMessageBody(content, opts ?? {});
         body.message_reference = { message_id: msg.id };
@@ -755,13 +910,24 @@ class Interpreter {
       joinedAt:    member?.joined_at,
       isBot:       user?.bot ?? false,
       permissions: member?.permissions,
-      send:        async (c, o) => self._sendToChannel(`@dm:${userId}`, c, o),
-      addRole:     async id => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${extractId(id)}`, { method: 'PUT' }),
-      removeRole:  async id => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${extractId(id)}`, { method: 'DELETE' }),
-      timeout:     async ms => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'PATCH', body: { communication_disabled_until: new Date(Date.now() + ms).toISOString() } }),
-      removeTimeout: async () => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'PATCH', body: { communication_disabled_until: null } }),
-      ban:         async reason => DiscordRequest(`/guilds/${self.discordCtx.guildId}/bans/${userId}`, { method: 'PUT', body: { reason } }),
-      kick:        async () => DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'DELETE' }),
+      // Antes: chamava _sendToChannel("@dm:"+userId), um "canal" que não
+      // existe pra API do Discord — user.send() nunca funcionava (sempre
+      // retornava null em silêncio). Corrigido pra abrir o DM primeiro,
+      // igual o global sendDM() já fazia corretamente.
+      send:        async (c, o) => {
+        const dm = await DiscordRequest('/users/@me/channels', { method: 'POST', body: { recipient_id: userId } }).catch(() => null);
+        if (!dm?.id) return null;
+        this._logAction('DM_SEND', `user=${userId}`);
+        const body = buildMessageBody(c, o ?? {});
+        const msg  = await DiscordRequest(`/channels/${dm.id}/messages`, { method: 'POST', body }).catch(() => null);
+        return msg?.id ? this._buildMessageObj(msg) : null;
+      },
+      addRole:     async id => { self._logAction('ROLE_ADD', `user=${userId} role=${extractId(id)}`); return DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${extractId(id)}`, { method: 'PUT' }); },
+      removeRole:  async id => { self._logAction('ROLE_REMOVE', `user=${userId} role=${extractId(id)}`); return DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}/roles/${extractId(id)}`, { method: 'DELETE' }); },
+      timeout:     async ms => { self._logAction('TIMEOUT', `user=${userId} ms=${ms}`); return DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'PATCH', body: { communication_disabled_until: new Date(Date.now() + ms).toISOString() } }); },
+      removeTimeout: async () => { self._logAction('TIMEOUT_REMOVE', `user=${userId}`); return DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'PATCH', body: { communication_disabled_until: null } }); },
+      ban:         async reason => { self._logAction('BAN', `user=${userId} reason=${reason ?? ''}`); return DiscordRequest(`/guilds/${self.discordCtx.guildId}/bans/${userId}`, { method: 'PUT', body: { reason } }); },
+      kick:        async () => { self._logAction('KICK', `user=${userId}`); return DiscordRequest(`/guilds/${self.discordCtx.guildId}/members/${userId}`, { method: 'DELETE' }); },
     };
   }
 
@@ -776,9 +942,9 @@ class Interpreter {
       type:     ch?.type,
       category: ch?.parent_id,
       send:     async (c, o) => self._sendToChannel(channelId, c, o),
-      rename:   async name => DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { name } }),
-      lock:     async () => DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { permission_overwrites: [{ id: self.discordCtx.guildId, type: 0, deny: '2048' }] } }),
-      unlock:   async () => DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { permission_overwrites: [{ id: self.discordCtx.guildId, type: 0, allow: '2048' }] } }),
+      rename:   async name => { self._logAction('CHANNEL_RENAME', `channel=${channelId} name=${name}`); return DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { name } }); },
+      lock:     async () => { self._logAction('CHANNEL_LOCK', `channel=${channelId}`); return DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { permission_overwrites: [{ id: self.discordCtx.guildId, type: 0, deny: '2048' }] } }); },
+      unlock:   async () => { self._logAction('CHANNEL_UNLOCK', `channel=${channelId}`); return DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { permission_overwrites: [{ id: self.discordCtx.guildId, type: 0, allow: '2048' }] } }); },
     };
   }
 

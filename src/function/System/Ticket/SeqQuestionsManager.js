@@ -6,11 +6,13 @@
  * Conduz um formulário sequencial diretamente no chat do ticket.
  * Coexiste com o sistema de modal existente — não o substitui.
  *
- * Tipos de pergunta suportados atualmente: text, number, yesno
- * Preparado para: attachment, select (infra já presente no schema)
+ * Tipos de pergunta suportados: text, short, long, number, yesno,
+ * select, multiple, checkbox, member, role, channel, attachment.
  */
 
 const DiscordRequest = require('../../DiscordRequest.js');
+
+const COMPONENT_TYPES = new Set(['select', 'multiple', 'checkbox', 'member', 'role', 'channel']);
 
 class SeqQuestionsManager {
 
@@ -96,6 +98,18 @@ class SeqQuestionsManager {
 
   async _askQuestion({ channelId, userId, question, index, total, timeout }) {
 
+    if (COMPONENT_TYPES.has(question.tipo)) {
+      return this._askComponentQuestion({ channelId, userId, question, index, total, timeout });
+    }
+    if (question.tipo === 'attachment') {
+      return this._askAttachmentQuestion({ channelId, userId, question, index, total, timeout });
+    }
+    return this._askTextQuestion({ channelId, userId, question, index, total, timeout });
+  }
+
+  /* ── Perguntas de texto/número/sim-não (via mensagem) ── */
+  async _askTextQuestion({ channelId, userId, question, index, total, timeout }) {
+
     const hint = this._getHint(question);
 
     // Envia a pergunta no canal
@@ -134,10 +148,99 @@ class SeqQuestionsManager {
         method: 'POST',
         body:   { content: `⚠️ <@${userId}> Resposta inválida. Tente novamente.` }
       });
-      return this._askQuestion({ channelId, userId, question, index, total, timeout });
+      return this._askTextQuestion({ channelId, userId, question, index, total, timeout });
     }
 
     return validated;
+  }
+
+  /* ── Perguntas de anexo (aguarda mensagem com arquivo) ── */
+  async _askAttachmentQuestion({ channelId, userId, question, index, total, timeout }) {
+
+    await DiscordRequest(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: {
+        embeds: [{
+          description: `**[${index}/${total}] ${question.label}**\n_Envie um arquivo ou imagem como resposta._`,
+          color:       0x5865F2,
+          footer:      { text: `Pergunta ${index} de ${total}` }
+        }]
+      }
+    });
+
+    let msg;
+    try {
+      msg = await this.client.NextMessageCollector.wait({ channelId, userId, time: timeout });
+    } catch {
+      return null; // timeout
+    }
+
+    if (msg.content?.toLowerCase() === 'cancelar') return null;
+
+    if (!msg.attachments?.length) {
+      if (question.required === false) return null;
+      await DiscordRequest(`/channels/${channelId}/messages`, {
+        method: 'POST',
+        body:   { content: `⚠️ <@${userId}> Envie um arquivo/imagem como resposta (ou digite \`cancelar\`).` }
+      });
+      return this._askAttachmentQuestion({ channelId, userId, question, index, total, timeout });
+    }
+
+    return msg.attachments.map(a => a.url);
+  }
+
+  /* ── Perguntas via componente (seleção/múltipla/checkbox/membro/cargo/canal) ── */
+  async _askComponentQuestion({ channelId, userId, question, index, total, timeout }) {
+    const kind = question.tipo;
+    const isMulti = kind === 'multiple' || kind === 'checkbox';
+
+    const commonData = {
+      placeholder: question.placeholder || 'Escolha uma opção...',
+      min_values:  kind === 'checkbox' ? 0 : 1,
+      max_values:  isMulti ? Math.max(1, Math.min(25, question.options?.length || 25)) : 1,
+    };
+
+    return new Promise(async (resolve) => {
+      let settled = false;
+      const finish = (val) => { if (!settled) { settled = true; resolve(val); } };
+      const timer  = setTimeout(() => finish(null), timeout);
+
+      const funcao = async (si) => {
+        clearTimeout(timer);
+        await DiscordRequest(`/interactions/${si.id}/${si.token}/callback`, { method: 'POST', body: { type: 6 } }).catch(() => {});
+        const values = si.data?.values || [];
+        finish(isMulti ? values : (values[0] ?? null));
+      };
+
+      let component;
+      if (kind === 'select' || kind === 'multiple' || kind === 'checkbox') {
+        component = this.client.interactions.createSelect({
+          user: userId, tempo: timeout, funcao,
+          data: {
+            ...commonData,
+            options: (question.options || []).slice(0, 25).map(o => ({ label: String(o).slice(0, 100), value: String(o).slice(0, 100) })),
+          },
+        });
+      } else if (kind === 'member') {
+        component = this.client.interactions.createUserSelect({ user: userId, tempo: timeout, funcao, data: commonData });
+      } else if (kind === 'role') {
+        component = this.client.interactions.createRoleSelect({ user: userId, tempo: timeout, funcao, data: commonData });
+      } else if (kind === 'channel') {
+        component = this.client.interactions.createChannelSelect({ user: userId, tempo: timeout, funcao, data: commonData });
+      }
+
+      await DiscordRequest(`/channels/${channelId}/messages`, {
+        method: 'POST',
+        body: {
+          embeds: [{
+            description: `**[${index}/${total}] ${question.label}**`,
+            color:       0x5865F2,
+            footer:      { text: `Pergunta ${index} de ${total} · responda pelo menu abaixo` }
+          }],
+          components: [{ type: 1, components: [component] }],
+        },
+      });
+    });
   }
 
   /* ═══════════════════════════════════════════
@@ -146,9 +249,24 @@ class SeqQuestionsManager {
 
   async _sendAnswersSummary({ cfg, panel, channelId, userId, answers, resumoTitulo }) {
 
+    const formatAnswer = (q, value) => {
+      if (value == null) return '-';
+      if (Array.isArray(value)) {
+        if (q.tipo === 'member') return value.map(v => `<@${v}>`).join(', ');
+        if (q.tipo === 'role')   return value.map(v => `<@&${v}>`).join(', ');
+        if (q.tipo === 'channel') return value.map(v => `<#${v}>`).join(', ');
+        if (q.tipo === 'attachment') return value.map(v => `[anexo](${v})`).join(', ');
+        return value.join(', ') || '-';
+      }
+      if (q.tipo === 'member')  return `<@${value}>`;
+      if (q.tipo === 'role')    return `<@&${value}>`;
+      if (q.tipo === 'channel') return `<#${value}>`;
+      return String(value);
+    };
+
     const fields = panel.seqQuestionsConfig.questions.map(q => ({
       name:   q.label,
-      value:  String(answers[q.id] ?? '-').slice(0, 1024),
+      value:  formatAnswer(q, answers[q.id]).slice(0, 1024),
       inline: false
     }));
 
@@ -213,6 +331,12 @@ class SeqQuestionsManager {
         if (['não', 'nao', 'n', 'no'].includes(v)) return 'Não';
         return false;
       }
+      case 'short': {
+        const text = String(value || '').slice(0, 100);
+        if (question.required && !text.trim()) return false;
+        return text;
+      }
+      case 'long':
       case 'text':
       default: {
         const text = String(value || '').slice(0, question.maxLength || 2000);
@@ -226,6 +350,7 @@ class SeqQuestionsManager {
     switch (question.tipo) {
       case 'number': return '_Responda com um número_';
       case 'yesno':  return '_Responda com **Sim** ou **Não**_';
+      case 'short':  return '_Resposta curta (até 100 caracteres)_';
       default:       return '';
     }
   }

@@ -455,7 +455,13 @@ const guildSchema = new Schema({
   guildId:     { type: String, required: true, unique: true },
   premiumUser: { type: String, default: "0" },
   premiumTime: { type: Number, default: 0   },
-  premiumPlan: { type: String, default: null }, // seção 2: nova_estrela | lua_crescente | constellation
+  premiumPlan: { type: String, default: null }, // FREE | NOVA_ESTRELA | LUA_CRESCENTE | CONSTELLATION — veja function/Utils/PremiumPlans.js
+  // ⚠️ Unificado com o site (site/models/guild.js, mesmo nome de campo).
+  // Sem `enum` de propósito: documentos antigos podem ter valores legados
+  // em minúsculo (ex.: "constellation") e a validação de mongoose recusaria
+  // o save() de qualquer outro código que releia e regrave este documento
+  // por um motivo não relacionado a premium. A normalização/validação real
+  // acontece em PremiumPlans.js#normalizePlanKey, que aceita os dois formatos.
   ticket:      { type: [ticketSchema], default: [] },
 
   uidSend: {

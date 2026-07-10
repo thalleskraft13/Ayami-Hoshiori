@@ -87,6 +87,25 @@ class InteractionManager {
     }
 
     /**
+     * Build a User Select component (type 5) and register its handler in cache.
+     * Options are populated automatically by Discord based on server members.
+     *
+     * @param {{ user?: string, tempo?: number, funcao: Function, data?: object }} opts
+     * @returns {object} Discord user select component object
+     */
+    createUserSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
+        const id = this._register({ user, funcao }, tempo);
+
+        return {
+            type:        5,
+            custom_id:   id,
+            placeholder: data.placeholder ?? 'Selecione um membro',
+            min_values:  data.min_values  ?? 1,
+            max_values:  data.max_values  ?? 1,
+        };
+    }
+
+    /**
      * Build a Role Select component (type 6) and register its handler in cache.
      * Options are populated automatically by Discord based on server roles.
      *

@@ -1,15 +1,22 @@
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const {GuildDb} = require("../../Mongodb/guild.js");
 const PremiumKey = require("../../Mongodb/premiumKey.js");
-const { getPlan, isValidPlan, DEFAULT_PLAN } = require("./PremiumPlans.js");
+const { getPlan, isValidPlan, isPlanAtLeast, normalizePlanKey, DEFAULT_PLAN } = require("./PremiumPlans.js");
+
+// Normaliza um planId recebido (pode vir em formato legado, minúsculo) para
+// a chave canônica; se não houver plano nenhum, cai no DEFAULT_PLAN. Usado
+// sempre que vamos GRAVAR um plano no banco, pra auto-curar dados antigos.
+function resolveStoredPlan(rawPlanId) {
+  return rawPlanId ? normalizePlanKey(rawPlanId) : DEFAULT_PLAN;
+}
 
 class PremiumManager {
 
-  
+
   async addUserPremium(userId, dias, planId = DEFAULT_PLAN) {
 
     const tempoMs = dias * 86400000;
-    const plan = isValidPlan(planId) ? planId : DEFAULT_PLAN;
+    const plan = resolveStoredPlan(planId);
 
     let user = await UserGlobalDb.findOne({ userId });
 
@@ -23,12 +30,17 @@ class PremiumManager {
     else
       user.premium = agora + tempoMs;
 
+    // premiumExpiresAt é o campo canônico lido pelo site (config/premiumPlans.js
+    // #resolveActivePlan) — mantido sempre igual a `premium` pra não haver
+    // divergência entre o que o bot e o site enxergam.
+    user.premiumExpiresAt = user.premium;
+
     // Se já tinha um plano melhor ativo, não rebaixa por engano (ex:
     // resgatar uma key de Nova Estrela enquanto já é Constellation).
-    const planoAtual = user.premium_plan && isValidPlan(user.premium_plan) ? getPlan(user.premium_plan) : null;
+    const planoAtual = user.premiumPlan && isValidPlan(user.premiumPlan) ? getPlan(user.premiumPlan) : null;
     const planoNovo = getPlan(plan);
     if (!planoAtual || planoNovo.order >= planoAtual.order) {
-      user.premium_plan = plan;
+      user.premiumPlan = plan;
     }
 
     await user.save();
@@ -36,8 +48,27 @@ class PremiumManager {
     return {
       status: true,
       expireAt: user.premium,
-      plan: user.premium_plan
+      plan: user.premiumPlan
     };
+  }
+
+  /**
+   * Remove o premium de um usuário imediatamente (não espera expirar).
+   * ⚠️ Método que não existia antes — `!userremovepremium` (ver
+   * MessageCollectorManager.js) chamava isso e quebrava com TypeError.
+   */
+  async removeUserPremium(userId) {
+
+    const user = await UserGlobalDb.findOne({ userId });
+    if (!user) return { status: false, motivo: "Usuário não encontrado" };
+
+    user.premium = 0;
+    user.premiumExpiresAt = 0;
+    user.premiumPlan = null;
+
+    await user.save();
+
+    return { status: true };
   }
 
   /**
@@ -57,7 +88,7 @@ class PremiumManager {
     const agora = Date.now();
 
     if (user.premium > agora) {
-      const planId = isValidPlan(user.premium_plan) ? user.premium_plan : DEFAULT_PLAN;
+      const planId = resolveStoredPlan(user.premiumPlan);
       return {
         status: true,
         tempo: user.premium - agora,
@@ -68,7 +99,8 @@ class PremiumManager {
     }
 
     user.premium = 0;
-    user.premium_plan = null;
+    user.premiumExpiresAt = 0;
+    user.premiumPlan = null;
     await user.save();
 
     return { status: false, planId: null, plan: null };
@@ -151,7 +183,7 @@ class PremiumManager {
     else
       guild.premiumTime = agora + tempoMs;
 
-    guild.premiumPlan = isValidPlan(planId) ? planId : DEFAULT_PLAN;
+    guild.premiumPlan = resolveStoredPlan(planId);
 
     await guild.save();
 
@@ -180,7 +212,7 @@ class PremiumManager {
       return { status: false };
     }
 
-    const planId = isValidPlan(guild.premiumPlan) ? guild.premiumPlan : DEFAULT_PLAN;
+    const planId = resolveStoredPlan(guild.premiumPlan);
 
     return {
       status: true,
@@ -192,13 +224,21 @@ class PremiumManager {
     };
   }
 
-  async removeGuildPremium(guildId, userId) {
+  /**
+   * Remove o premium de um servidor imediatamente.
+   *
+   * `userId` é opcional: quando não informado (ex.: comando administrativo
+   * `!guildremovepremium [GUILD_ID]`, que só tem o guildId), remove o
+   * premium do servidor mesmo sem saber quem foi o usuário que o concedeu —
+   * antes esse caminho silenciosamente não fazia nada porque o método
+   * exigia os dois parâmetros e retornava `status: false` sem limpar nada.
+   */
+  async removeGuildPremium(guildId, userId = null) {
 
     const guild = await GuildDb.findOne({ guildId });
-    const user = await UserGlobalDb.findOne({ userId });
+    if (!guild) return { status: false, motivo: "Servidor não encontrado" };
 
-    if (!guild || !user)
-      return { status: false };
+    const donoAnterior = userId || guild.premiumUser;
 
     guild.premiumUser = null;
     guild.premiumTime = 0;
@@ -206,10 +246,13 @@ class PremiumManager {
 
     await guild.save();
 
-    user.premium_guilds = user.premium_guilds
-      .filter(g => g.guildId !== guildId);
-
-    await user.save();
+    if (donoAnterior) {
+      const user = await UserGlobalDb.findOne({ userId: donoAnterior });
+      if (user && Array.isArray(user.premium_guilds)) {
+        user.premium_guilds = user.premium_guilds.filter(g => g.guildId !== guildId);
+        await user.save();
+      }
+    }
 
     return { status: true };
   }
@@ -261,7 +304,7 @@ class PremiumManager {
     return { status: true, plan: getPlan(key.plan) };
   }
 
-  
+
   async createKey(type, dias, planId = DEFAULT_PLAN) {
 
     const crypto = require("crypto");
@@ -271,7 +314,7 @@ class PremiumManager {
     await PremiumKey.create({
       code,
       type,
-      plan: isValidPlan(planId) ? planId : DEFAULT_PLAN,
+      plan: resolveStoredPlan(planId),
       duration: dias * 86400000
     });
 

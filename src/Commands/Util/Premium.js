@@ -157,11 +157,15 @@ async function renderBuy(interaction, emoji) {
     cv2Text(
       `✨ **Escolha seu plano:**\n\n` +
       `> 🌟 **Nova Estrela** — R$ 7,99/mês\n` +
-      `> 　 1 servidor · +25% no daily\n\n` +
+      `> 　 1 servidor · 25 fluxos no Logic Builder · 15 arquivos no Logic Script\n` +
+      `> 　 +25% no daily · Tickets Avançados (até 10 perguntas)\n\n` +
       `> 🌙 **Lua Crescente** — R$ 14,99/mês\n` +
-      `> 　 3 servidores · +60% no daily · +0.5% chance 5⭐ · fila prioritária de ticket\n\n` +
-      `> ✨ **Constellation** — R$ 21,99/mês\n` +
-      `> 　 5 servidores · +100% no daily · +1% chance 5⭐ · fila prioritária · acesso a Webhooks\n\n` +
+      `> 　 3 servidores · 35 fluxos no Logic Builder · 35 arquivos no Logic Script\n` +
+      `> 　 +60% no daily · +0.5% chance 5⭐ · HTTP e Webhooks liberados no Logic Script\n` +
+      `> 　 Tickets com perguntas ilimitadas\n\n` +
+      `> ✨ **Constellation** — R$ 24,99/mês\n` +
+      `> 　 Servidores ilimitados · Logic Builder e Logic Script ilimitados\n` +
+      `> 　 +100% no daily · +1% chance 5⭐ · Acesso antecipado e à Ayami CANARY\n\n` +
       `${emoji.curtida} **Ou adquira um Código avulso de qualquer plano**\n` +
       `> 🔑 Fale com a staff pra gerar sua key`
     ),
@@ -187,7 +191,7 @@ async function renderBuy(interaction, emoji) {
       type: 2,
       style: 5,
       label: "✨ Assinar Constellation",
-      url: "https://discord.gg/wfaRZw5pGn"
+      url: "https://discord.gg/WjeVXJPn5p"
     }),
   ];
 
@@ -278,7 +282,7 @@ async function renderPanel(interaction, client, userId, edit = false) {
   mainText += `${emoji.animada} **Assinante:** <@${userId}>\n`;
   mainText += `✨ **Plano:** ${userPremium.plan.emoji} ${userPremium.plan.name}\n`;
   mainText += `⏳ **Expira em:** \`${formatTempo(userPremium.tempo)}\`\n\n`;
-  mainText += `🏠 **Servidores com Constellation:** ${guilds.length}/${userPremium.plan.guildLimit}`;
+  mainText += `🏠 **Servidores com Constellation:** ${guilds.length}/${userPremium.plan.guildLimit === Infinity ? '∞' : userPremium.plan.guildLimit}`;
 
   const blocks = [
     cv2SectionThumb(mainText, avatar),
@@ -344,7 +348,7 @@ async function renderPanel(interaction, client, userId, edit = false) {
     type: 2,
     style: 5,
     label: "✨ Ver Planos Constellation",
-    url: "https://discord.gg/wfaRZw5pGn"
+    url: "https://discord.gg/WjeVXJPn5p"
   });
 
   blocks.push(cv2Divider());

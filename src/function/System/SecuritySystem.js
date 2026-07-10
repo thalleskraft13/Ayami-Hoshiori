@@ -17,10 +17,66 @@ class SecuritySystem {
 
   /* ================= INTERACTIONS ================= */
 
+  /**
+   * Converte um payload legado ({embeds, components}) para o formato
+   * Components V2 ({flags: 32768, components: [Container]}).
+   *
+   * ⚠️ Bug raiz do "menu de segurança não abre": a mensagem inicial do
+   * /configurar já é enviada com a flag IS_COMPONENTS_V2 (32768) — e essa
+   * flag, uma vez definida, NUNCA pode ser removida da mensagem (é
+   * permanente, por design da API do Discord). Todo o resto do bot
+   * (Tickets, UID, Logic Builder) já usa Components V2 consistentemente;
+   * só o SecuritySystem.js ainda montava `embeds:` — e a API rejeita
+   * silenciosamente qualquer PATCH com `embeds` numa mensagem já
+   * flagada como V2, então o `editOriginal` falhava e o menu nunca
+   * era atualizado (parecia "não abrir").
+   *
+   * Em vez de reescrever as ~60 telas deste arquivo uma por uma, a
+   * conversão acontece aqui, uma única vez, no ponto de saída — todas
+   * as telas continuam definindo `embeds`/`components` normalmente.
+   */
+  _toV2(data) {
+    if (!data) return data;
+    if (!data.embeds) {
+      // Já não usa embeds — só garante que a flag V2 está presente.
+      return { ...data, flags: (data.flags ?? 0) | 32768 };
+    }
+
+    const blocks = [];
+    for (const embed of data.embeds) {
+      let text = '';
+      if (embed.title)       text += `# ${embed.title}\n`;
+      if (embed.description) text += `${embed.description}\n`;
+      if (embed.fields?.length) {
+        text += embed.fields
+          .map(f => `**${f.name}**\n${f.value}`)
+          .join('\n\n');
+      }
+      if (embed.footer?.text) text += `\n-# ${embed.footer.text}`;
+      blocks.push({ type: 10, content: text.trim() || '\u200b' });
+    }
+
+    const rows = (data.components || []).filter(c => c.type === 1);
+    const accentColor = data.embeds.find(e => typeof e.color === 'number')?.color ?? 0x7C8FFF;
+
+    return {
+      flags: (data.flags ?? 0) | 32768,
+      components: [{
+        type: 17,
+        accent_color: accentColor,
+        components: [
+          ...blocks,
+          ...(rows.length ? [{ type: 14, divider: true, spacing: 1 }] : []),
+          ...rows,
+        ],
+      }],
+    };
+  }
+
   async reply(interaction, data) {
     return DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
-      { method: "POST", body: { type: 4, data } }
+      { method: "POST", body: { type: 4, data: this._toV2(data) } }
     );
   }
 
@@ -34,14 +90,14 @@ class SecuritySystem {
   async editOriginal(interaction, data) {
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
-      { method: "PATCH", body: data }
+      { method: "PATCH", body: this._toV2(data) }
     );
   }
 
   async followUp(interaction, data) {
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}`,
-      { method: "POST", body: data }
+      { method: "POST", body: this._toV2(data) }
     );
   }
 

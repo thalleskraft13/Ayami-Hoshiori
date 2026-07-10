@@ -2,6 +2,7 @@
 
 const LISTASHARDS = [0, 3, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77, 82, 87, 92, 97]
 const { parentPort } = require('worker_threads');
+const MaintenanceMode = require('./Utils/MaintenanceMode.js');
 const fs   = require('fs');
 const path = require('path');
 const { WebSocketManager, WebSocketShardEvents } = require('@discordjs/ws');
@@ -22,10 +23,10 @@ const UserGlobalDb         = require('../Mongodb/userglobal.js');
 const sendDm               = require('./Utils/sendDm.js');
 const MessageEmbed         = require('./Messages/EmbedBuild.js');
 const GenshinLeaksManager  = require('./System/GenshinLeaksManager.js');
-const LogicEngine = require('./System/EventCreater/LogicEngine.js')
-const FlowUI = require('./System/EventCreater/Flow.js');
+const LogicEngine = require('./System/LogicBuilder/LogicEngine.js')
+const FlowUI = require('./System/LogicBuilder/Flow.js');
 const BirthdayManager = require("./System/BirthdayManager.js");
-const LibraryManager = require("./System/EventCreater/LibraryManager.js");
+const LibraryManager = require("./System/LogicBuilder/LibraryManager.js");
 const MissionManager = require('./System/MissionManager.js');
 const SecuritySystem = require("./System/SecuritySystem.js")
 const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
@@ -518,6 +519,10 @@ async _onReactionAdd(d) {
         if (cfg?.presence?.name) customPresence = cfg.presence;
     } catch { /* Mongo pode não estar pronto ainda nesse ponto — usa o default */ }
 
+    // Sistema de Atualização Programada — carrega o estado persistido
+    // (se a Staff já tiver ativado antes de um restart, por exemplo).
+    await require('./Utils/MaintenanceMode.js').loadFromDb();
+
     this.setPresence(d.shard[0], customPresence ?? {
       name: `🌙 Assinatura "Constellation" por R$7,99 | Cluster ${this.CLUSTERS_NAME[process.env.CLUSTER_ID ?? 0]}, Shard: ${d.shard[0]}/4`
     });
@@ -565,6 +570,20 @@ async _onReactionAdd(d) {
             return this._replyBlacklisted(interaction, userId);
         }
 
+        // Sistema de Atualização Programada — checagem síncrona (cache em
+        // memória), centralizada aqui pra cobrir TODAS as interações
+        // (comandos, botões, selects, modais) sem duplicar a verificação em
+        // cada handler. Nunca bloqueia a interação — só avisa, em paralelo
+        // (fire-and-forget), e o processamento normal continua embaixo.
+        if (MaintenanceMode.isActive()) {
+            // Pequeno atraso: o followup só é aceito pela API depois que a
+            // interação foi respondida (type 4/5/6/9) — o handler do
+            // comando/componente/modal faz isso quase sempre nos primeiros
+            // milissegundos, então esse atraso garante a ordem sem
+            // precisar acoplar este aviso ao fluxo de cada handler.
+            setTimeout(() => this._warnMaintenance(interaction), 1500);
+        }
+
         // Always process XP first, regardless of interaction type
         await this._processAdventureRankXp(interaction);
 
@@ -576,6 +595,18 @@ async _onReactionAdd(d) {
             case INTERACTION_TYPE.MODAL_SUBMIT:
                 return this.interactions.handleModal(interaction);
         }
+    }
+
+    /**
+     * Avisa sobre a Atualização Programada como um followup efêmero,
+     * em paralelo ao processamento normal (nunca await'ado no caminho
+     * principal) — por isso nunca atrasa nem impede a interação em si.
+     */
+    _warnMaintenance(interaction) {
+        DiscordRequest(
+            `/webhooks/${this.clientId}/${interaction.token}`,
+            { method: 'POST', body: { content: MaintenanceMode.getMessage(), flags: 64 } }
+        ).catch(() => { /* token pode já ter expirado/sido consumido — ignora */ });
     }
 
     async _replyBlacklisted(interaction, userId) {
@@ -750,200 +781,4 @@ async _onReactionAdd(d) {
     }
 
     _updateXpRemaining(user) {
-        const { nivelAtual, xpTotal } = user.rankaventureiro;
-
-        if (nivelAtual >= MAX_ADVENTURE_LEVEL) {
-            user.rankaventureiro.xpRestante = 0;
-            return;
-        }
-
-        user.rankaventureiro.xpRestante = ((nivelAtual + 1) * 1000) - xpTotal;
-    }
-
-
-
-    async _sendLevelUpDm(userId, user, levelBefore, levelAfter) {
-        try {
-            const levelsGained = levelAfter - levelBefore;
-            const rolls        = levelsGained * ROLLS_PER_LEVEL;
-            const primogemas   = rolls * PRIMOGEMAS_PER_ROLL;
-
-            const userData = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
-
-            const embed = new MessageEmbed()
-                .setTitle('Novo Rank de Aventureiro!')
-                .setColor('Red')
-                .setThumbnail(this._getAvatarUrl(userData))
-                .setDescription(this._buildLevelUpDescription({
-                    levelBefore,
-                    levelAfter,
-                    rolls,
-                    primogemas,
-                    xpTotal:    user.rankaventureiro.xpTotal,
-                    xpRestante: user.rankaventureiro.xpRestante,
-                }));
-
-            await sendDm(userId, { embeds: [embed.build()] });
-        } catch (err) {
-            console.error('[DM] Failed to send level-up DM:', err);
-        }
-    }
-
-    _getAvatarUrl(user) {
-        if (!user.avatar) return 'https://cdn.discordapp.com/embed/avatars/0.png';
-        const ext = user.avatar.startsWith('a_') ? 'gif' : 'png';
-        return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=1024`;
-    }
-
-    _buildLevelUpDescription({ levelBefore, levelAfter, rolls, primogemas, xpTotal, xpRestante }) {
-        return (
-`${this.emoji.animada} Uau, você subiu de rank!! Do **#${levelBefore}** pro **#${levelAfter}**, que incrível!!
-
-Fico tão feliz em ver você crescendo assim! ${this.emoji.corao}
-
-Fiquei tão animada que separei **${rolls} giros** pra você de presente~!
-
-💎 Recompensa recebida:
-**${primogemas.toLocaleString()} Primogemas**
-
-${this.emoji.festa} Aproveita bem, tá?! Cada primogema conta~
-
-Sua experiência atual é **${xpTotal} XP**!
-Faltam só **${xpRestante} XP** pro Rank **#${levelAfter + 1}**!
-
-${this.emoji.carinho} Você consegue, eu acredito em você!!
-Continua assim e logo logo você vai estar no topo~
-
-Torço muito por você! ${this.emoji.feliz}`
-)
-    }
-
-
-
-    /**
-     * Deep-compare the fields Discord accepts on a command PATCH.
-     * Returns true when a local command differs from the API version.
-     */
-    _commandHasChanged(local, api) {
-        const normalize = (cmd) => JSON.stringify({
-            name:                       cmd.name,
-            description:                cmd.description                ?? '',
-            options:                    cmd.options                    ?? [],
-            default_member_permissions: cmd.default_member_permissions ?? null,
-            dm_permission:              cmd.dm_permission              ?? true,
-            nsfw:                       cmd.nsfw                       ?? false,
-        });
-
-        return normalize(local) !== normalize(api);
-    }
-    
-    // Retorna o shard responsável por uma guild
-getShardId(guildId) {
-    const totalShards = parseInt(process.env.TOTAL_SHARDS ?? '1');
-    return Number(BigInt(guildId) >> 22n) % totalShards;
-}
-
-// Retorna os shards ativos neste cluster
-getShards() {
-    return process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
-}
-
-// Retorna o cluster ID
-getClusterId() {
-    return parseInt(process.env.CLUSTER_ID ?? '0');
-}
-
-// Calcula o ping de um shard específico
-async getShardPing(shardId) {
-    try {
-        const start = Date.now();
-        await DiscordRequest(`/gateway`, { method: 'GET' });
-        return Date.now() - start;
-    } catch {
-        return -1;
-    }
-}
-
-// Retorna info completa de todos os shards do cluster
-async getClusterInfo() {
-    const shards  = this.getShards();
-    const cluster = this.getClusterId();
-
-    const shardInfos = await Promise.all(
-        shards.map(async (shardId) => ({
-            shardId,
-            ping: await this.getShardPing(shardId),
-        }))
-    );
-
-    // Seção 7: lista de guilds deste cluster, lida direto do cache do
-    // GuildManager (tempo real via gateway, sem gastar chamada à API do
-    // Discord). Payload leve — só id/name/memberCount, não o objeto inteiro.
-    const guilds = Array.from(this.guilds.values()).map(g => ({
-        id: g.id,
-        name: g.name,
-        memberCount: g.memberCount,
-    }));
-
-    return {
-        clusterId: cluster,
-        shards:    shardInfos,
-        totalShards: parseInt(process.env.TOTAL_SHARDS ?? '1'),
-        uptime:    process.uptime(),
-        memory:    process.memoryUsage().heapUsed,
-        guilds,
-    };
-}
-
-requestAllStats() {
-    return new Promise((resolve, reject) => {
-        const requestId = `allstats_${Date.now()}`;
-        const timeout = setTimeout(() => reject(new Error('Timeout')), 10_000);
-
-        this.once('all_stats_response', (msg) => {
-            if (msg.requestId !== requestId) return;
-            clearTimeout(timeout);
-            resolve(msg.data);
-        });
-
-        parentPort.postMessage({ type: 'GET_ALL_STATS', requestId });
-    });
-}
-
-/**
- * Seção 7 — lista completa e correta de guilds do bot, agregada entre
- * TODOS os clusters (não paginada/silenciosamente truncada como o antigo
- * `DiscordRequest("/users/@me/guilds")`, e sem gastar chamada à API do
- * Discord — cada cluster devolve o próprio cache do GuildManager).
- */
-async getAllGuilds() {
-    const allStats = await this.requestAllStats();
-    const seen = new Map();
-    for (const cluster of allStats) {
-        for (const g of cluster.guilds ?? []) {
-            seen.set(g.id, g); // dedupe por id, por segurança
-        }
-    }
-    return Array.from(seen.values());
-}
-
-/**
- * Seção 6 — define a presence em TODOS os clusters (não só o atual) e
- * persiste no banco, pra sobreviver a restarts (senão o valor hardcoded
- * do handler de READY sempre desfaria a mudança). Pede pro ClusterManager
- * (thread principal) fazer o broadcast, já que este worker só fala com os
- * próprios shards.
- */
-async setPresenceAllClusters(opts) {
-    const BotConfig = require('../Mongodb/botConfig.js');
-    await BotConfig.findOneAndUpdate(
-        { key: 'global' },
-        { key: 'global', presence: opts },
-        { upsert: true }
-    );
-    parentPort.postMessage({ type: 'REQUEST_SET_PRESENCE', opts });
-}
-
-}
-
-module.exports = DiscordGatewayClient;
+        const { nivelAtual, xpTotal } = user.r

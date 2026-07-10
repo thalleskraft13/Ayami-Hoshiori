@@ -336,6 +336,7 @@ Eu estarei observando.`
             ['eval',              this._cmdEval.bind(this)],
             ['status',            this._cmdStatus.bind(this)],
             ['blacklist',         this._cmdBlacklist.bind(this)],
+            ['manutencao',        this._cmdManutencao.bind(this)],
         ]);
     }
 
@@ -458,6 +459,55 @@ Eu estarei observando.`
                 );
             }
         }
+    }
+
+    /**
+     * !manutencao ativar [mensagem personalizada]
+     * !manutencao desativar
+     * !manutencao status
+     *
+     * Sistema de Atualização Programada — todas as interações (comandos,
+     * botões, selects, modais) passam a exibir um aviso, sem deixar de
+     * funcionar normalmente. Ver DiscordGatewayClient.js#_onInteraction
+     * e function/Utils/MaintenanceMode.js.
+     */
+    async _cmdManutencao(message, args) {
+        const MaintenanceMode = require('../Utils/MaintenanceMode.js');
+        const [rawSub, ...rest] = args;
+        const sub = rawSub?.toLowerCase();
+
+        if (!sub || !['ativar', 'desativar', 'status'].includes(sub)) {
+            return this._send(
+                message.channel_id,
+                '❌ Uso: `!manutencao <ativar|desativar|status> [mensagem personalizada]`'
+            );
+        }
+
+        if (sub === 'status') {
+            const state = MaintenanceMode.getState();
+            if (!state.active) return this._send(message.channel_id, '🟢 Atualização Programada está **desativada**.');
+            return this._send(
+                message.channel_id,
+                `🟡 Atualização Programada está **ativa**.\n` +
+                `Ativada por: <@${state.activatedBy}>\n` +
+                `Quando: <t:${Math.floor(state.activatedAt / 1000)}:R>\n` +
+                `Mensagem: ${state.message}`
+            );
+        }
+
+        if (sub === 'desativar') {
+            await MaintenanceMode.setActive(this.client, false);
+            return this._send(message.channel_id, '✅ Atualização Programada **desativada** em todos os clusters.');
+        }
+
+        // ativar
+        const customMsg = rest.join(' ').trim() || null;
+        await MaintenanceMode.setActive(this.client, true, { staffId: message.author.id, message: customMsg });
+        return this._send(
+            message.channel_id,
+            `✅ Atualização Programada **ativada** em todos os clusters.\n` +
+            `Aviso que os usuários vão ver: ${customMsg || MaintenanceMode.DEFAULT_MESSAGE}`
+        );
     }
 
 

@@ -28,11 +28,25 @@ const userSchema = new Schema({
     default: 0
   },
 
-  // Seção 2: qual dos 3 planos (Nova Estrela/Lua Crescente/Constellation)
-  // essa assinatura é. Substitui o antigo modelo flat (só um boolean).
-  premium_plan: {
+  // Plano premium do usuário: FREE | NOVA_ESTRELA | LUA_CRESCENTE | CONSTELLATION
+  // Veja function/Utils/PremiumPlans.js para o que cada plano libera.
+  //
+  // ⚠️ Campo unificado com o site (site/models/userglobal.js usa o mesmo
+  // nome `premiumPlan`, camelCase). Antes desta atualização o bot usava
+  // `premium_plan` (snake_case) com valores em minúsculo — isso fazia o
+  // site nunca reconhecer o plano real do usuário. Não reintroduzir esse
+  // nome de campo nem valores em minúsculo.
+  premiumPlan: {
     type: String,
     default: null
+  },
+
+  // Timestamp (ms) de expiração do premiumPlan. 1 = vitalício.
+  // Espelha `premium` (mantido por compatibilidade com código legado que
+  // ainda lê só esse campo) — sempre escritos juntos pelo PremiumManager.
+  premiumExpiresAt: {
+    type: Number,
+    default: 0
   },
 
   premium_guild_limit: {

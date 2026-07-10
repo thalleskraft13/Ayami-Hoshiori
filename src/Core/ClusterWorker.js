@@ -38,6 +38,12 @@ async function main() {
         // shards DESTE cluster.
         client.setPresence('all', msg.opts ?? {});
     }
+
+    if (msg?.type === 'SET_MAINTENANCE') {
+        // Broadcast da Atualização Programada — atualiza o cache em
+        // memória deste cluster imediatamente (sem round-trip ao Mongo).
+        require('../function/Utils/MaintenanceMode.js').applyLocalState(msg.state ?? {});
+    }
 });
     
     client.once('ready', () => {

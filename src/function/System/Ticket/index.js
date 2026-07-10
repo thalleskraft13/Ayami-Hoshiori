@@ -7,6 +7,27 @@ const SeqQuestionsManager = require('./SeqQuestionsManager.js');
 const TranscriptManager   = require('./TranscriptManager.js');
 const EmbedBuilderUI      = require('./EmbedBuilderUI.js');
 const { randomUUID }      = require('crypto');
+const PremiumManager      = require('../../Utils/PremiumManager.js');
+const { getPlan }         = require('../../Utils/PremiumPlans.js');
+
+// Tipos de pergunta "avançados" — contam contra o limite separado do
+// plano (plan.tickets.advancedTypeLimit). Texto curto/longo, número e
+// sim/não são "básicos" e só contam contra o limite total de perguntas.
+const ADVANCED_QUESTION_TYPES = new Set(['select', 'multiple', 'checkbox', 'attachment', 'member', 'role', 'channel']);
+
+const QUESTION_TYPE_CHOICES = [
+  { label: '📝 Texto curto',        value: 'short',      description: 'Resposta em até ~100 caracteres' },
+  { label: '📄 Texto longo',        value: 'long',       description: 'Resposta em até 2000 caracteres' },
+  { label: '🔢 Número',             value: 'number',     description: 'Aceita apenas números' },
+  { label: '✅ Sim/Não',            value: 'yesno',      description: 'Resposta sim ou não' },
+  { label: '📋 Seleção',            value: 'select',     description: 'Escolher 1 opção de uma lista (Premium)' },
+  { label: '☑️ Múltipla escolha',   value: 'multiple',   description: 'Escolher várias opções de uma lista (Premium)' },
+  { label: '🔲 Checkbox',           value: 'checkbox',   description: 'Marcar 0+ opções (Premium)' },
+  { label: '👤 Seleção de membro',  value: 'member',     description: 'Escolher um membro do servidor (Premium)' },
+  { label: '🏷️ Seleção de cargo',   value: 'role',       description: 'Escolher um cargo do servidor (Premium)' },
+  { label: '📌 Seleção de canal',   value: 'channel',    description: 'Escolher um canal do servidor (Premium)' },
+  { label: '📎 Anexo',              value: 'attachment', description: 'Enviar um arquivo/imagem (Premium)' },
+];
 
 /* ─────────────────────────────────────────────
    CORES DA AYAMI (mesma paleta do Logic Builder)
@@ -183,6 +204,48 @@ class TicketSystem {
 
   _uid() {
     return randomUUID().replace(/-/g, '').slice(0, 16);
+  }
+
+  /** Resolve o plano premium da guild (FREE se não houver nenhum ativo). */
+  async _getGuildPlan(guildId) {
+    const premium = await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }));
+    return premium.status ? premium.plan : getPlan(null);
+  }
+
+  /**
+   * Checa se a guild ainda pode adicionar uma pergunta do `tipo` informado
+   * a essa lista de perguntas, respeitando os limites do plano:
+   *   - total de perguntas (plan.tickets.maxQuestions)
+   *   - perguntas de tipo avançado — seleção/múltipla escolha/checkbox/
+   *     anexo/membro/cargo/canal (plan.tickets.advancedTypeLimit)
+   * Retorna { ok: true, plan } ou { ok: false, motivo, plan }.
+   */
+  async _checkSeqQuestionLimit(guildId, existingQuestions, tipo) {
+    const plan = await this._getGuildPlan(guildId);
+    const questions = existingQuestions || [];
+
+    const maxQuestions = plan.tickets?.maxQuestions ?? 10;
+    if (questions.length >= maxQuestions) {
+      return {
+        ok: false,
+        plan,
+        motivo: `Limite de perguntas do plano ${plan.emoji} ${plan.name} atingido (${maxQuestions === Infinity ? '∞' : maxQuestions}). Assine um plano maior em /premium para adicionar mais.`,
+      };
+    }
+
+    if (ADVANCED_QUESTION_TYPES.has(tipo)) {
+      const advancedLimit = plan.tickets?.advancedTypeLimit ?? 0;
+      const advancedCount = questions.filter(q => ADVANCED_QUESTION_TYPES.has(q.tipo)).length;
+      if (advancedCount >= advancedLimit) {
+        return {
+          ok: false,
+          plan,
+          motivo: `Limite de perguntas avançadas (seleção/múltipla escolha/checkbox/anexo/membro/cargo/canal) do plano ${plan.emoji} ${plan.name} atingido (${advancedLimit === Infinity ? '∞' : advancedLimit}). Assine um plano maior em /premium para desbloquear mais.`,
+        };
+      }
+    }
+
+    return { ok: true, plan };
   }
 
   /* ═══════════════════════════════════════
@@ -693,9 +756,11 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const cfg   = panel.seqQuestionsConfig || { enabled: false, questions: [], timeout: 60000 };
+    const plan  = await this._getGuildPlan(interaction.guild_id);
+    const maxQ  = plan.tickets?.maxQuestions ?? 10;
 
     const questionsList = cfg.questions?.length
-      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label}${q.required ? ' *obrigatória*' : ''}`).join('\n')
+      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label} \`[${q.tipo || 'text'}]\`${q.required ? ' *obrigatória*' : ''}`).join('\n')
       : '_Nenhuma pergunta adicionada_';
 
     const timeoutSec = Math.round((cfg.timeout ?? 60000) / 1000);
@@ -711,7 +776,7 @@ class TicketSystem {
 
     const btnAddQ = this.btn(user, '➕ Adicionar Pergunta', 1, async (i) => {
       return this._seqAddQuestion(i, user, panelId);
-    }, { disabled: (cfg.questions?.length || 0) >= 10 });
+    }, { disabled: (cfg.questions?.length || 0) >= maxQ });
 
     const btnRemQ = this.btn(user, '🗑️ Remover Última', 4, async (i) => {
       await this.deferUpdate(i);
@@ -792,7 +857,7 @@ class TicketSystem {
         `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
         `> Tempo por pergunta: ${timeoutSec}s\n` +
         `> Resumo vai pra: ${cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : '🎫 o próprio ticket'}\n\n` +
-        `**Perguntas (${cfg.questions?.length || 0}/10):**\n${questionsList}`
+        `**Perguntas (${cfg.questions?.length || 0}/${maxQ === Infinity ? '∞' : maxQ}):**\n${questionsList}`
       ),
       cv2Divider(),
       row(btnToggle, btnAddQ, btnRemQ),
@@ -807,28 +872,105 @@ class TicketSystem {
   }
 
   async _seqAddQuestion(interaction, user, panelId) {
+    return this._seqAddQuestionGeneric({
+      interaction, user,
+      guildId:     interaction.guild_id,
+      locateTarget: fd => this._findPanel(fd, panelId),
+      onAdded:     mi => this.seqFormMenu(mi, user, panelId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` }),
+    });
+  }
+
+  /**
+   * Fluxo genérico de "adicionar pergunta sequencial" — usado tanto no
+   * form do painel quanto no form embutido numa opção do select menu.
+   * Passos: 1) escolher o TIPO da pergunta → 2) checar limite do plano
+   * pro tipo escolhido → 3) modal com os campos certos pro tipo → 4) salva.
+   *
+   * @param {Function} locateTarget (guildDoc) => objeto com .seqQuestionsConfig (painel ou opção)
+   * @param {Function} onAdded      (modalInteraction) => tela pra voltar depois de salvar
+   */
+  async _seqAddQuestionGeneric({ interaction, user, guildId, locateTarget, onAdded }) {
+    const typeSelect = this.client.interactions.createSelect({
+      user,
+      tempo: 120_000,
+      data: {
+        placeholder: 'Qual o tipo dessa pergunta?',
+        options: QUESTION_TYPE_CHOICES,
+      },
+      funcao: async (si) => {
+        const tipo = si.data.values[0];
+
+        const fd = await this._getGuildDoc(guildId);
+        const target = locateTarget(fd);
+        target.seqQuestionsConfig = target.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
+        target.seqQuestionsConfig.questions = target.seqQuestionsConfig.questions || [];
+
+        const check = await this._checkSeqQuestionLimit(guildId, target.seqQuestionsConfig.questions, tipo);
+        if (!check.ok) {
+          return this.client.interactions._callback(si, {
+            type: 4,
+            data: { content: `🔒 ${check.motivo}`, flags: 64 },
+          });
+        }
+
+        return this._seqAddQuestionModal(si, user, tipo, async (mi, fields) => {
+          const fd2 = await this._getGuildDoc(guildId);
+          const target2 = locateTarget(fd2);
+          target2.seqQuestionsConfig = target2.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
+          target2.seqQuestionsConfig.questions = target2.seqQuestionsConfig.questions || [];
+
+          const question = {
+            id:       this._uid(),
+            label:    fields.text.trim(),
+            tipo,
+            required: !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
+          };
+          if (['select', 'multiple', 'checkbox'].includes(tipo)) {
+            question.options = (fields.options || '')
+              .split(',').map(s => s.trim()).filter(Boolean).slice(0, 25);
+          }
+
+          target2.seqQuestionsConfig.questions.push(question);
+          await fd2.save();
+
+          await this.client.interactions._callback(mi, { type: 6 });
+          return onAdded(mi);
+        });
+      },
+    });
+
+    return this.client.interactions._callback(interaction, {
+      type: 4,
+      data: { content: '📋 Qual o tipo dessa pergunta?', flags: 64, components: [row(typeSelect)] },
+    });
+  }
+
+  /** Monta e exibe o modal certo pro tipo de pergunta escolhido. */
+  async _seqAddQuestionModal(interaction, user, tipo, onSubmit) {
+    const needsOptions = ['select', 'multiple', 'checkbox'].includes(tipo);
+
+    const components = [
+      { type: 1, components: [{ type: 4, custom_id: 'text', label: 'Texto da pergunta', style: 2, required: true, max_length: 300 }] },
+    ];
+
+    if (needsOptions) {
+      components.push({
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'options', style: 2, required: true, max_length: 500,
+          label: 'Opções (separadas por vírgula)',
+          placeholder: 'Ex: Dúvida, Bug, Sugestão, Denúncia',
+        }],
+      });
+    }
+
+    components.push({ type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatória? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] });
+
     const modal = this.client.interactions.createModal({
       user,
       title: 'Adicionar Pergunta',
-      components: [
-        { type: 1, components: [{ type: 4, custom_id: 'text', label: 'Texto da pergunta', style: 2, required: true, max_length: 300 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatória? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
-      ],
-      funcao: async (mi, _, fields) => {
-        const fd = await this._getGuildDoc(mi.guild_id);
-        const fp = this._findPanel(fd, panelId);
-        fp.seqQuestionsConfig = fp.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
-        fp.seqQuestionsConfig.questions = fp.seqQuestionsConfig.questions || [];
-        fp.seqQuestionsConfig.questions.push({
-          id:       this._uid(),
-          label:    fields.text.trim(),
-          required: !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
-        });
-        await fd.save();
-
-        await this.client.interactions._callback(mi, { type: 6 });
-        return this.seqFormMenu(mi, user, panelId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` });
-      }
+      components,
+      funcao: async (mi, _, fields) => onSubmit(mi, fields),
     });
 
     return this.client.interactions.showModal(interaction, modal);
@@ -1464,9 +1606,11 @@ class TicketSystem {
     const option = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
     const cfg    = option.seqQuestionsConfig || { enabled: false, questions: [], timeout: 60000 };
     const timeoutSec = Math.round((cfg.timeout ?? 60000) / 1000);
+    const plan   = await this._getGuildPlan(interaction.guild_id);
+    const maxQ   = plan.tickets?.maxQuestions ?? 10;
 
     const questionsList = cfg.questions?.length
-      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label}${q.required ? ' *obrigatória*' : ''}`).join('\n')
+      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label} \`[${q.tipo || 'text'}]\`${q.required ? ' *obrigatória*' : ''}`).join('\n')
       : '_Nenhuma pergunta adicionada_';
 
     const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Form' : '▶️ Ativar Form', cfg.enabled ? 4 : 3, async (i) => {
@@ -1480,7 +1624,7 @@ class TicketSystem {
 
     const btnAddQ = this.btn(user, '➕ Adicionar Pergunta', 1, async (i) => {
       return this._selectOptionSeqAddQuestion(i, user, panelId, optionId);
-    }, { disabled: (cfg.questions?.length || 0) >= 10 });
+    }, { disabled: (cfg.questions?.length || 0) >= maxQ });
 
     const btnRemQ = this.btn(user, '🗑️ Remover Última', 4, async (i) => {
       await this.deferUpdate(i);
@@ -1557,7 +1701,7 @@ class TicketSystem {
         `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
         `> Tempo por pergunta: ${timeoutSec}s\n` +
         `> Resumo vai pra: ${cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : '🎫 o próprio ticket'}\n\n` +
-        `**Perguntas (${cfg.questions?.length || 0}/10):**\n${questionsList}`
+        `**Perguntas (${cfg.questions?.length || 0}/${maxQ === Infinity ? '∞' : maxQ}):**\n${questionsList}`
       ),
       cv2Divider(),
       row(btnToggle, btnAddQ, btnRemQ),
@@ -1572,32 +1716,12 @@ class TicketSystem {
   }
 
   async _selectOptionSeqAddQuestion(interaction, user, panelId, optionId) {
-    const modal = this.client.interactions.createModal({
-      user,
-      title: 'Adicionar Pergunta',
-      components: [
-        { type: 1, components: [{ type: 4, custom_id: 'text', label: 'Texto da pergunta', style: 2, required: true, max_length: 300 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatória? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
-      ],
-      funcao: async (mi, _, fields) => {
-        const fd = await this._getGuildDoc(mi.guild_id);
-        const fp = this._findPanel(fd, panelId);
-        const fo = fp.selectMenuConfig.options.find(o => o.optionId === optionId);
-        fo.seqQuestionsConfig = fo.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
-        fo.seqQuestionsConfig.questions = fo.seqQuestionsConfig.questions || [];
-        fo.seqQuestionsConfig.questions.push({
-          id:       this._uid(),
-          label:    fields.text.trim(),
-          required: !['não', 'nao', 'no', 'n'].includes((fields.required || 'sim').toLowerCase()),
-        });
-        await fd.save();
-
-        await this.client.interactions._callback(mi, { type: 6 });
-        return this.selectOptionSeqFormMenu(mi, user, panelId, optionId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` });
-      }
+    return this._seqAddQuestionGeneric({
+      interaction, user,
+      guildId: interaction.guild_id,
+      locateTarget: fd => this._findPanel(fd, panelId).selectMenuConfig.options.find(o => o.optionId === optionId),
+      onAdded: mi => this.selectOptionSeqFormMenu(mi, user, panelId, optionId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` }),
     });
-
-    return this.client.interactions.showModal(interaction, modal);
   }
 
   /* ═══════════════════════════════════════

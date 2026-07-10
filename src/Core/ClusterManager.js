@@ -81,6 +81,17 @@ class ClusterManager {
         }
     }
 
+    /**
+     * Sistema de Atualização Programada — replica o novo estado (ativo/
+     * inativo + mensagem) pra TODOS os clusters imediatamente. Mesmo
+     * padrão de IPC do setPresenceAll(), acima.
+     */
+    setMaintenanceAll(state) {
+        for (const [, { worker }] of this._clusters) {
+            worker.postMessage({ type: 'SET_MAINTENANCE', state });
+        }
+    }
+
     // ─── Private ──────────────────────────────────────────────────────────────
 
     _requestStats(clusterId, worker) {
@@ -138,6 +149,14 @@ class ClusterManager {
             // Um worker (onde o comando rodou) pede pro ClusterManager (thread
             // principal) replicar a presence pra TODOS os clusters.
             this.setPresenceAll(msg.opts);
+            return;
+        }
+
+        if (msg?.type === 'REQUEST_SET_MAINTENANCE') {
+            // Um worker (onde o comando de Staff rodou) pede pro
+            // ClusterManager replicar o estado da Atualização Programada
+            // pra TODOS os clusters imediatamente.
+            this.setMaintenanceAll(msg.state);
             return;
         }
 

@@ -20,9 +20,24 @@ const presenceSchema = new Schema({
   state:  { type: String, default: null },
 }, { _id: false });
 
+/**
+ * Atualização Programada (seção "Sistema de Atualização Programada").
+ * Singleton — um documento global. Persiste o estado pra sobreviver a
+ * restarts e permitir que TODOS os clusters/shards enxerguem o mesmo
+ * estado (a fonte de verdade é este documento; cada worker mantém um
+ * cache em memória disso, ver function/Utils/MaintenanceMode.js).
+ */
+const maintenanceSchema = new Schema({
+  active:      { type: Boolean, default: false },
+  message:     { type: String,  default: null },
+  activatedBy: { type: String,  default: null },
+  activatedAt: { type: Number,  default: null },
+}, { _id: false });
+
 const botConfigSchema = new Schema({
-  key:      { type: String, default: 'global', unique: true },
-  presence: { type: presenceSchema, default: null },
+  key:         { type: String, default: 'global', unique: true },
+  presence:    { type: presenceSchema,    default: null },
+  maintenance: { type: maintenanceSchema, default: () => ({}) },
 }, {
   collection: 'bot_config',
 });

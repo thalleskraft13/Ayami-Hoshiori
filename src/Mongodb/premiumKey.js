@@ -13,11 +13,13 @@ const keySchema = new Schema({
     required: true
   },
 
-  // Seção 2: qual plano essa key concede quando type === "USER"
-  // (nova_estrela | lua_crescente | constellation). Ignorado pra type GUILD.
+  // Qual plano essa key concede quando type === "USER"
+  // (FREE | NOVA_ESTRELA | LUA_CRESCENTE | CONSTELLATION). Ignorado pra type GUILD.
+  // ⚠️ Sem `enum` de propósito — mesmo motivo dos outros schemas: não recusar
+  // saves por causa de keys antigas gravadas com valor legado em minúsculo.
   plan: {
     type: String,
-    default: "constellation"
+    default: "CONSTELLATION"
   },
 
   duration: {

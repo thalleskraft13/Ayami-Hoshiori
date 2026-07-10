@@ -253,7 +253,7 @@ module.exports = {
       type: 2,
       style: 5,
       label: "Servidor Oficial",
-      url: "https://discord.gg/RBVSUyNZKv"
+      url: "https://discord.gg/WjeVXJPn5p"
     };
 
     const select = client.interactions.createSelect({

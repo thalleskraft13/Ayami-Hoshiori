@@ -43,7 +43,7 @@ const COLOR = {
 };
 
 const SUPPORT_ANNOUNCE_CHANNEL = '1508910999753850910';
-const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
+const GUIDE_URL = 'https://ayami-hoshiori.discloud.app/logic-builder';
 
 /* ═══════════════════════════════════════════════════════════
    MAPA DE CAMPOS QUE PRECISAM SER CONFIGURADOS NA INSTALAÇÃO
