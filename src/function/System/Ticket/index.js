@@ -939,9 +939,19 @@ class TicketSystem {
       },
     });
 
+    // Precisa nascer em formato Components V2 (não "content" legado): essa
+    // mesma mensagem é convertida depois, via editOriginal()/cv2Payload(),
+    // quando o usuário termina o modal (ver seqFormMenu() chamado no fim do
+    // fluxo do select acima). Se ela começasse como `content` + action row
+    // comum, o PATCH pra Components V2 falharia com "The 'content' field
+    // cannot be used when using MessageFlags.IS_COMPONENTS_V2" — o content
+    // antigo continua salvo na mensagem até esse ponto, e um PATCH que só
+    // adiciona a flag 32768 sem tocar no content não é suficiente pro
+    // Discord aceitar a transição. Nascendo já em CV2, nunca existe content
+    // legado pra entrar em conflito.
     return this.client.interactions._callback(interaction, {
       type: 4,
-      data: { content: '📋 Qual o tipo dessa pergunta?', flags: 64, components: [row(typeSelect)] },
+      data: cv2Payload([cv2Text('📋 Qual o tipo dessa pergunta?'), row(typeSelect)], { ephemeral: true }),
     });
   }
 

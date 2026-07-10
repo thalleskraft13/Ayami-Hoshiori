@@ -148,7 +148,12 @@ class ScriptRunner {
 
       case 'CHANNEL_CREATE':
       case 'CHANNEL_DELETE':
-        ctx.channelId = data.id;
+        ctx.channelId   = data.id;
+        // Guardamos o payload bruto do gateway (não fazemos fetch via REST
+        // aqui): pra CHANNEL_DELETE o canal já não existe mais na API, e
+        // pra CHANNEL_CREATE evitamos uma chamada extra desnecessária —
+        // o gateway já manda name/type/parent_id no próprio evento.
+        ctx.channelData = data;
         break;
 
       case 'VOICE_STATE_UPDATE':
@@ -295,7 +300,15 @@ class ScriptRunner {
       case 'memberUpdate':
       case 'banAdd':
       case 'banRemove':
+      case 'voiceJoin':
+      case 'voiceLeave':
         return [{ id: ctx.userId }];
+
+      case 'channelCreate':
+      case 'channelDelete': {
+        const d = ctx.channelData ?? {};
+        return [{ id: ctx.channelId, name: d.name, type: d.type, category: d.parent_id }];
+      }
 
       case 'buttonClick':
       case 'selectMenu':

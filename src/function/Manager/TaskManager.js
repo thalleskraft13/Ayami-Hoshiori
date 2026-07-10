@@ -211,9 +211,11 @@ class TaskManager {
 
         case 'giveaway_end': {
   const { giveawayId } = task.dados;
-  if (this.client.giveawayScheduler) {
-    await this.client.giveawayScheduler._end(giveawayId)
+  if (this.client.gScheduler) {
+    await this.client.gScheduler._end(giveawayId)
       .catch(err => console.error('[TaskManager] giveaway_end error:', err));
+  } else {
+    console.error('[TaskManager] giveaway_end: client.gScheduler indisponível.');
   }
   break;
 }

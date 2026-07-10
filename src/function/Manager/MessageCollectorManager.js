@@ -3,6 +3,7 @@
 const util = require('util');
 
 const PremiumManager = require('../Utils/PremiumManager.js');
+const { PLANS, PLAN_KEYS, normalizePlanKey, isValidPlan } = require('../Utils/PremiumPlans.js');
 const GuildDb        = require('../../Mongodb/guild.js');
 const UserGlobalDb   = require('../../Mongodb/userglobal.js');
 const sendDm         = require('../Utils/sendDm.js');
@@ -512,17 +513,43 @@ Eu estarei observando.`
 
 
     async _cmdUserAddPremium(message, args) {
-        const [targetId, rawDays] = args;
+        const [targetId, rawDays, rawPlan] = args;
         const days = Number(rawDays);
 
+        // Planos concedíveis (FREE não é um plano premium, então fica de fora)
+        const grantablePlans = Object.values(PLAN_KEYS).filter(k => k !== PLAN_KEYS.FREE);
+        const planList = grantablePlans.map(k => `\`${k}\` (${PLANS[k].name})`).join(', ');
+
         if (!targetId || !days) {
-            return this._send(message.channel_id, '❌ Uso: `!useraddpremium [ID] [DIAS]`');
+            return this._send(
+                message.channel_id,
+                `❌ Uso: \`!useraddpremium [ID] [DIAS] [PLANO]\`\n` +
+                `Planos disponíveis: ${planList}\n` +
+                `Se \`[PLANO]\` for omitido, o padrão é \`${PLAN_KEYS.CONSTELLATION}\`.`
+            );
         }
 
-        await PremiumManager.addUserPremium(targetId, days);
+        // Plano é opcional, mas se for informado precisa ser válido — sem
+        // isso o comando aceitava qualquer coisa e caía silenciosamente
+        // sempre no plano padrão (Constellation), que era o bug original.
+        let planId;
+        if (rawPlan) {
+            const normalized = normalizePlanKey(rawPlan);
+            if (normalized === PLAN_KEYS.FREE || !grantablePlans.includes(normalized)) {
+                return this._send(
+                    message.channel_id,
+                    `❌ Plano inválido: \`${rawPlan}\`\nPlanos disponíveis: ${planList}`
+                );
+            }
+            planId = normalized;
+        }
+
+        const result = await PremiumManager.addUserPremium(targetId, days, planId);
+        const plano = PLANS[result.plan] || PLANS[normalizePlanKey(result.plan)];
+
         return this._send(
             message.channel_id,
-            `✅ Premium adicionado para <@${targetId}> por **${days} dias**`
+            `✅ Premium **${plano?.name ?? result.plan}** adicionado para <@${targetId}> por **${days} dias**`
         );
     }
 

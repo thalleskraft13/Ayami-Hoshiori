@@ -7,6 +7,8 @@ const GiveawayDraw    = require('./Utils/GiveawayDraw.js');
 const GiveawayEmbed   = require('./Utils/GiveawayEmbed.js');
 const GiveawayExport  = require('./Utils/GiveawayExport.js');
 const PremiumManager  = require('../../Utils/PremiumManager.js');
+const { isPlanAtLeast, PLAN_KEYS } = require('../../Utils/PremiumPlans.js');
+const TaskDb          = require('../../../Mongodb/tarefas.js');
 
 const E = Object.freeze({
   feliz:    '<:ayamifeliz:1513904597649981561>',
@@ -159,9 +161,50 @@ class GiveawaySystem {
 
   _clearDraft(userId) { this._drafts.delete(userId); }
 
+  /**
+   * Mantém a tarefa persistida `giveaway_end` (usada pelo TaskManager,
+   * poll a cada 1s) em sincronia com o agendamento em memória do
+   * gScheduler. Isso é necessário porque um sorteio pode ter sido
+   * criado pelo site (que só agenda via tarefa persistida, já que
+   * roda em outro processo) e depois ser gerenciado pelo Discord
+   * (pausar/ajustar tempo/encerrar) — sem isso, a tarefa antiga
+   * continuaria disparando no horário errado.
+   */
+  async _syncEndTask(doc) {
+    try {
+      await TaskDb.findOneAndUpdate(
+        { tipo: 'giveaway_end', 'dados.giveawayId': doc.giveawayId },
+        {
+          $setOnInsert: { taskId: `giveaway_end_${doc.giveawayId}` },
+          $set: { executeAt: doc.endsAt, status: 'pending', dados: { giveawayId: doc.giveawayId } }
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.error('[GiveawaySystem] _syncEndTask error:', err);
+    }
+  }
+
+  async _cancelEndTask(giveawayId) {
+    try {
+      await TaskDb.updateOne(
+        { tipo: 'giveaway_end', 'dados.giveawayId': giveawayId, status: 'pending' },
+        { $set: { status: 'cancelled' } }
+      );
+    } catch (err) {
+      console.error('[GiveawaySystem] _cancelEndTask error:', err);
+    }
+  }
+
+  /**
+   * Os recursos premium do sistema de sorteios (requisitos avançados e
+   * multi-servidor) são liberados a partir do 2º plano (Lua Crescente)
+   * em diante — o 1º plano (Nova Estrela) NÃO libera esses recursos.
+   */
   async isPremium(guildId) {
     const p = await PremiumManager.getGuildPremium(guildId);
-    return p.status;
+    if (!p.status) return false;
+    return isPlanAtLeast(p.planId, PLAN_KEYS.LUA_CRESCENTE);
   }
 
   async save(doc) { await doc.save(); }
@@ -853,6 +896,7 @@ class GiveawaySystem {
     }
 
     this.client.gScheduler?.schedule(doc);
+    await this._syncEndTask(doc);
     this._clearDraft(user);
 
     return this.editOriginal(interaction, {
@@ -1019,6 +1063,7 @@ class GiveawaySystem {
     doc.status = 'ended'; doc.endedAt = new Date();
     await this.save(doc);
     this.client.gScheduler?.cancel(doc.giveawayId);
+    await this._cancelEndTask(doc.giveawayId);
 
     const result = await GiveawayDraw.draw(doc, this.client);
     await this.save(doc);
@@ -1037,9 +1082,11 @@ class GiveawaySystem {
       doc.endsAt   = new Date(doc.endsAt.getTime() + pausedMs);
       doc.status   = 'active'; doc.pausedAt = null;
       this.client.gScheduler?.schedule(doc);
+      await this._syncEndTask(doc);
     } else {
       doc.pausedAt = new Date(); doc.status = 'paused';
       this.client.gScheduler?.cancel(doc.giveawayId);
+      await this._cancelEndTask(doc.giveawayId);
     }
     await this.save(doc);
     await this._refreshEmbed(doc).catch(() => {});
@@ -1076,6 +1123,7 @@ class GiveawaySystem {
 
     await this.save(doc);
     this.client.gScheduler?.reschedule(doc.giveawayId);
+    await this._syncEndTask(doc);
     await this._refreshEmbed(doc).catch(() => {});
     return this.giveawayMenu(interaction, doc, user);
   }
