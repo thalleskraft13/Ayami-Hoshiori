@@ -949,9 +949,19 @@ class TicketSystem {
     // adiciona a flag 32768 sem tocar no content não é suficiente pro
     // Discord aceitar a transição. Nascendo já em CV2, nunca existe content
     // legado pra entrar em conflito.
+    //
+    // type: 7 (UPDATE_MESSAGE) — edita o painel original em vez de criar
+    // uma mensagem nova (type: 4). Era esse o bug real: com type 4, o
+    // select de tipo virava uma mensagem separada, e toda a cadeia
+    // seguinte (modal → salvar → seqFormMenu) ficava presa editando ESSA
+    // mensagem nova em vez de voltar pro painel visível — por isso parecia
+    // que o resultado final aparecia "de novo" como um followUp solto ao
+    // invés de atualizar o painel. O painel do formulário sequencial não é
+    // ephemeral (ephemeral: false em seqFormMenu), então mantemos o mesmo
+    // aqui — UPDATE_MESSAGE não pode mudar a visibilidade da mensagem.
     return this.client.interactions._callback(interaction, {
-      type: 4,
-      data: cv2Payload([cv2Text('📋 Qual o tipo dessa pergunta?'), row(typeSelect)], { ephemeral: true }),
+      type: 7,
+      data: cv2Payload([cv2Text('📋 Qual o tipo dessa pergunta?'), row(typeSelect)], { ephemeral: false }),
     });
   }
 
