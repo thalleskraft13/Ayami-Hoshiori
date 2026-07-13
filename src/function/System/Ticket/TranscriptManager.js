@@ -11,6 +11,7 @@
  */
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 const MAX_MESSAGES_PER_FETCH = 100;
 const MAX_TOTAL_MESSAGES     = 2000; // limite de segurança
@@ -19,6 +20,12 @@ class TranscriptManager {
 
   constructor(client) {
     this.client = client;
+    this._ctx = {};
+  }
+
+  /** Atalho pra tradução de uma chave do sistema "ticket". */
+  _t(key, extra = {}) {
+    return this.client.t(`ticket.${key}`, { ...this._ctx, ...extra });
   }
 
   /* ═══════════════════════════════════════════
@@ -40,6 +47,7 @@ class TranscriptManager {
    * @returns {Promise<void>}
    */
   async generate({ interaction, panel, closedBy, messages = {} }) {
+    this._ctx = localeCtx(interaction);
     const cfg = panel.transcriptConfig;
     if (!cfg?.enabled || !cfg.channelId) return;
 
@@ -62,8 +70,8 @@ class TranscriptManager {
         method: 'POST',
         body: {
           embeds: [{
-            title:       messages.canalTitulo || '📄 Transcript',
-            description: `Canal: **${channel.name || channelId}**\nFechado por: <@${closedBy}>\nMensagens: **${msgs.length}**`,
+            title:       messages.canalTitulo || this._t('default_transcript_title'),
+            description: this._t('tr_summary_desc', { channelName: channel.name || channelId, closedBy, count: msgs.length }),
             color:       0x7C8FFF,
             timestamp:   new Date().toISOString()
           }]
@@ -118,13 +126,14 @@ class TranscriptManager {
 
   _buildHtml(messages, channel, closedBy) {
     const rows = messages.map(m => this._messageToHtmlRow(m)).join('\n');
+    const locale = this._t('tr_locale_tag');
 
     return `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transcript — ${this._esc(channel.name || channel.id)}</title>
+  <title>${this._t('tr_html_title_prefix')} — ${this._esc(channel.name || channel.id)}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -190,13 +199,13 @@ class TranscriptManager {
   <header>
     <div>
       <h1>#${this._esc(channel.name || channel.id)}</h1>
-      <span>Fechado por: ${this._esc(closedBy)} · ${messages.length} mensagem(s) · Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+      <span>${this._t('tr_closed_by_label')}: ${this._esc(closedBy)} · ${this._t('tr_messages_label', { count: messages.length })} · ${this._t('tr_generated_at_label')} ${new Date().toLocaleString(locale)}</span>
     </div>
   </header>
   <div class="messages">
 ${rows}
   </div>
-  <footer>Transcript gerado automaticamente · ${new Date().toISOString()}</footer>
+  <footer>${this._t('tr_footer_generated')} · ${new Date().toISOString()}</footer>
 </body>
 </html>`;
   }
@@ -208,8 +217,8 @@ ${rows}
 
     const user      = msg.author;
     const avatarUrl = this._avatarUrl(user);
-    const name      = this._esc(user.global_name || user.username || 'Unknown');
-    const ts        = new Date(msg.timestamp).toLocaleString('pt-BR');
+    const name      = this._esc(user.global_name || user.username || this._t('tr_unknown_user'));
+    const ts        = new Date(msg.timestamp).toLocaleString(this._t('tr_locale_tag'));
     const content   = this._esc(msg.content || '');
 
     const embedsHtml = (msg.embeds || []).map(e => `
@@ -239,30 +248,30 @@ ${rows}
 
   _buildTxt(messages, channel, closedBy) {
     const header = [
-      `=== TRANSCRIPT ===`,
-      `Canal: #${channel.name || channel.id}`,
-      `Fechado por: ${closedBy}`,
-      `Mensagens: ${messages.length}`,
-      `Gerado em: ${new Date().toISOString()}`,
+      this._t('tr_txt_header_title'),
+      `${this._t('tr_txt_channel_label')}: #${channel.name || channel.id}`,
+      `${this._t('tr_txt_closed_by_label')}: ${closedBy}`,
+      `${this._t('tr_txt_messages_label')}: ${messages.length}`,
+      `${this._t('tr_txt_generated_label')}: ${new Date().toISOString()}`,
       `==================\n`
     ].join('\n');
 
     const body = messages.map(m => {
       const user    = m.author;
-      const name    = user.global_name || user.username || 'Unknown';
-      const ts      = new Date(m.timestamp).toLocaleString('pt-BR');
+      const name    = user.global_name || user.username || this._t('tr_unknown_user');
+      const ts      = new Date(m.timestamp).toLocaleString(this._t('tr_locale_tag'));
       const content = m.content || '';
 
       let line = `[${ts}] ${name}: ${content}`;
 
       if (m.embeds?.length) {
         line += m.embeds.map(e =>
-          `\n  [EMBED] ${e.title || ''}: ${e.description || ''}`
+          `\n  [${this._t('tr_embed_tag')}] ${e.title || ''}: ${e.description || ''}`
         ).join('');
       }
 
       if (m.attachments?.length) {
-        line += m.attachments.map(a => `\n  [ANEXO] ${a.filename}: ${a.url}`).join('');
+        line += m.attachments.map(a => `\n  [${this._t('tr_attachment_tag')}] ${a.filename}: ${a.url}`).join('');
       }
 
       return line;
@@ -286,8 +295,8 @@ ${rows}
       method: 'POST',
       body: {
         embeds: [{
-          title:       messages.dmTitulo || '📄 Seu Transcript',
-          description: messages.dmDescricao || `Seu ticket **#${channelName || 'ticket'}** foi fechado.\nSegue o transcript em anexo.`,
+          title:       messages.dmTitulo || this._t('default_transcript_dm_title'),
+          description: messages.dmDescricao || this._t('tr_dm_desc_default', { channelName: channelName || 'ticket' }),
           color:       0x7C8FFF
         }]
       },

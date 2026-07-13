@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest      = require('../../DiscordRequest.js');
+const { localeCtx }       = require('../../Utils/ctxLocale.js');
 const { GuildDb: GuildModel } = require('../../../Mongodb/guild.js');
 const AutoRoleManager     = require('./AutoRoleManager.js');
 const SeqQuestionsManager = require('./SeqQuestionsManager.js');
@@ -14,20 +15,6 @@ const { getPlan }         = require('../../Utils/PremiumPlans.js');
 // plano (plan.tickets.advancedTypeLimit). Texto curto/longo, número e
 // sim/não são "básicos" e só contam contra o limite total de perguntas.
 const ADVANCED_QUESTION_TYPES = new Set(['select', 'multiple', 'checkbox', 'attachment', 'member', 'role', 'channel']);
-
-const QUESTION_TYPE_CHOICES = [
-  { label: '📝 Texto curto',        value: 'short',      description: 'Resposta em até ~100 caracteres' },
-  { label: '📄 Texto longo',        value: 'long',       description: 'Resposta em até 2000 caracteres' },
-  { label: '🔢 Número',             value: 'number',     description: 'Aceita apenas números' },
-  { label: '✅ Sim/Não',            value: 'yesno',      description: 'Resposta sim ou não' },
-  { label: '📋 Seleção',            value: 'select',     description: 'Escolher 1 opção de uma lista (Premium)' },
-  { label: '☑️ Múltipla escolha',   value: 'multiple',   description: 'Escolher várias opções de uma lista (Premium)' },
-  { label: '🔲 Checkbox',           value: 'checkbox',   description: 'Marcar 0+ opções (Premium)' },
-  { label: '👤 Seleção de membro',  value: 'member',     description: 'Escolher um membro do servidor (Premium)' },
-  { label: '🏷️ Seleção de cargo',   value: 'role',       description: 'Escolher um cargo do servidor (Premium)' },
-  { label: '📌 Seleção de canal',   value: 'channel',    description: 'Escolher um canal do servidor (Premium)' },
-  { label: '📎 Anexo',              value: 'attachment', description: 'Enviar um arquivo/imagem (Premium)' },
-];
 
 /* ─────────────────────────────────────────────
    CORES DA AYAMI (mesma paleta do Logic Builder)
@@ -104,6 +91,48 @@ class TicketSystem {
 
   _e(name) {
     return this.client?.emoji?.[name] ?? '';
+  }
+
+  /** Atalho pra tradução de uma chave do sistema "ticket". */
+  t(key, ctx) {
+    return this.client.t(`ticket.${key}`, ctx);
+  }
+
+  /**
+   * Contexto de tradução padrão: locale resolvido da interação +
+   * atalhos pros emojis mais usados nas mensagens do sistema.
+   */
+  _tctx(interaction, extra = {}) {
+    return localeCtx(interaction, {
+      animada:   this._e('animada'),
+      feliz:     this._e('feliz'),
+      carinho:   this._e('carinho'),
+      emburrada: this._e('emburrada'),
+      pensando:  this._e('pensando'),
+      curtida:   this._e('curtida'),
+      emduvida:  this._e('emduvida'),
+      assustada: this._e('assustada'),
+      festa:     this._e('festa'),
+      chorando:  this._e('chorando'),
+      ...extra,
+    });
+  }
+
+  /** Opções do tipo de pergunta (form sequencial), traduzidas. */
+  _questionTypeChoices(ctx) {
+    return [
+      { label: this.t('qtype_short_label', ctx),      value: 'short',      description: this.t('qtype_short_desc', ctx) },
+      { label: this.t('qtype_long_label', ctx),       value: 'long',       description: this.t('qtype_long_desc', ctx) },
+      { label: this.t('qtype_number_label', ctx),     value: 'number',     description: this.t('qtype_number_desc', ctx) },
+      { label: this.t('qtype_yesno_label', ctx),      value: 'yesno',      description: this.t('qtype_yesno_desc', ctx) },
+      { label: this.t('qtype_select_label', ctx),     value: 'select',     description: this.t('qtype_select_desc', ctx) },
+      { label: this.t('qtype_multiple_label', ctx),   value: 'multiple',   description: this.t('qtype_multiple_desc', ctx) },
+      { label: this.t('qtype_checkbox_label', ctx),   value: 'checkbox',   description: this.t('qtype_checkbox_desc', ctx) },
+      { label: this.t('qtype_member_label', ctx),     value: 'member',     description: this.t('qtype_member_desc', ctx) },
+      { label: this.t('qtype_role_label', ctx),       value: 'role',       description: this.t('qtype_role_desc', ctx) },
+      { label: this.t('qtype_channel_label', ctx),    value: 'channel',    description: this.t('qtype_channel_desc', ctx) },
+      { label: this.t('qtype_attachment_label', ctx), value: 'attachment', description: this.t('qtype_attachment_desc', ctx) },
+    ];
   }
 
   /* ═══════════════════════════════════════
@@ -220,7 +249,7 @@ class TicketSystem {
    *     anexo/membro/cargo/canal (plan.tickets.advancedTypeLimit)
    * Retorna { ok: true, plan } ou { ok: false, motivo, plan }.
    */
-  async _checkSeqQuestionLimit(guildId, existingQuestions, tipo) {
+  async _checkSeqQuestionLimit(guildId, existingQuestions, tipo, ctx) {
     const plan = await this._getGuildPlan(guildId);
     const questions = existingQuestions || [];
 
@@ -229,7 +258,7 @@ class TicketSystem {
       return {
         ok: false,
         plan,
-        motivo: `Limite de perguntas do plano ${plan.emoji} ${plan.name} atingido (${maxQuestions === Infinity ? '∞' : maxQuestions}). Assine um plano maior em /premium para adicionar mais.`,
+        motivo: this.t('question_limit_reached', { ...ctx, planEmoji: plan.emoji, planName: plan.name, max: maxQuestions === Infinity ? this.t('infinity_symbol', ctx) : maxQuestions }),
       };
     }
 
@@ -240,7 +269,7 @@ class TicketSystem {
         return {
           ok: false,
           plan,
-          motivo: `Limite de perguntas avançadas (seleção/múltipla escolha/checkbox/anexo/membro/cargo/canal) do plano ${plan.emoji} ${plan.name} atingido (${advancedLimit === Infinity ? '∞' : advancedLimit}). Assine um plano maior em /premium para desbloquear mais.`,
+          motivo: this.t('advanced_question_limit_reached', { ...ctx, planEmoji: plan.emoji, planName: plan.name, max: advancedLimit === Infinity ? this.t('infinity_symbol', ctx) : advancedLimit }),
         };
       }
     }
@@ -258,22 +287,21 @@ class TicketSystem {
     const doc     = await this._getGuildDoc(guildId);
     const panels  = doc?.ticket || [];
 
-    return this.editOriginal(interaction, this._homePayload(user, panels));
+    return this.editOriginal(interaction, this._homePayload(interaction, user, panels));
   }
 
-  _homePayload(user, panels) {
-    const btnList = this.btn(user, `📋 Painéis (${panels.length})`, 1, async (i) => {
+  _homePayload(interaction, user, panels) {
+    const ctx = this._tctx(interaction);
+
+    const btnList = this.btn(user, this.t('btn_panels', { ...ctx, count: panels.length }), 1, async (i) => {
       await this.deferUpdate(i);
       return this.painelList(i, user);
     });
 
-    const btnNew = this.btn(user, '✨ Novo Painel', 3, async (i) => this.criar(i, user));
+    const btnNew = this.btn(user, this.t('btn_new_panel', ctx), 3, async (i) => this.criar(i, user));
 
     const blocks = [
-      cv2Text(
-        `# 🎫 Sistema de Tickets ${this._e('animada')}\n` +
-        `Oii! Eu sou a Ayami ${this._e('corao')} e vou te ajudar a montar o atendimento do servidor!`
-      ),
+      cv2Text(this.t('home_title', { ...ctx, corao: this._e('corao') })),
       cv2Divider(),
       row(btnList, btnNew),
     ];
@@ -285,16 +313,17 @@ class TicketSystem {
     const guildId = interaction.guild_id;
     const doc     = await this._getGuildDoc(guildId);
     const panels  = doc?.ticket || [];
+    const ctx     = this._tctx(interaction);
 
-    const btnNew  = this.btn(user, '✨ Novo Painel', 3, async (i) => this.criar(i, user));
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnNew  = this.btn(user, this.t('btn_new_panel', ctx), 3, async (i) => this.criar(i, user));
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.open(i);
     });
 
     if (!panels.length) {
       const blocks = [
-        cv2Text(`# 📋 Seus Painéis ${this._e('emburrada')}\nNenhum painel ainda... vamos criar o primeiro?`),
+        cv2Text(this.t('no_panels_title', ctx)),
         cv2Divider(),
         row(btnNew, btnBack),
       ];
@@ -304,10 +333,10 @@ class TicketSystem {
     const options = panels.map(p => ({
       label:       (p.painelPrincipal?.title || p.panelId).slice(0, 100),
       value:       p.panelId,
-      description: `${p.cargosStaff?.length || 0} staff • ${p.selectMenuConfig?.enabled ? 'Select Menu' : 'Botão único'}`
+      description: this.t('panel_option_desc', { ...ctx, staffCount: p.cargosStaff?.length || 0, hubLabel: p.selectMenuConfig?.enabled ? this.t('panel_hub_multi', ctx) : this.t('panel_hub_single', ctx) })
     }));
 
-    const sel = this.select(user, options, '✨ Qual painel você quer ver?', async (i) => {
+    const sel = this.select(user, options, this.t('select_which_panel', ctx), async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, i.data.values[0]);
     });
@@ -317,7 +346,7 @@ class TicketSystem {
       .join('\n');
 
     const blocks = [
-      cv2Text(`# 📋 Seus Painéis (${panels.length}) ${this._e('feliz')}\n${listText}`),
+      cv2Text(this.t('panels_title', { ...ctx, count: panels.length, list: listText })),
       cv2Divider(),
       row(sel),
       cv2Divider(),
@@ -332,28 +361,30 @@ class TicketSystem {
   ═══════════════════════════════════════ */
 
   async criar(interaction, user) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Criar Painel de Ticket ✨',
+      title: this.t('modal_create_panel_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'panelId', label: 'ID do painel (sem espaços)', style: 1, required: true, max_length: 50, placeholder: 'suporte, denuncias, parcerias...' }] }
+        { type: 1, components: [{ type: 4, custom_id: 'panelId', label: this.t('modal_panel_id_label', ctx), style: 1, required: true, max_length: 50, placeholder: this.t('modal_panel_id_placeholder', ctx) }] }
       ],
       funcao: async (mi, client, fields) => {
+        const miCtx = this._tctx(mi);
         const panelId = fields.panelId?.trim().toLowerCase().replace(/\s+/g, '_');
         if (!panelId) {
-          return this.client.interactions._callback(mi, { type: 4, data: { content: `❌ ID inválido!`, flags: 64 } });
+          return this.client.interactions._callback(mi, { type: 4, data: { content: this.t('invalid_id', miCtx), flags: 64 } });
         }
 
         const doc = await this._getGuildDoc(mi.guild_id) || new GuildModel({ guildId: mi.guild_id });
         if (this._findPanel(doc, panelId)) {
-          return this.client.interactions._callback(mi, { type: 4, data: { content: `${this._e('emburrada')} Já existe um painel com ID **${panelId}**.`, flags: 64 } });
+          return this.client.interactions._callback(mi, { type: 4, data: { content: this.t('panel_id_exists', { ...miCtx, panelId }), flags: 64 } });
         }
 
         doc.ticket = doc.ticket || [];
         doc.ticket.push({ panelId });
         await doc.save();
 
-        await this.client.interactions._callback(mi, { type: 4, data: this._homePayload(user, doc.ticket) });
+        await this.client.interactions._callback(mi, { type: 4, data: this._homePayload(mi, user, doc.ticket) });
 
         return this.painelMenu(mi, user, panelId);
       }
@@ -369,41 +400,44 @@ class TicketSystem {
   async painelMenu(interaction, user, panelId, { successMsg } = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
+    const ctx   = this._tctx(interaction);
 
     if (!panel) {
       return this.followUpEphemeral(interaction, cv2Payload([
-        cv2Text(`# ${this._e('emduvida')} Não achei esse painel...\nPode ter sido apagado!`)
+        cv2Text(this.t('panel_not_found', ctx))
       ]));
     }
 
     const hasEmbed   = !!panel.painelPrincipal;
     const hubEnabled = panel.selectMenuConfig?.enabled;
+    const tipoLabels = [this.t('tipo_label_channel', ctx), this.t('tipo_label_thread_public', ctx), this.t('tipo_label_thread_private', ctx)];
+    const statusLabel = (enabled) => enabled ? this.t('opt_active', ctx) : this.t('opt_inactive', ctx);
 
     const navSelect = this.select(user, [
-      { label: hasEmbed ? '🎨 Editar Embed' : '✨ Criar Embed', value: 'embed', description: 'A carinha do seu painel' },
-      { label: '📌 Canal & Categoria',     value: 'destino',  description: panel.canalId ? 'Já configurado' : 'Ainda não configurado' },
-      { label: '👥 Staff & Nome',          value: 'staff',    description: 'Quem atende e como o ticket se chama' },
-      { label: '⚙️ Tipo de Criação',       value: 'tipo',     description: ['Canal', 'Thread Pública', 'Thread Privada'][panel.tipoDeCriacao] || 'Canal' },
-      { label: '📋 Modal',                 value: 'modal',    description: panel.modalConfig?.enabled ? 'Ativo' : 'Inativo' },
-      { label: '📝 Form Sequencial',       value: 'seqform',  description: panel.seqQuestionsConfig?.enabled ? 'Ativo' : 'Inativo' },
-      { label: '🏷️ Auto-Cargo',           value: 'autorole', description: panel.autoRoleConfig?.enabled ? 'Ativo' : 'Inativo' },
-      { label: '📄 Transcript',            value: 'transcript', description: panel.transcriptConfig?.enabled ? 'Ativo' : 'Inativo' },
-      { label: '🧩 Select Menu',           value: 'selecthub', description: hubEnabled ? `${panel.selectMenuConfig.options.length} opção(ões)` : 'Inativo' },
-      { label: '💬 Mensagens',             value: 'mensagens', description: 'Deixe tudo com a sua cara!' },
-    ], '✨ O que você quer configurar?', async (i) => {
+      { label: hasEmbed ? this.t('opt_edit_embed', ctx) : this.t('opt_create_embed', ctx), value: 'embed', description: this.t('opt_embed_desc', ctx) },
+      { label: this.t('opt_channel_category', ctx),     value: 'destino',  description: panel.canalId ? this.t('opt_configured', ctx) : this.t('opt_not_configured', ctx) },
+      { label: this.t('opt_staff_name', ctx),          value: 'staff',    description: this.t('opt_staff_name_desc', ctx) },
+      { label: this.t('opt_creation_type', ctx),       value: 'tipo',     description: tipoLabels[panel.tipoDeCriacao] || tipoLabels[0] },
+      { label: this.t('opt_modal', ctx),                value: 'modal',    description: statusLabel(panel.modalConfig?.enabled) },
+      { label: this.t('opt_seqform', ctx),       value: 'seqform',  description: statusLabel(panel.seqQuestionsConfig?.enabled) },
+      { label: this.t('opt_autorole', ctx),           value: 'autorole', description: statusLabel(panel.autoRoleConfig?.enabled) },
+      { label: this.t('opt_transcript', ctx),            value: 'transcript', description: statusLabel(panel.transcriptConfig?.enabled) },
+      { label: this.t('opt_selecthub', ctx),           value: 'selecthub', description: hubEnabled ? this.t('opt_selecthub_desc', { ...ctx, count: panel.selectMenuConfig.options.length }) : this.t('opt_inactive', ctx) },
+      { label: this.t('opt_messages', ctx),             value: 'mensagens', description: this.t('opt_messages_desc', ctx) },
+    ], this.t('select_what_configure', ctx), async (i) => {
       await this.deferUpdate(i);
       const dest = {
         embed: async () => EmbedBuilderUI.open(i, this.client, {
           user,
           existingEmbed: panel.painelPrincipal,
-          title: `Embed — ${panelId}`,
+          title: this.t('embed_title_prefix', { ...ctx, panelId }),
           onDone: async (rootInteraction, embedResult) => {
             const freshDoc   = await this._getGuildDoc(rootInteraction.guild_id);
             const freshPanel = this._findPanel(freshDoc, panelId);
             freshPanel.painelPrincipal = embedResult;
             await freshDoc.save();
             return this.painelMenu(rootInteraction, user, panelId, {
-              successMsg: embedResult ? `${this._e('curtida')} Ficou linda!` : `${this._e('emduvida')} Tirei a embed.`
+              successMsg: embedResult ? this.t('embed_updated', this._tctx(rootInteraction)) : this.t('embed_removed', this._tctx(rootInteraction))
             });
           }
         }),
@@ -420,29 +454,30 @@ class TicketSystem {
       return dest[i.data.values[0]]?.();
     });
 
-    const btnPublish = this.btn(user, '🚀 Publicar', 3, async (i) => {
+    const btnPublish = this.btn(user, this.t('btn_publish', ctx), 3, async (i) => {
       await this.deferUpdate(i);
       return this._publicarPainel(i, user, panelId);
     });
 
-    const btnDelete = this.btn(user, '🗑️ Excluir', 4, async (i) => {
+    const btnDelete = this.btn(user, this.t('btn_delete', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       return this._confirmDeletePanel(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelList(i, user);
     });
 
     const blocks = [
-      cv2Text(
-        `# 🎫 ${panelId} ${this._e('animada')}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `> 🎨 Embed: ${hasEmbed ? 'pronta!' : 'falta criar'}\n` +
-        `> 📌 Canal: ${panel.canalId ? `<#${panel.canalId}>` : 'não escolhido'}\n` +
-        `> 👥 Staff: ${panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : 'ninguém ainda'}`
-      ),
+      cv2Text(this.t('panel_header', {
+        ...ctx,
+        panelId,
+        successMsg,
+        embedStatus:   hasEmbed ? this.t('embed_ready', ctx) : this.t('embed_missing', ctx),
+        channelStatus: panel.canalId ? `<#${panel.canalId}>` : this.t('no_channel_chosen', ctx),
+        staffStatus:   panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : this.t('no_staff_yet', ctx),
+      })),
       cv2Divider(),
       row(navSelect),
       row(btnPublish, btnDelete, btnBack),
@@ -452,20 +487,21 @@ class TicketSystem {
   }
 
   async _confirmDeletePanel(interaction, user, panelId) {
-    const btnConfirm = this.btn(user, '✅ Sim, excluir', 4, async (i) => {
+    const ctx = this._tctx(interaction);
+    const btnConfirm = this.btn(user, this.t('btn_confirm_delete', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const doc = await this._getGuildDoc(i.guild_id);
       doc.ticket = doc.ticket.filter(t => t.panelId !== panelId);
       await doc.save();
       return this.painelList(i, user);
     });
-    const btnCancel = this.btn(user, '❌ Cancelar', 2, async (i) => {
+    const btnCancel = this.btn(user, this.t('btn_cancel', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(`# ${this._e('assustada')} Excluir o painel?\nTem certeza? Não vai dar pra desfazer depois...`),
+      cv2Text(this.t('confirm_delete_title', ctx)),
       cv2Divider(),
       row(btnConfirm, btnCancel),
     ];
@@ -475,25 +511,26 @@ class TicketSystem {
   async _publicarPainel(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
+    const ctx   = this._tctx(interaction);
 
     if (!panel.canalId) {
-      return this.painelMenu(interaction, user, panelId, { successMsg: `${this._e('emduvida')} Escolhe um canal antes, tá bom?` });
+      return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_channel', ctx) });
     }
     if (!panel.painelPrincipal) {
-      return this.painelMenu(interaction, user, panelId, { successMsg: `${this._e('emduvida')} Falta criar a embed primeiro!` });
+      return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_embed', ctx) });
     }
 
     const components = panel.selectMenuConfig?.enabled
       ? [row({
           type: 3,
           custom_id: JSON.stringify({ t: 'ticket_select_hub', p: panelId }),
-          placeholder: panel.selectMenuConfig.placeholder || 'Selecione o tipo de atendimento',
+          placeholder: panel.selectMenuConfig.placeholder || this.t('select_service_type_placeholder', ctx),
           options: panel.selectMenuConfig.options.map(o => ({
             label: o.label, value: o.optionId, description: o.description || undefined,
             emoji: o.emoji ? { name: o.emoji } : undefined
           }))
         })]
-      : [row({ type: 2, style: 1, label: '🎫 Abrir Ticket', custom_id: JSON.stringify({ t: 'create_ticket_select', p: panelId }) })];
+      : [row({ type: 2, style: 1, label: this.t('open_ticket_button', ctx), custom_id: JSON.stringify({ t: 'create_ticket_select', p: panelId }) })];
 
     const msg = await DiscordRequest(`/channels/${panel.canalId}/messages`, {
       method: 'POST',
@@ -503,7 +540,7 @@ class TicketSystem {
     panel.messageId = msg.id;
     await doc.save();
 
-    return this.painelMenu(interaction, user, panelId, { successMsg: `${this._e('festa')} Prontinho! Publiquei em <#${panel.canalId}>~` });
+    return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_success', { ...ctx, channelId: panel.canalId }) });
   }
 
   /* ═══════════════════════════════════════
@@ -513,9 +550,10 @@ class TicketSystem {
   async destinoMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
+    const ctx   = this._tctx(interaction);
 
     const chSel = this.client.interactions.createChannelSelect({
-      user, data: { placeholder: '📌 Canal onde o painel será enviado', channel_types: [0, 5] },
+      user, data: { placeholder: this.t('destino_channel_placeholder', ctx), channel_types: [0, 5] },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -526,7 +564,7 @@ class TicketSystem {
     });
 
     const catSel = this.client.interactions.createChannelSelect({
-      user, data: { placeholder: '📂 Categoria onde os tickets serão criados', channel_types: [4] },
+      user, data: { placeholder: this.t('destino_category_placeholder', ctx), channel_types: [4] },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -536,17 +574,17 @@ class TicketSystem {
       }
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(
-        `# 📌 Canal & Categoria ${this._e('feliz')}\n` +
-        `> 📢 Canal: ${panel.canalId ? `<#${panel.canalId}>` : 'nenhum ainda'}\n` +
-        `> 📂 Categoria: ${panel.categoriaId ? `<#${panel.categoriaId}>` : 'nenhuma ainda'}`
-      ),
+      cv2Text(this.t('destino_title', {
+        ...ctx,
+        channelStatus:  panel.canalId ? `<#${panel.canalId}>` : this.t('destino_none_channel', ctx),
+        categoryStatus: panel.categoriaId ? `<#${panel.categoriaId}>` : this.t('destino_none_category', ctx),
+      })),
       cv2Divider(),
       row(chSel),
       row(catSel),
@@ -564,9 +602,10 @@ class TicketSystem {
   async staffNomeMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
+    const ctx   = this._tctx(interaction);
 
     const roleSel = this.client.interactions.createRoleSelect({
-      user, data: { placeholder: '👥 Adicionar cargo staff', max_values: 5 },
+      user, data: { placeholder: this.t('staff_role_select_placeholder', ctx), max_values: 5 },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -577,7 +616,7 @@ class TicketSystem {
       }
     });
 
-    const btnClearStaff = this.btn(user, '🧹 Limpar Staff', 4, async (i) => {
+    const btnClearStaff = this.btn(user, this.t('btn_clear_staff', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).cargosStaff = [];
@@ -585,8 +624,8 @@ class TicketSystem {
       return this.staffNomeMenu(i, user, panelId);
     });
 
-    const btnNome = this.btn(user, '✏️ Nome do Ticket', 2, async (i) => {
-      const resp = await this._ask(i, `${this._e('pensando')} Como o ticket vai se chamar?\nUse \`{count}\` pro número. Ex: \`ticket-{count}\``);
+    const btnNome = this.btn(user, this.t('btn_ticket_name', ctx), 2, async (i) => {
+      const resp = await this._ask(i, this.t('ask_ticket_name', this._tctx(i)));
       if (resp === null) return;
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).ticketChatName = resp.trim().slice(0, 90);
@@ -594,17 +633,17 @@ class TicketSystem {
       return this.staffNomeMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(
-        `# 👥 Staff & Nome ${this._e('feliz')}\n` +
-        `> 🛡️ Staff: ${panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : 'ninguém ainda'}\n` +
-        `> 🏷️ Nome: \`${panel.ticketChatName || 'ticket-{count}'}\``
-      ),
+      cv2Text(this.t('staff_title', {
+        ...ctx,
+        staffStatus: panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : this.t('no_staff_yet', ctx),
+        name: panel.ticketChatName || 'ticket-{count}',
+      })),
       cv2Divider(),
       row(roleSel),
       row(btnClearStaff, btnNome),
@@ -622,10 +661,11 @@ class TicketSystem {
   async tipoCriacaoMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
+    const ctx   = this._tctx(interaction);
 
-    const labels = ['📁 Canal de Texto', '🧵 Thread Pública', '🔒 Thread Privada'];
+    const labels = [this.t('tipo_label_channel', ctx), this.t('tipo_label_thread_public', ctx), this.t('tipo_label_thread_private', ctx)];
 
-    const sel = this.select(user, labels.map((l, i) => ({ label: l, value: String(i), description: i === panel.tipoDeCriacao ? '✅ Atual' : undefined })), 'Selecionar tipo de criação', async (i) => {
+    const sel = this.select(user, labels.map((l, i) => ({ label: l, value: String(i), description: i === panel.tipoDeCriacao ? this.t('tipo_current_label', ctx) : undefined })), this.t('tipo_select_placeholder', ctx), async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).tipoDeCriacao = Number(i.data.values[0]);
@@ -633,13 +673,13 @@ class TicketSystem {
       return this.tipoCriacaoMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(`# ⚙️ Tipo de Criação ${this._e('feliz')}\nComo o ticket é criado? Atual: ${labels[panel.tipoDeCriacao] || labels[0]}`),
+      cv2Text(this.t('tipo_title', { ...ctx, current: labels[panel.tipoDeCriacao] || labels[0] })),
       cv2Divider(),
       row(sel),
       cv2Divider(),
@@ -657,12 +697,13 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const cfg   = panel.modalConfig || { enabled: false, fields: [] };
+    const ctx   = this._tctx(interaction);
 
     const fieldsList = cfg.fields?.length
-      ? cfg.fields.map((f, i) => `\`${i + 1}.\` **${f.label}** (${f.style === 2 ? 'parágrafo' : 'curto'})${f.required ? ' *obrigatório*' : ''}`).join('\n')
-      : '_Nenhum campo adicionado_';
+      ? cfg.fields.map((f, i) => `\`${i + 1}.\` **${f.label}** (${f.style === 2 ? this.t('modal_field_paragraph', ctx) : this.t('modal_field_short', ctx)})${f.required ? this.t('modal_field_required_tag', ctx) : ''}`).join('\n')
+      : this.t('modal_no_fields', ctx);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Modal' : '▶️ Ativar Modal', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_modal_off', ctx) : this.t('btn_toggle_modal_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -671,8 +712,8 @@ class TicketSystem {
       return this.modalMenu(i, user, panelId);
     });
 
-    const btnTitulo = this.btn(user, '✏️ Título do Modal', 2, async (i) => {
-      const resp = await this._ask(i, `${this._e('pensando')} Qual o título do modal?`);
+    const btnTitulo = this.btn(user, this.t('btn_modal_title', ctx), 2, async (i) => {
+      const resp = await this._ask(i, this.t('ask_modal_title', this._tctx(i)));
       if (resp === null) return;
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).modalConfig.title = resp.trim().slice(0, 45);
@@ -680,11 +721,11 @@ class TicketSystem {
       return this.modalMenu(i, user, panelId);
     });
 
-    const btnAddField = this.btn(user, '➕ Adicionar Campo', 1, async (i) => {
+    const btnAddField = this.btn(user, this.t('btn_add_field', ctx), 1, async (i) => {
       return this._modalAddField(i, user, panelId);
     }, { disabled: (cfg.fields?.length || 0) >= 5 });
 
-    const btnRemField = this.btn(user, '🗑️ Remover Último Campo', 4, async (i) => {
+    const btnRemField = this.btn(user, this.t('btn_remove_field', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).modalConfig.fields.pop();
@@ -692,20 +733,20 @@ class TicketSystem {
       return this.modalMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(
-        `# 📋 Modal ${this._e('feliz')}\n` +
-        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
-        `Aparece quando alguém clica em Abrir Ticket!\n` +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
-        `> Título: \`${cfg.title || 'Formulário de Atendimento'}\`\n\n` +
-        `**Campos (${cfg.fields?.length || 0}/5):**\n${fieldsList}`
-      ),
+      cv2Text(this.t('modal_header', {
+        ...ctx,
+        successMsg: opts.successMsg,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        title: cfg.title || this.t('modal_title_default', ctx),
+        count: cfg.fields?.length || 0,
+        list: fieldsList,
+      })),
       cv2Divider(),
       row(btnToggle, btnTitulo),
       row(btnAddField, btnRemField),
@@ -717,14 +758,15 @@ class TicketSystem {
   }
 
   async _modalAddField(interaction, user, panelId) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Adicionar Campo do Modal',
+      title: this.t('add_field_modal_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Pergunta/Label do campo', style: 1, required: true, max_length: 45 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: 'Placeholder (opcional)', style: 1, required: false, max_length: 100 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'style', label: 'Estilo: curto ou paragrafo', style: 1, required: true, max_length: 10, placeholder: 'curto' }] },
-        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatório? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'label', label: this.t('field_label_label', ctx), style: 1, required: true, max_length: 45 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: this.t('field_placeholder_label', ctx), style: 1, required: false, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'style', label: this.t('field_style_label', ctx), style: 1, required: true, max_length: 10, placeholder: this.t('field_style_placeholder', ctx) }] },
+        { type: 1, components: [{ type: 4, custom_id: 'required', label: this.t('field_required_label', ctx), style: 1, required: false, max_length: 5, placeholder: this.t('field_required_placeholder', ctx) }] },
       ],
       funcao: async (mi, _, fields) => {
         const fd = await this._getGuildDoc(mi.guild_id);
@@ -741,7 +783,7 @@ class TicketSystem {
         await fd.save();
 
         await this.client.interactions._callback(mi, { type: 6 });
-        return this.modalMenu(mi, user, panelId, { successMsg: `${this._e('curtida')} Campo adicionado!` });
+        return this.modalMenu(mi, user, panelId, { successMsg: this.t('field_added', this._tctx(mi)) });
       }
     });
 
@@ -758,14 +800,15 @@ class TicketSystem {
     const cfg   = panel.seqQuestionsConfig || { enabled: false, questions: [], timeout: 60000 };
     const plan  = await this._getGuildPlan(interaction.guild_id);
     const maxQ  = plan.tickets?.maxQuestions ?? 10;
+    const ctx   = this._tctx(interaction);
 
     const questionsList = cfg.questions?.length
-      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label} \`[${q.tipo || 'text'}]\`${q.required ? ' *obrigatória*' : ''}`).join('\n')
-      : '_Nenhuma pergunta adicionada_';
+      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label} \`[${q.tipo || 'text'}]\`${q.required ? this.t('seq_question_required_tag', ctx) : ''}`).join('\n')
+      : this.t('seq_no_questions', ctx);
 
     const timeoutSec = Math.round((cfg.timeout ?? 60000) / 1000);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Form' : '▶️ Ativar Form', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_form_off', ctx) : this.t('btn_toggle_form_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -774,11 +817,11 @@ class TicketSystem {
       return this.seqFormMenu(i, user, panelId);
     });
 
-    const btnAddQ = this.btn(user, '➕ Adicionar Pergunta', 1, async (i) => {
+    const btnAddQ = this.btn(user, this.t('btn_add_question', ctx), 1, async (i) => {
       return this._seqAddQuestion(i, user, panelId);
     }, { disabled: (cfg.questions?.length || 0) >= maxQ });
 
-    const btnRemQ = this.btn(user, '🗑️ Remover Última', 4, async (i) => {
+    const btnRemQ = this.btn(user, this.t('btn_remove_question', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).seqQuestionsConfig.questions.pop();
@@ -791,19 +834,19 @@ class TicketSystem {
      * Select com presets comuns + opção de digitar valor customizado.
      */
     const timeoutSel = this.select(user, [
-      { label: '30 segundos',  value: '30'  },
-      { label: '1 minuto',     value: '60'  },
-      { label: '2 minutos',    value: '120' },
-      { label: '5 minutos',    value: '300' },
-      { label: '10 minutos',   value: '600' },
-      { label: '✏️ Personalizado (digitar)', value: 'custom' },
-    ], `⏱️ Tempo por pergunta — Atual: ${timeoutSec}s`, async (i) => {
+      { label: this.t('timeout_30s', ctx),  value: '30'  },
+      { label: this.t('timeout_1m', ctx),     value: '60'  },
+      { label: this.t('timeout_2m', ctx),    value: '120' },
+      { label: this.t('timeout_5m', ctx),    value: '300' },
+      { label: this.t('timeout_10m', ctx),   value: '600' },
+      { label: this.t('timeout_custom', ctx), value: 'custom' },
+    ], this.t('timeout_select_placeholder', { ...ctx, seconds: timeoutSec }), async (i) => {
       if (i.data.values[0] === 'custom') {
-        const resp = await this._ask(i, `${this._e('pensando')} Quantos **segundos** o usuário terá para responder cada pergunta? *(5 a 600)*`);
+        const resp = await this._ask(i, this.t('ask_custom_seconds', this._tctx(i)));
         if (resp === null) return;
         const sec = parseInt(resp);
         if (!sec || sec < 5 || sec > 600) {
-          await this.followUpEphemeral(i, cv2Payload([cv2Text(`${this._e('emduvida')} Valor inválido! Use entre 5 e 600 segundos.`)], { ephemeral: true }));
+          await this.followUpEphemeral(i, cv2Payload([cv2Text(this.t('invalid_seconds', this._tctx(i)))], { ephemeral: true }));
           return this.seqFormMenu(i, user, panelId);
         }
         const fd = await this._getGuildDoc(i.guild_id);
@@ -818,7 +861,7 @@ class TicketSystem {
       return this.seqFormMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
@@ -828,9 +871,9 @@ class TicketSystem {
      * também/só num canal de log configurado.
      */
     const sendModeSel = this.select(user, [
-      { label: '🎫 Só no ticket', value: '0', description: cfg.sendMode === 0 ? 'Selecionado' : undefined },
-      { label: '📋 Canal de log', value: '1', description: cfg.sendMode === 1 ? 'Selecionado' : undefined },
-    ], '📤 Onde mandar as respostas?', async (i) => {
+      { label: this.t('send_mode_only_ticket', ctx), value: '0', description: cfg.sendMode === 0 ? this.t('selected_label', ctx) : undefined },
+      { label: this.t('send_mode_log_channel', ctx), value: '1', description: cfg.sendMode === 1 ? this.t('selected_label', ctx) : undefined },
+    ], this.t('send_mode_select_placeholder', ctx), async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).seqQuestionsConfig.sendMode = Number(i.data.values[0]);
@@ -839,7 +882,7 @@ class TicketSystem {
     });
 
     const logChSel = this.client.interactions.createChannelSelect({
-      user, data: { placeholder: '📋 Canal de log das respostas', channel_types: [0, 5] },
+      user, data: { placeholder: this.t('log_channel_select_placeholder', ctx), channel_types: [0, 5] },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -850,15 +893,16 @@ class TicketSystem {
     });
 
     const blocks = [
-      cv2Text(
-        `# 📝 Form Sequencial ${this._e('animada')}\n` +
-        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
-        `Eu faço as perguntas no chat, uma de cada vez!\n` +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
-        `> Tempo por pergunta: ${timeoutSec}s\n` +
-        `> Resumo vai pra: ${cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : '🎫 o próprio ticket'}\n\n` +
-        `**Perguntas (${cfg.questions?.length || 0}/${maxQ === Infinity ? '∞' : maxQ}):**\n${questionsList}`
-      ),
+      cv2Text(this.t('seq_header', {
+        ...ctx,
+        successMsg: opts.successMsg,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        seconds: timeoutSec,
+        destination: cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : this.t('seq_dest_own_ticket', ctx),
+        count: cfg.questions?.length || 0,
+        max: maxQ === Infinity ? this.t('infinity_symbol', ctx) : maxQ,
+        list: questionsList,
+      })),
       cv2Divider(),
       row(btnToggle, btnAddQ, btnRemQ),
       row(timeoutSel),
@@ -876,7 +920,7 @@ class TicketSystem {
       interaction, user,
       guildId:     interaction.guild_id,
       locateTarget: fd => this._findPanel(fd, panelId),
-      onAdded:     mi => this.seqFormMenu(mi, user, panelId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` }),
+      onAdded:     mi => this.seqFormMenu(mi, user, panelId, { successMsg: this.t('question_added', this._tctx(mi)) }),
     });
   }
 
@@ -890,22 +934,24 @@ class TicketSystem {
    * @param {Function} onAdded      (modalInteraction) => tela pra voltar depois de salvar
    */
   async _seqAddQuestionGeneric({ interaction, user, guildId, locateTarget, onAdded }) {
+    const ctx = this._tctx(interaction);
     const typeSelect = this.client.interactions.createSelect({
       user,
       tempo: 120_000,
       data: {
-        placeholder: 'Qual o tipo dessa pergunta?',
-        options: QUESTION_TYPE_CHOICES,
+        placeholder: this.t('question_type_select_placeholder', ctx),
+        options: this._questionTypeChoices(ctx),
       },
       funcao: async (si) => {
         const tipo = si.data.values[0];
+        const siCtx = this._tctx(si);
 
         const fd = await this._getGuildDoc(guildId);
         const target = locateTarget(fd);
         target.seqQuestionsConfig = target.seqQuestionsConfig || { enabled: true, questions: [], timeout: 60000 };
         target.seqQuestionsConfig.questions = target.seqQuestionsConfig.questions || [];
 
-        const check = await this._checkSeqQuestionLimit(guildId, target.seqQuestionsConfig.questions, tipo);
+        const check = await this._checkSeqQuestionLimit(guildId, target.seqQuestionsConfig.questions, tipo, siCtx);
         if (!check.ok) {
           return this.client.interactions._callback(si, {
             type: 4,
@@ -961,16 +1007,17 @@ class TicketSystem {
     // aqui — UPDATE_MESSAGE não pode mudar a visibilidade da mensagem.
     return this.client.interactions._callback(interaction, {
       type: 7,
-      data: cv2Payload([cv2Text('📋 Qual o tipo dessa pergunta?'), row(typeSelect)], { ephemeral: false }),
+      data: cv2Payload([cv2Text(this.t('flow_intermediate_title', ctx)), row(typeSelect)], { ephemeral: false }),
     });
   }
 
   /** Monta e exibe o modal certo pro tipo de pergunta escolhido. */
   async _seqAddQuestionModal(interaction, user, tipo, onSubmit) {
+    const ctx = this._tctx(interaction);
     const needsOptions = ['select', 'multiple', 'checkbox'].includes(tipo);
 
     const components = [
-      { type: 1, components: [{ type: 4, custom_id: 'text', label: 'Texto da pergunta', style: 2, required: true, max_length: 300 }] },
+      { type: 1, components: [{ type: 4, custom_id: 'text', label: this.t('question_text_label', ctx), style: 2, required: true, max_length: 300 }] },
     ];
 
     if (needsOptions) {
@@ -978,17 +1025,17 @@ class TicketSystem {
         type: 1,
         components: [{
           type: 4, custom_id: 'options', style: 2, required: true, max_length: 500,
-          label: 'Opções (separadas por vírgula)',
-          placeholder: 'Ex: Dúvida, Bug, Sugestão, Denúncia',
+          label: this.t('question_options_label', ctx),
+          placeholder: this.t('question_options_placeholder', ctx),
         }],
       });
     }
 
-    components.push({ type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatória? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] });
+    components.push({ type: 1, components: [{ type: 4, custom_id: 'required', label: this.t('question_required_label', ctx), style: 1, required: false, max_length: 5, placeholder: this.t('question_required_placeholder', ctx) }] });
 
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Adicionar Pergunta',
+      title: this.t('add_question_modal_title', ctx),
       components,
       funcao: async (mi, _, fields) => onSubmit(mi, fields),
     });
@@ -1001,19 +1048,21 @@ class TicketSystem {
   ═══════════════════════════════════════ */
 
   async _autoRoleAskTipo(interaction, user, panelId, roleId) {
+    const ctx = this._tctx(interaction);
     const sel = this.select(user, [
-      { label: '♾️ Permanente',        value: '0', description: 'O cargo fica para sempre' },
-      { label: '⏱️ Temporário',        value: '1', description: 'Removido após X minutos' },
-      { label: '🔗 Vinculado ao Ticket', value: '2', description: 'Removido quando o ticket fechar' },
-    ], `Tipo do cargo <@&${roleId}>`, async (i) => {
+      { label: this.t('role_permanent_label', ctx),        value: '0', description: this.t('role_permanent_desc', ctx) },
+      { label: this.t('role_temp_select_label', ctx),        value: '1', description: this.t('role_temp_desc', ctx) },
+      { label: this.t('role_linked_select_label', ctx), value: '2', description: this.t('role_linked_desc', ctx) },
+    ], this.t('role_type_select_label', { ...ctx, roleId }), async (i) => {
       const tipo = Number(i.data.values[0]);
+      const iCtx = this._tctx(i, { roleId });
 
       if (tipo === 1) {
-        const resp = await this._ask(i, `${this._e('pensando')} Em quantos **minutos** o cargo <@&${roleId}> deve ser removido?`);
+        const resp = await this._ask(i, this.t('ask_role_duration', iCtx));
         if (resp === null) return this.autoRoleMenu(i, user, panelId);
         const min = parseInt(resp);
         if (!min || min < 1) {
-          await this.followUpEphemeral(i, cv2Payload([cv2Text(`${this._e('emduvida')} Valor inválido!`)], { ephemeral: true }));
+          await this.followUpEphemeral(i, cv2Payload([cv2Text(this.t('invalid_value', iCtx))], { ephemeral: true }));
           return this.autoRoleMenu(i, user, panelId);
         }
         const fd = await this._getGuildDoc(i.guild_id);
@@ -1036,7 +1085,7 @@ class TicketSystem {
     });
 
     const blocks = [
-      cv2Text(`# 🏷️ Esse cargo é... ${this._e('pensando')}\nComo o cargo <@&${roleId}> deve se comportar?`),
+      cv2Text(this.t('role_behavior_title', { ...ctx, roleId })),
       cv2Divider(),
       row(sel),
     ];
@@ -1048,18 +1097,19 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const cfg   = panel.autoRoleConfig || { enabled: false, roles: [] };
+    const ctx   = this._tctx(interaction);
 
     const tipoLabel = (tipo, duration) => {
-      if (tipo === 1) return `⏱️ Temporário (${Math.round((duration || 0) / 60000)}min)`;
-      if (tipo === 2) return `🔗 Vinculado (some quando o ticket fecha)`;
-      return '♾️ Permanente';
+      if (tipo === 1) return this.t('role_temp_result_label', { ...ctx, minutes: Math.round((duration || 0) / 60000) });
+      if (tipo === 2) return this.t('role_linked_result_label', ctx);
+      return this.t('role_permanent_label', ctx);
     };
 
     const rolesList = cfg.roles?.length
       ? cfg.roles.map(r => `<@&${r.roleId}> — ${tipoLabel(r.tipo, r.duration)}`).join('\n')
-      : '_Nenhum cargo configurado_';
+      : this.t('no_roles', ctx);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar' : '▶️ Ativar', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_off', ctx) : this.t('btn_toggle_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1069,14 +1119,14 @@ class TicketSystem {
     });
 
     const roleSel = this.client.interactions.createRoleSelect({
-      user, data: { placeholder: '➕ Adicionar cargo automático (dado ao abrir o ticket)' },
+      user, data: { placeholder: this.t('autorole_add_role_placeholder', ctx) },
       funcao: async (i) => {
         // Pede o tipo antes de salvar
         return this._autoRoleAskTipo(i, user, panelId, i.data.values[0]);
       }
     });
 
-    const btnRemRole = this.btn(user, '🗑️ Remover Último', 4, async (i) => {
+    const btnRemRole = this.btn(user, this.t('btn_remove_role', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).autoRoleConfig.roles.pop();
@@ -1084,21 +1134,17 @@ class TicketSystem {
       return this.autoRoleMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(
-        `# 🏷️ Auto-Cargo ${this._e('feliz')}\n` +
-        `Dou um cargo automático pra quem abre o ticket!\n` +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n\n` +
-        `> ♾️ Permanente — fica pra sempre\n` +
-        `> ⏱️ Temporário — some depois de X minutos\n` +
-        `> 🔗 Vinculado — some quando o ticket fecha\n\n` +
-        `**Cargos:**\n${rolesList}`
-      ),
+      cv2Text(this.t('autorole_header', {
+        ...ctx,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        list: rolesList,
+      })),
       cv2Divider(),
       row(btnToggle),
       row(roleSel),
@@ -1118,8 +1164,9 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const cfg   = panel.transcriptConfig || { enabled: false, channelId: null, sendToUser: true };
+    const ctx   = this._tctx(interaction);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar' : '▶️ Ativar', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_off', ctx) : this.t('btn_toggle_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1129,7 +1176,7 @@ class TicketSystem {
     });
 
     const chSel = this.client.interactions.createChannelSelect({
-      user, data: { placeholder: '📌 Canal para salvar transcripts', channel_types: [0, 5] },
+      user, data: { placeholder: this.t('transcript_channel_placeholder', ctx), channel_types: [0, 5] },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -1141,7 +1188,7 @@ class TicketSystem {
       }
     });
 
-    const btnDmToggle = this.btn(user, cfg.sendToUser ? '🔕 Não enviar DM' : '🔔 Enviar DM ao usuário', 2, async (i) => {
+    const btnDmToggle = this.btn(user, cfg.sendToUser ? this.t('btn_dm_toggle_off', ctx) : this.t('btn_dm_toggle_on', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1150,19 +1197,18 @@ class TicketSystem {
       return this.transcriptMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(
-        `# 📄 Transcript ${this._e('feliz')}\n` +
-        `Guardo um histórico da conversa quando o ticket fecha!\n` +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
-        `> Canal: ${cfg.channelId ? `<#${cfg.channelId}>` : 'nenhum ainda'}\n` +
-        `> Mandar por DM: ${cfg.sendToUser ? '✅ Sim' : '❌ Não'}`
-      ),
+      cv2Text(this.t('transcript_header', {
+        ...ctx,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        channel: cfg.channelId ? `<#${cfg.channelId}>` : this.t('destino_none_channel', ctx),
+        dm: cfg.sendToUser ? this.t('dm_yes', ctx) : this.t('dm_no', ctx),
+      })),
       cv2Divider(),
       row(btnToggle, btnDmToggle),
       row(chSel),
@@ -1186,31 +1232,32 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const m     = panel.mensagensConfig || {};
+    const ctx   = this._tctx(interaction);
 
     const fieldDefs = [
-      { key: 'ticketCriadoTitulo',    label: '🎫 Ticket Criado — Título',          vars: '' },
-      { key: 'ticketCriadoDescricao', label: '🎫 Ticket Criado — Descrição',       vars: '{user}' },
-      { key: 'fecharBotaoLabel',      label: '🔒 Texto do Botão Fechar',           vars: '' },
-      { key: 'fechandoMensagem',      label: '🔒 Mensagem ao Fechar',              vars: '' },
-      { key: 'modalRespostasTitulo',  label: '📋 Título das Respostas do Modal',   vars: '' },
-      { key: 'seqInicioTitulo',       label: '📝 Form Sequencial — Título Início', vars: '' },
-      { key: 'seqInicioDescricao',    label: '📝 Form Sequencial — Descrição Início', vars: '{user} {timeout}' },
-      { key: 'seqCanceladoMensagem',  label: '📝 Form Sequencial — Mensagem Cancelado', vars: '' },
-      { key: 'seqResumoTitulo',       label: '📝 Form Sequencial — Título do Resumo', vars: '' },
-      { key: 'transcriptTitulo',      label: '📄 Transcript — Título no canal',    vars: '' },
-      { key: 'transcriptDmTitulo',    label: '📄 Transcript — Título na DM',       vars: '' },
-      { key: 'transcriptDmDescricao', label: '📄 Transcript — Descrição na DM',    vars: '{user}' },
+      { key: 'ticketCriadoTitulo',    label: this.t('msg_field_ticket_title', ctx),          vars: '' },
+      { key: 'ticketCriadoDescricao', label: this.t('msg_field_ticket_desc', ctx),       vars: '{user}' },
+      { key: 'fecharBotaoLabel',      label: this.t('msg_field_close_btn', ctx),           vars: '' },
+      { key: 'fechandoMensagem',      label: this.t('msg_field_closing', ctx),              vars: '' },
+      { key: 'modalRespostasTitulo',  label: this.t('msg_field_modal_answers', ctx),   vars: '' },
+      { key: 'seqInicioTitulo',       label: this.t('msg_field_seq_start_title', ctx), vars: '' },
+      { key: 'seqInicioDescricao',    label: this.t('msg_field_seq_start_desc', ctx), vars: '{user} {timeout}' },
+      { key: 'seqCanceladoMensagem',  label: this.t('msg_field_seq_cancel', ctx), vars: '' },
+      { key: 'seqResumoTitulo',       label: this.t('msg_field_seq_summary', ctx), vars: '' },
+      { key: 'transcriptTitulo',      label: this.t('msg_field_transcript_title', ctx),    vars: '' },
+      { key: 'transcriptDmTitulo',    label: this.t('msg_field_transcript_dm_title', ctx),       vars: '' },
+      { key: 'transcriptDmDescricao', label: this.t('msg_field_transcript_dm_desc', ctx), vars: '{user}' },
     ];
 
     const select = this.select(user, fieldDefs.map(f => ({
       label: f.label.slice(0, 100),
       value: f.key,
-      description: m[f.key] ? '✏️ Personalizada' : '— Padrão da Ayami',
-    })), 'Escolher mensagem para editar', async (i) => {
+      description: m[f.key] ? this.t('msg_custom_label', ctx) : this.t('msg_default_label', ctx),
+    })), this.t('select_message_placeholder', ctx), async (i) => {
       return this._editarMensagem(i, user, panelId, fieldDefs.find(f => f.key === i.data.values[0]));
     });
 
-    const btnResetAll = this.btn(user, '🧹 Restaurar Todas ao Padrão', 4, async (i) => {
+    const btnResetAll = this.btn(user, this.t('btn_reset_all', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).mensagensConfig = {};
@@ -1218,20 +1265,17 @@ class TicketSystem {
       return this.mensagensMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
 
     const statusList = fieldDefs
-      .map(f => `${m[f.key] ? '✏️' : '⚪'} ${f.label}`)
+      .map(f => `${m[f.key] ? this.t('msg_status_custom_icon', ctx) : this.t('msg_status_default_icon', ctx)} ${f.label}`)
       .join('\n');
 
     const blocks = [
-      cv2Text(
-        `# 💬 Mensagens ${this._e('carinho')}\n` +
-        `Deixa tudo com a sua cara! O que não mexer, eu cuido~\n\n${statusList}`
-      ),
+      cv2Text(this.t('messages_header', { ...ctx, statusList })),
       cv2Divider(),
       row(select),
       row(btnResetAll, btnBack),
@@ -1244,6 +1288,7 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const atual = panel.mensagensConfig?.[fieldDef.key] || '';
+    const ctx   = this._tctx(interaction);
 
     const modal = this.client.interactions.createModal({
       user,
@@ -1252,10 +1297,10 @@ class TicketSystem {
         type: 1,
         components: [{
           type: 4, custom_id: 'texto',
-          label: `Texto${fieldDef.vars ? ` (vars: ${fieldDef.vars})` : ''}`.slice(0, 45),
+          label: this.t('edit_message_field_label', { ...ctx, vars: fieldDef.vars }).slice(0, 45),
           style: 2, required: false, max_length: 1000,
           value: atual,
-          placeholder: 'Deixe vazio para usar o texto padrão da Ayami',
+          placeholder: this.t('edit_message_placeholder', ctx),
         }]
       }],
       funcao: async (mi, _, fields) => {
@@ -1287,8 +1332,9 @@ class TicketSystem {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
     const cfg   = panel.selectMenuConfig || { enabled: false, options: [] };
+    const ctx   = this._tctx(interaction);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Select Hub' : '▶️ Ativar Select Hub', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_hub_off', ctx) : this.t('btn_toggle_hub_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1297,8 +1343,8 @@ class TicketSystem {
       return this.selectHubMenu(i, user, panelId);
     });
 
-    const btnPlaceholder = this.btn(user, '✏️ Texto do Select', 2, async (i) => {
-      const resp = await this._ask(i, `${this._e('pensando')} Qual o texto exibido no select menu (placeholder)?`);
+    const btnPlaceholder = this.btn(user, this.t('btn_select_text', ctx), 2, async (i) => {
+      const resp = await this._ask(i, this.t('ask_select_placeholder', this._tctx(i)));
       if (resp === null) return;
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).selectMenuConfig.placeholder = resp.trim().slice(0, 100);
@@ -1306,7 +1352,7 @@ class TicketSystem {
       return this.selectHubMenu(i, user, panelId);
     });
 
-    const btnAddOption = this.btn(user, '➕ Criar Opção', 1, async (i) => {
+    const btnAddOption = this.btn(user, this.t('btn_add_option', ctx), 1, async (i) => {
       return this._selectAddOption(i, user, panelId);
     }, { disabled: (cfg.options?.length || 0) >= 25 });
 
@@ -1316,15 +1362,15 @@ class TicketSystem {
       const editSel = this.select(user, cfg.options.map(o => ({
         label: `⚙️ ${o.label}`.slice(0, 100),
         value: o.optionId,
-        description: 'Configurar staff, modal, form e embed desta opção',
-      })), '⚙️ Configurar uma opção existente', async (i) => {
+        description: this.t('edit_existing_option_desc', ctx),
+      })), this.t('select_configure_existing_placeholder', ctx), async (i) => {
         await this.deferUpdate(i);
         return this.selectOptionMenu(i, user, panelId, i.data.values[0]);
       });
       components.push(row(editSel));
     }
 
-    const btnRemOption = this.btn(user, '🗑️ Remover Última Opção', 4, async (i) => {
+    const btnRemOption = this.btn(user, this.t('btn_remove_option', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       this._findPanel(fd, panelId).selectMenuConfig.options.pop();
@@ -1332,7 +1378,7 @@ class TicketSystem {
       return this.selectHubMenu(i, user, panelId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.painelMenu(i, user, panelId);
     });
@@ -1347,17 +1393,16 @@ class TicketSystem {
           ].filter(Boolean).join(' ') || '—';
           return `\`${i + 1}.\` ${o.emoji || '▪️'} **${o.label}** ${completude}`;
         }).join('\n')
-      : '_Nenhuma opção criada_';
+      : this.t('no_options', ctx);
 
     const blocks = [
-      cv2Text(
-        `# 🧩 Select Menu ${this._e('animada')}\n` +
-        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
-        `Em vez de um botão só, mostro várias opções de atendimento!\n` +
-        `Cada uma com seu próprio staff, modal e formulário ${this._e('feliz')}\n\n` +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n\n` +
-        `**Opções (${cfg.options?.length || 0}/25):**\n${optionsList}`
-      ),
+      cv2Text(this.t('selecthub_header', {
+        ...ctx,
+        successMsg: opts.successMsg,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        count: cfg.options?.length || 0,
+        list: optionsList,
+      })),
       cv2Divider(),
       row(btnToggle, btnPlaceholder),
       row(btnAddOption, btnRemOption),
@@ -1370,13 +1415,14 @@ class TicketSystem {
   }
 
   async _selectAddOption(interaction, user, panelId) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Nova Opção do Select',
+      title: this.t('new_option_modal_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Nome da opção', style: 1, required: true, max_length: 100 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'description', label: 'Descrição (opcional)', style: 1, required: false, max_length: 100 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'emoji', label: 'Emoji (opcional)', style: 1, required: false, max_length: 50 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'label', label: this.t('option_name_label', ctx), style: 1, required: true, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'description', label: this.t('option_desc_label', ctx), style: 1, required: false, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'emoji', label: this.t('option_emoji_label', ctx), style: 1, required: false, max_length: 50 }] },
       ],
       funcao: async (mi, _, fields) => {
         const fd = await this._getGuildDoc(mi.guild_id);
@@ -1403,7 +1449,7 @@ class TicketSystem {
         // Abre direto o sub-painel da opção recém-criada — sem
         // precisar de outro painelId, exatamente como pedido.
         return this.selectOptionMenu(mi, user, panelId, optionId, {
-          successMsg: `${this._e('festa')} Opção **${fields.label.trim()}** criada! Configure-a abaixo.`
+          successMsg: this.t('option_created', { ...this._tctx(mi), label: fields.label.trim() })
         });
       }
     });
@@ -1420,16 +1466,17 @@ class TicketSystem {
     const doc    = await this._getGuildDoc(interaction.guild_id);
     const panel  = this._findPanel(doc, panelId);
     const option = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
+    const ctx    = this._tctx(interaction);
 
     if (!option) {
-      return this.followUpEphemeral(interaction, cv2Payload([cv2Text(`❌ Opção não encontrada.`)]));
+      return this.followUpEphemeral(interaction, cv2Payload([cv2Text(this.t('option_not_found', ctx))]));
     }
 
-    const btnEmbed = this.btn(user, option.embedBoasVindas ? '🎨 Editar Embed' : '✨ Criar Embed', 1, async (i) => {
+    const btnEmbed = this.btn(user, option.embedBoasVindas ? this.t('opt_edit_embed', ctx) : this.t('opt_create_embed', ctx), 1, async (i) => {
       return EmbedBuilderUI.open(i, this.client, {
         user,
         existingEmbed: option.embedBoasVindas,
-        title: `Embed de Boas-Vindas — ${option.label}`,
+        title: this.t('welcome_embed_title_prefix', { ...ctx, optionLabel: option.label }),
         onDone: async (rootInteraction, embedResult) => {
           const fd = await this._getGuildDoc(rootInteraction.guild_id);
           const fp = this._findPanel(fd, panelId);
@@ -1437,14 +1484,14 @@ class TicketSystem {
           fo.embedBoasVindas = embedResult;
           await fd.save();
           return this.selectOptionMenu(rootInteraction, user, panelId, optionId, {
-            successMsg: embedResult ? `${this._e('curtida')} Embed de boas-vindas atualizada!` : `${this._e('emduvida')} Embed removida.`
+            successMsg: embedResult ? this.t('welcome_embed_updated', this._tctx(rootInteraction)) : this.t('welcome_embed_removed', this._tctx(rootInteraction))
           });
         }
       });
     });
 
     const roleSel = this.client.interactions.createRoleSelect({
-      user, data: { placeholder: '👥 Adicionar cargo staff desta opção', max_values: 5 },
+      user, data: { placeholder: this.t('staff_role_option_placeholder', ctx), max_values: 5 },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -1456,7 +1503,7 @@ class TicketSystem {
       }
     });
 
-    const btnClearStaff = this.btn(user, '🧹 Limpar Staff', 4, async (i) => {
+    const btnClearStaff = this.btn(user, this.t('btn_clear_staff', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1465,8 +1512,8 @@ class TicketSystem {
       return this.selectOptionMenu(i, user, panelId, optionId);
     });
 
-    const btnNome = this.btn(user, '✏️ Nome do Ticket', 2, async (i) => {
-      const resp = await this._ask(i, `${this._e('pensando')} Nome dos tickets criados por esta opção? Use \`{count}\` para o número.`);
+    const btnNome = this.btn(user, this.t('btn_ticket_name', ctx), 2, async (i) => {
+      const resp = await this._ask(i, this.t('ask_option_ticket_name', this._tctx(i)));
       if (resp === null) return;
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1475,38 +1522,40 @@ class TicketSystem {
       return this.selectOptionMenu(i, user, panelId, optionId);
     });
 
-    const btnModal = this.btn(user, `📋 Modal (${option.modalConfig?.enabled ? 'Ativo' : 'Inativo'})`, 2, async (i) => {
+    const btnModal = this.btn(user, this.t('btn_modal_status', { ...ctx, status: option.modalConfig?.enabled ? this.t('opt_active', ctx) : this.t('opt_inactive', ctx) }), 2, async (i) => {
       await this.deferUpdate(i);
       return this.selectOptionModalMenu(i, user, panelId, optionId);
     });
 
-    const btnSeqForm = this.btn(user, `📝 Form Sequencial (${option.seqQuestionsConfig?.enabled ? 'Ativo' : 'Inativo'})`, 2, async (i) => {
+    const btnSeqForm = this.btn(user, this.t('btn_seqform_status', { ...ctx, status: option.seqQuestionsConfig?.enabled ? this.t('opt_active', ctx) : this.t('opt_inactive', ctx) }), 2, async (i) => {
       await this.deferUpdate(i);
       return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
     });
 
-    const btnDelete = this.btn(user, '🗑️ Excluir Opção', 4, async (i) => {
+    const btnDelete = this.btn(user, this.t('btn_delete_option', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
       fp.selectMenuConfig.options = fp.selectMenuConfig.options.filter(o => o.optionId !== optionId);
       await fd.save();
-      return this.selectHubMenu(i, user, panelId, { successMsg: `${this._e('chorando')} Opção **${option.label}** excluída.` });
+      return this.selectHubMenu(i, user, panelId, { successMsg: this.t('option_deleted', { ...this._tctx(i), label: option.label }) });
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.selectHubMenu(i, user, panelId);
     });
 
     const blocks = [
-      cv2Text(
-        `# ${option.emoji || '⚙️'} ${option.label} ${this._e('feliz')}\n` +
-        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
-        `> 🎨 Embed: ${option.embedBoasVindas ? 'pronta!' : 'falta criar'}\n` +
-        `> 🛡️ Staff: ${option.cargosStaff?.length ? option.cargosStaff.map(r => `<@&${r}>`).join(', ') : 'ninguém ainda'}\n` +
-        `> 🏷️ Nome: \`${option.ticketChatName || panel.ticketChatName || 'ticket-{count}'}\``
-      ),
+      cv2Text(this.t('option_header', {
+        ...ctx,
+        successMsg: opts.successMsg,
+        optionEmoji: option.emoji || '⚙️',
+        optionLabel: option.label,
+        embedStatus: option.embedBoasVindas ? this.t('embed_ready', ctx) : this.t('embed_missing', ctx),
+        staffStatus: option.cargosStaff?.length ? option.cargosStaff.map(r => `<@&${r}>`).join(', ') : this.t('no_staff_yet', ctx),
+        name: option.ticketChatName || panel.ticketChatName || 'ticket-{count}',
+      })),
       cv2Divider(),
       row(btnEmbed, btnModal, btnSeqForm),
       row(roleSel),
@@ -1525,12 +1574,13 @@ class TicketSystem {
     const panel  = this._findPanel(doc, panelId);
     const option = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
     const cfg    = option.modalConfig || { enabled: false, fields: [] };
+    const ctx    = this._tctx(interaction);
 
     const fieldsList = cfg.fields?.length
-      ? cfg.fields.map((f, i) => `\`${i + 1}.\` **${f.label}** (${f.style === 2 ? 'parágrafo' : 'curto'})${f.required ? ' *obrigatório*' : ''}`).join('\n')
-      : '_Nenhum campo adicionado_';
+      ? cfg.fields.map((f, i) => `\`${i + 1}.\` **${f.label}** (${f.style === 2 ? this.t('modal_field_paragraph', ctx) : this.t('modal_field_short', ctx)})${f.required ? this.t('modal_field_required_tag', ctx) : ''}`).join('\n')
+      : this.t('modal_no_fields', ctx);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Modal' : '▶️ Ativar Modal', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_modal_off', ctx) : this.t('btn_toggle_modal_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1539,8 +1589,8 @@ class TicketSystem {
       return this.selectOptionModalMenu(i, user, panelId, optionId);
     });
 
-    const btnTitulo = this.btn(user, '✏️ Título do Modal', 2, async (i) => {
-      const resp = await this._ask(i, `${this._e('pensando')} Título do modal desta opção?`);
+    const btnTitulo = this.btn(user, this.t('btn_modal_title', ctx), 2, async (i) => {
+      const resp = await this._ask(i, this.t('ask_modal_title', this._tctx(i)));
       if (resp === null) return;
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1549,11 +1599,11 @@ class TicketSystem {
       return this.selectOptionModalMenu(i, user, panelId, optionId);
     });
 
-    const btnAddField = this.btn(user, '➕ Adicionar Campo', 1, async (i) => {
+    const btnAddField = this.btn(user, this.t('btn_add_field', ctx), 1, async (i) => {
       return this._selectOptionModalAddField(i, user, panelId, optionId);
     }, { disabled: (cfg.fields?.length || 0) >= 5 });
 
-    const btnRemField = this.btn(user, '🗑️ Remover Último Campo', 4, async (i) => {
+    const btnRemField = this.btn(user, this.t('btn_remove_field', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1562,19 +1612,21 @@ class TicketSystem {
       return this.selectOptionModalMenu(i, user, panelId, optionId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.selectOptionMenu(i, user, panelId, optionId);
     });
 
     const blocks = [
-      cv2Text(
-        `# 📋 Modal — ${option.label} ${this._e('feliz')}\n` +
-        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
-        `> Título: \`${cfg.title || 'Formulário de Atendimento'}\`\n\n` +
-        `**Campos (${cfg.fields?.length || 0}/5):**\n${fieldsList}`
-      ),
+      cv2Text(this.t('modal_header_option', {
+        ...ctx,
+        optionLabel: option.label,
+        successMsg: opts.successMsg,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        title: cfg.title || this.t('modal_title_default', ctx),
+        count: cfg.fields?.length || 0,
+        list: fieldsList,
+      })),
       cv2Divider(),
       row(btnToggle, btnTitulo),
       row(btnAddField, btnRemField),
@@ -1586,14 +1638,15 @@ class TicketSystem {
   }
 
   async _selectOptionModalAddField(interaction, user, panelId, optionId) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Adicionar Campo do Modal',
+      title: this.t('add_field_modal_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'label', label: 'Pergunta/Label do campo', style: 1, required: true, max_length: 45 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: 'Placeholder (opcional)', style: 1, required: false, max_length: 100 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'style', label: 'Estilo: curto ou paragrafo', style: 1, required: true, max_length: 10, placeholder: 'curto' }] },
-        { type: 1, components: [{ type: 4, custom_id: 'required', label: 'Obrigatório? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'sim' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'label', label: this.t('field_label_label', ctx), style: 1, required: true, max_length: 45 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'placeholder', label: this.t('field_placeholder_label', ctx), style: 1, required: false, max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'style', label: this.t('field_style_label', ctx), style: 1, required: true, max_length: 10, placeholder: this.t('field_style_placeholder', ctx) }] },
+        { type: 1, components: [{ type: 4, custom_id: 'required', label: this.t('field_required_label', ctx), style: 1, required: false, max_length: 5, placeholder: this.t('field_required_placeholder', ctx) }] },
       ],
       funcao: async (mi, _, fields) => {
         const fd = await this._getGuildDoc(mi.guild_id);
@@ -1611,7 +1664,7 @@ class TicketSystem {
         await fd.save();
 
         await this.client.interactions._callback(mi, { type: 6 });
-        return this.selectOptionModalMenu(mi, user, panelId, optionId, { successMsg: `${this._e('curtida')} Campo adicionado!` });
+        return this.selectOptionModalMenu(mi, user, panelId, optionId, { successMsg: this.t('field_added', this._tctx(mi)) });
       }
     });
 
@@ -1628,12 +1681,13 @@ class TicketSystem {
     const timeoutSec = Math.round((cfg.timeout ?? 60000) / 1000);
     const plan   = await this._getGuildPlan(interaction.guild_id);
     const maxQ   = plan.tickets?.maxQuestions ?? 10;
+    const ctx    = this._tctx(interaction);
 
     const questionsList = cfg.questions?.length
-      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label} \`[${q.tipo || 'text'}]\`${q.required ? ' *obrigatória*' : ''}`).join('\n')
-      : '_Nenhuma pergunta adicionada_';
+      ? cfg.questions.map((q, i) => `\`${i + 1}.\` ${q.label} \`[${q.tipo || 'text'}]\`${q.required ? this.t('seq_question_required_tag', ctx) : ''}`).join('\n')
+      : this.t('seq_no_questions', ctx);
 
-    const btnToggle = this.btn(user, cfg.enabled ? '⏸️ Desativar Form' : '▶️ Ativar Form', cfg.enabled ? 4 : 3, async (i) => {
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_form_off', ctx) : this.t('btn_toggle_form_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1642,11 +1696,11 @@ class TicketSystem {
       return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
     });
 
-    const btnAddQ = this.btn(user, '➕ Adicionar Pergunta', 1, async (i) => {
+    const btnAddQ = this.btn(user, this.t('btn_add_question', ctx), 1, async (i) => {
       return this._selectOptionSeqAddQuestion(i, user, panelId, optionId);
     }, { disabled: (cfg.questions?.length || 0) >= maxQ });
 
-    const btnRemQ = this.btn(user, '🗑️ Remover Última', 4, async (i) => {
+    const btnRemQ = this.btn(user, this.t('btn_remove_question', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1656,19 +1710,19 @@ class TicketSystem {
     });
 
     const timeoutSel = this.select(user, [
-      { label: '30 segundos',  value: '30'  },
-      { label: '1 minuto',     value: '60'  },
-      { label: '2 minutos',    value: '120' },
-      { label: '5 minutos',    value: '300' },
-      { label: '10 minutos',   value: '600' },
-      { label: '✏️ Personalizado (digitar)', value: 'custom' },
-    ], `⏱️ Tempo por pergunta — Atual: ${timeoutSec}s`, async (i) => {
+      { label: this.t('timeout_30s', ctx),  value: '30'  },
+      { label: this.t('timeout_1m', ctx),     value: '60'  },
+      { label: this.t('timeout_2m', ctx),    value: '120' },
+      { label: this.t('timeout_5m', ctx),    value: '300' },
+      { label: this.t('timeout_10m', ctx),   value: '600' },
+      { label: this.t('timeout_custom', ctx), value: 'custom' },
+    ], this.t('timeout_select_placeholder', { ...ctx, seconds: timeoutSec }), async (i) => {
       if (i.data.values[0] === 'custom') {
-        const resp = await this._ask(i, `${this._e('pensando')} Quantos **segundos** para responder cada pergunta? *(5 a 600)*`);
+        const resp = await this._ask(i, this.t('ask_custom_seconds', this._tctx(i)));
         if (resp === null) return;
         const sec = parseInt(resp);
         if (!sec || sec < 5 || sec > 600) {
-          await this.followUpEphemeral(i, cv2Payload([cv2Text(`${this._e('emduvida')} Valor inválido! Use entre 5 e 600 segundos.`)], { ephemeral: true }));
+          await this.followUpEphemeral(i, cv2Payload([cv2Text(this.t('invalid_seconds', this._tctx(i)))], { ephemeral: true }));
           return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
         }
         const fd = await this._getGuildDoc(i.guild_id);
@@ -1685,15 +1739,15 @@ class TicketSystem {
       return this.selectOptionSeqFormMenu(i, user, panelId, optionId);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.selectOptionMenu(i, user, panelId, optionId);
     });
 
     const sendModeSel = this.select(user, [
-      { label: '🎫 Só no ticket', value: '0', description: cfg.sendMode === 0 ? 'Selecionado' : undefined },
-      { label: '📋 Canal de log', value: '1', description: cfg.sendMode === 1 ? 'Selecionado' : undefined },
-    ], '📤 Onde mandar as respostas?', async (i) => {
+      { label: this.t('send_mode_only_ticket', ctx), value: '0', description: cfg.sendMode === 0 ? this.t('selected_label', ctx) : undefined },
+      { label: this.t('send_mode_log_channel', ctx), value: '1', description: cfg.sendMode === 1 ? this.t('selected_label', ctx) : undefined },
+    ], this.t('send_mode_select_placeholder', ctx), async (i) => {
       await this.deferUpdate(i);
       const fd = await this._getGuildDoc(i.guild_id);
       const fp = this._findPanel(fd, panelId);
@@ -1703,7 +1757,7 @@ class TicketSystem {
     });
 
     const logChSel = this.client.interactions.createChannelSelect({
-      user, data: { placeholder: '📋 Canal de log das respostas', channel_types: [0, 5] },
+      user, data: { placeholder: this.t('log_channel_select_placeholder', ctx), channel_types: [0, 5] },
       funcao: async (i) => {
         await this.deferUpdate(i);
         const fd = await this._getGuildDoc(i.guild_id);
@@ -1715,14 +1769,17 @@ class TicketSystem {
     });
 
     const blocks = [
-      cv2Text(
-        `# 📝 Form Sequencial — ${option.label} ${this._e('animada')}\n` +
-        (opts.successMsg ? `${opts.successMsg}\n\n` : '') +
-        `> Status: ${cfg.enabled ? '🟢 Ativo' : '🔴 Inativo'}\n` +
-        `> Tempo por pergunta: ${timeoutSec}s\n` +
-        `> Resumo vai pra: ${cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : '🎫 o próprio ticket'}\n\n` +
-        `**Perguntas (${cfg.questions?.length || 0}/${maxQ === Infinity ? '∞' : maxQ}):**\n${questionsList}`
-      ),
+      cv2Text(this.t('seq_header_option', {
+        ...ctx,
+        optionLabel: option.label,
+        successMsg: opts.successMsg,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        seconds: timeoutSec,
+        destination: cfg.sendMode === 1 ? `📋 <#${cfg.logChannelId || '...'}>` : this.t('seq_dest_own_ticket', ctx),
+        count: cfg.questions?.length || 0,
+        max: maxQ === Infinity ? this.t('infinity_symbol', ctx) : maxQ,
+        list: questionsList,
+      })),
       cv2Divider(),
       row(btnToggle, btnAddQ, btnRemQ),
       row(timeoutSel),
@@ -1740,7 +1797,7 @@ class TicketSystem {
       interaction, user,
       guildId: interaction.guild_id,
       locateTarget: fd => this._findPanel(fd, panelId).selectMenuConfig.options.find(o => o.optionId === optionId),
-      onAdded: mi => this.selectOptionSeqFormMenu(mi, user, panelId, optionId, { successMsg: `${this._e('curtida')} Pergunta adicionada!` }),
+      onAdded: mi => this.selectOptionSeqFormMenu(mi, user, panelId, optionId, { successMsg: this.t('question_added', this._tctx(mi)) }),
     });
   }
 
@@ -1753,7 +1810,7 @@ class TicketSystem {
     const data  = JSON.parse(interaction.data.custom_id);
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, data.p);
-    if (!panel) return this.reply(interaction, { content: '❌ Painel não encontrado.', flags: 64 });
+    if (!panel) return this.reply(interaction, { content: this.t('panel_not_found_short', this._tctx(interaction)), flags: 64 });
 
     return this._startTicketFlow(interaction, doc, panel, null);
   }
@@ -1763,11 +1820,11 @@ class TicketSystem {
     const data    = JSON.parse(interaction.data.custom_id);
     const doc     = await this._getGuildDoc(interaction.guild_id);
     const panel   = this._findPanel(doc, data.p);
-    if (!panel) return this.reply(interaction, { content: '❌ Painel não encontrado.', flags: 64 });
+    if (!panel) return this.reply(interaction, { content: this.t('panel_not_found_short', this._tctx(interaction)), flags: 64 });
 
     const optionId = interaction.data.values[0];
     const option    = panel.selectMenuConfig.options.find(o => o.optionId === optionId);
-    if (!option) return this.reply(interaction, { content: '❌ Opção não encontrada.', flags: 64 });
+    if (!option) return this.reply(interaction, { content: this.t('option_not_found', this._tctx(interaction)), flags: 64 });
 
     return this._startTicketFlow(interaction, doc, panel, option);
   }
@@ -1790,9 +1847,10 @@ class TicketSystem {
   }
 
   async _openTicketModal(interaction, panel, option, modalCfg) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user:  interaction.member?.user?.id || interaction.user?.id,
-      title: modalCfg.title || 'Formulário de Atendimento',
+      title: modalCfg.title || this.t('modal_title_default', ctx),
       components: (modalCfg.fields || []).slice(0, 5).map(f => ({
         type: 1,
         components: [{
@@ -1870,9 +1928,10 @@ class TicketSystem {
     }
 
     // Mensagem "Ticket Criado" — personalizada
-    const tituloCriado = resolveMsg(fp, 'ticketCriadoTitulo', '🎫 Ticket Criado');
+    const ctx = this._tctx(interaction);
+    const tituloCriado = resolveMsg(fp, 'ticketCriadoTitulo', this.t('default_ticket_created_title', ctx));
     const descCriado    = resolveMsg(fp, 'ticketCriadoDescricao',
-      'Olá {user}! Sua solicitação foi recebida.\nUm membro da equipe responderá em breve.',
+      this.t('default_ticket_created_desc', ctx),
       { userId }
     );
 
@@ -1882,7 +1941,7 @@ class TicketSystem {
       ? Object.entries(modalAnswers).map(([k, v]) => `**${k}:** ${v}`).join('\n')
       : null;
 
-    const fecharLabel = resolveMsg(fp, 'fecharBotaoLabel', 'Fechar Ticket');
+    const fecharLabel = resolveMsg(fp, 'fecharBotaoLabel', this.t('default_close_button_label', ctx));
 
     await DiscordRequest(`/channels/${channel.id}/messages`, {
       method: 'POST',
@@ -1891,7 +1950,7 @@ class TicketSystem {
         embeds: [
           { title: tituloCriado, description: descCriado, color: 0x7C8FFF },
           ...(embedBoasVindas ? [embedBoasVindas] : []),
-          ...(respostasText ? [{ title: resolveMsg(fp, 'modalRespostasTitulo', '📋 Respostas do Formulário'), description: respostasText, color: 0xFFD966 }] : []),
+          ...(respostasText ? [{ title: resolveMsg(fp, 'modalRespostasTitulo', this.t('default_modal_answers_title', ctx)), description: respostasText, color: 0xFFD966 }] : []),
         ],
         components: [{
           type: 1,
@@ -1908,16 +1967,17 @@ class TicketSystem {
         panel:     { seqQuestionsConfig: seqCfg }, // run() espera panel.seqQuestionsConfig
         channelId: channel.id,
         userId,
+        ctx,
         messages: {
-          inicioTitulo:      resolveMsg(fp, 'seqInicioTitulo', '📋 Formulário de Atendimento'),
-          inicioDescricao:   resolveMsg(fp, 'seqInicioDescricao', 'Olá {user}! Vou te fazer algumas perguntas.\nVocê tem {timeout}s para responder cada uma.', { userId, timeout: Math.round((seqCfg.timeout ?? 60000) / 1000) }),
-          canceladoMensagem: resolveMsg(fp, 'seqCanceladoMensagem', '⚠️ Formulário encerrado.'),
-          resumoTitulo:      resolveMsg(fp, 'seqResumoTitulo', '✅ Respostas Recebidas'),
+          inicioTitulo:      resolveMsg(fp, 'seqInicioTitulo', this.t('default_seq_intro_title', ctx)),
+          inicioDescricao:   resolveMsg(fp, 'seqInicioDescricao', this.t('default_seq_intro_desc', ctx), { userId, timeout: Math.round((seqCfg.timeout ?? 60000) / 1000) }),
+          canceladoMensagem: resolveMsg(fp, 'seqCanceladoMensagem', this.t('default_seq_cancelled', ctx)),
+          resumoTitulo:      resolveMsg(fp, 'seqResumoTitulo', this.t('default_seq_summary_title', ctx)),
         }
       }).catch(err => console.error('[TicketSystem] Erro no form sequencial:', err));
     }
 
-    const successMsg = `${this._e('feliz') || '✅'} Ticket criado em <#${channel.id}>!`;
+    const successMsg = this.t('ticket_created_success', { ...ctx, channelId: channel.id });
 
     if (isModalFlow) {
       // Veio de modal_submit (defer type 5) — completa com PATCH @original.
@@ -1955,7 +2015,8 @@ class TicketSystem {
     const panel = panelId ? this._findPanel(doc, panelId) : null;
     console.log('[DIAG-TRANSCRIPT] panel encontrado?', !!panel, '| transcriptConfig:', JSON.stringify(panel?.transcriptConfig));
 
-    const fechandoMsg = resolveMsg(panel, 'fechandoMensagem', '⛔ Este ticket será fechado em 10 segundos...');
+    const ctx = this._tctx(interaction);
+    const fechandoMsg = resolveMsg(panel, 'fechandoMensagem', this.t('default_closing_message', ctx));
 
     await this.reply(interaction, { content: fechandoMsg });
 
@@ -1968,9 +2029,9 @@ class TicketSystem {
         panel,
         closedBy,
         messages: {
-          canalTitulo: resolveMsg(panel, 'transcriptTitulo', '📄 Transcript'),
-          dmTitulo:    resolveMsg(panel, 'transcriptDmTitulo', '📄 Seu Transcript'),
-          dmDescricao: resolveMsg(panel, 'transcriptDmDescricao', 'Aqui está o histórico do seu atendimento, {user}!', { userId: ownerId }),
+          canalTitulo: resolveMsg(panel, 'transcriptTitulo', this.t('default_transcript_title', ctx)),
+          dmTitulo:    resolveMsg(panel, 'transcriptDmTitulo', this.t('default_transcript_dm_title', ctx)),
+          dmDescricao: resolveMsg(panel, 'transcriptDmDescricao', this.t('default_transcript_dm_desc', ctx), { userId: ownerId }),
         }
       }).then(() => console.log('[DIAG-TRANSCRIPT] generate() concluiu sem lançar erro'))
         .catch(err => console.error('[TicketSystem] Erro ao gerar transcript:', err));

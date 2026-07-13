@@ -2,6 +2,7 @@
 
 const crypto         = require('crypto');
 const DiscordRequest = require('../DiscordRequest.js');
+const { localeCtx }  = require('../Utils/ctxLocale.js');
 const ms             = require('ms');
 
 
@@ -480,28 +481,32 @@ if (interaction.data?.custom_id === "birthday_register_btn") {
 
     _replyUnavailable(interaction) {
     const emoji = this.client.emoji;
+    const ctx = localeCtx(interaction, { emoji: emoji.chorando });
     return this._reply(
         interaction,
-        `${emoji.chorando} Essa interação expirou ou não está mais disponível... Execute o comando novamente!`
+        this.client.t('interactionmanager.unavailable', ctx)
     );
 }
 
 _replyExpired(interaction) {
     const emoji = this.client.emoji;
+    const ctx = localeCtx(interaction, { emoji: emoji.emburrada });
     return this._reply(
         interaction,
-        `${emoji.emburrada} Esse formulário expirou! Execute novamente, por favor~`
+        this.client.t('interactionmanager.expired', ctx)
     );
 }
 
 _replyUnauthorized(interaction) {
     const emoji = this.client.emoji;
-    return this._reply(interaction, `${emoji.brava} Ei! Você não pode usar este componente!`);
+    const ctx = localeCtx(interaction, { emoji: emoji.brava });
+    return this._reply(interaction, this.client.t('interactionmanager.unauthorized', ctx));
 }
 
 _replyUnauthorizedModal(interaction) {
     const emoji = this.client.emoji;
-    return this._reply(interaction, `${emoji.brava} Ei! Você não pode responder este formulário!`);
+    const ctx = localeCtx(interaction, { emoji: emoji.brava });
+    return this._reply(interaction, this.client.t('interactionmanager.unauthorized_modal', ctx));
 }
 
 async _replyError(interaction, err, context = 'Erro interno') {
@@ -510,11 +515,9 @@ async _replyError(interaction, err, context = 'Erro interno') {
 
     console.error(`[InteractionManager] [${errorId}] ${context}`, err);
 
-    const message =
-        `${emoji.assustada} Ops, algo deu errado ao processar essa interação...\n\n` +
-        `Contexto: **\`${context}\`**\n` +
-        `ID do erro: **\`${errorId}\`**\n` +
-        `Detalhe: \`\`\`\n${err?.message ?? 'Desconhecido'}\n\`\`\``;
+    const ctx = localeCtx(interaction, { emoji: emoji.assustada });
+    const detail = err?.message ?? this.client.t('interactionmanager.error_unknown_detail', ctx);
+    const message = this.client.t('interactionmanager.error_message', { ...ctx, context, errorId, detail });
 
     try {
         await this._reply(interaction, message);

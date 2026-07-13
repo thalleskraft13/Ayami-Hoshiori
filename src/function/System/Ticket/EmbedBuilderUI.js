@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 const COLOR_GOLD = 0xFFD966;
 
@@ -37,20 +38,26 @@ const COLOR_GOLD = 0xFFD966;
    (precisamos ler `channel_id` e `message.id` dela intactos).
    ═══════════════════════════════════════════════════════════ */
 
-const PRESET_COLORS = [
-  { label: '🔵 Azul Ayami',        value: '7C8FFF' },
-  { label: '💙 Azul Cabelo',       value: 'A9D6FF' },
-  { label: '🌙 Azul Escuro',       value: '243B7A' },
-  { label: '⭐ Dourado',           value: 'FFD966' },
-  { label: '🌸 Rosa',              value: 'FFB6C8' },
-  { label: '🟢 Verde',             value: '57F287' },
-  { label: '🔴 Vermelho',          value: 'ED4245' },
-  { label: '🟡 Amarelo',           value: 'FEE75C' },
-  { label: '🟠 Laranja',           value: 'E67E22' },
-  { label: '🟣 Roxo',              value: '9B59B6' },
-  { label: '⚫ Preto',             value: '000000' },
-  { label: '🎨 HEX Personalizado', value: 'custom' },
-];
+function t(client, key, ctx) {
+  return client.t(`ticket.${key}`, ctx);
+}
+
+function presetColors(client, ctx) {
+  return [
+    { label: t(client, 'eb_color_blue_ayami', ctx), value: '7C8FFF' },
+    { label: t(client, 'eb_color_blue_hair', ctx),  value: 'A9D6FF' },
+    { label: t(client, 'eb_color_dark_blue', ctx),  value: '243B7A' },
+    { label: t(client, 'eb_color_gold', ctx),       value: 'FFD966' },
+    { label: t(client, 'eb_color_pink', ctx),       value: 'FFB6C8' },
+    { label: t(client, 'eb_color_green', ctx),      value: '57F287' },
+    { label: t(client, 'eb_color_red', ctx),        value: 'ED4245' },
+    { label: t(client, 'eb_color_yellow', ctx),     value: 'FEE75C' },
+    { label: t(client, 'eb_color_orange', ctx),     value: 'E67E22' },
+    { label: t(client, 'eb_color_purple', ctx),     value: '9B59B6' },
+    { label: t(client, 'eb_color_black', ctx),      value: '000000' },
+    { label: t(client, 'eb_color_custom', ctx),     value: 'custom' },
+  ];
+}
 
 function cleanEmbed(e) {
   const out = {};
@@ -66,10 +73,10 @@ function cleanEmbed(e) {
   return out;
 }
 
-function buildLiveEmbed(embed) {
+function buildLiveEmbed(embed, client, ctx) {
   const e = cleanEmbed(embed);
   if (!e.title && !e.description && !e.fields?.length && !e.image && !e.thumbnail && !e.author) {
-    e.description = '*Embed em branco — comece escolhendo um campo para editar abaixo* 👇';
+    e.description = t(client, 'eb_blank_placeholder', ctx);
   }
   e.color = embed.color ?? COLOR_GOLD;
   return e;
@@ -117,7 +124,8 @@ const EmbedBuilderUI = {
    *        setado, pronto para qualquer `editOriginal`-like subsequente.
    */
   async open(interaction, client, opts) {
-    const { user, existingEmbed = null, title = '🎨 Editor de Embed', onDone } = opts;
+    const ctx = localeCtx(interaction);
+    const { user, existingEmbed = null, title = t(client, 'eb_default_title', ctx), onDone } = opts;
 
     // ── Captura definitiva da msg raiz (canal + id), ANTES do followUp ──
     const rootChannelId = interaction.channel_id || interaction.channel?.id;
@@ -134,32 +142,33 @@ const EmbedBuilderUI = {
       const editSel = client.interactions.createSelect({
         user,
         data: {
-          placeholder: '✏️ Editar campo da embed…',
+          placeholder: t(client, 'eb_field_select_placeholder', ctx),
           options: [
-            { label: 'Título',           value: 'title'        },
-            { label: 'Descrição',        value: 'description'  },
-            { label: 'URL do Título',    value: 'url'          },
-            { label: 'Author Nome',      value: 'author_name'  },
-            { label: 'Author Icon URL',  value: 'author_icon'  },
-            { label: 'Author URL',       value: 'author_url'   },
-            { label: 'Footer Texto',     value: 'footer_text'  },
-            { label: 'Footer Icon URL',  value: 'footer_icon'  },
-            { label: 'Thumbnail URL',    value: 'thumbnail'    },
-            { label: 'Image URL',        value: 'image'        },
+            { label: t(client, 'eb_field_title', ctx),        value: 'title'        },
+            { label: t(client, 'eb_field_description', ctx),  value: 'description'  },
+            { label: t(client, 'eb_field_url', ctx),          value: 'url'          },
+            { label: t(client, 'eb_field_author_name', ctx),  value: 'author_name'  },
+            { label: t(client, 'eb_field_author_icon', ctx),  value: 'author_icon'  },
+            { label: t(client, 'eb_field_author_url', ctx),   value: 'author_url'   },
+            { label: t(client, 'eb_field_footer_text', ctx),  value: 'footer_text'  },
+            { label: t(client, 'eb_field_footer_icon', ctx),  value: 'footer_icon'  },
+            { label: t(client, 'eb_field_thumbnail', ctx),    value: 'thumbnail'    },
+            { label: t(client, 'eb_field_image', ctx),        value: 'image'        },
           ]
         },
         funcao: async (si) => {
+          const editPrefix = t(client, 'eb_edit_prefix', ctx);
           const MAP = {
-            title:       ['Editar Título',          () => embed.title,           v => { embed.title           = v; }, false],
-            description: ['Editar Descrição',       () => embed.description,     v => { embed.description     = v; }, true ],
-            url:         ['Editar URL do Título',    () => embed.url,             v => { embed.url             = v; }, false],
-            author_name: ['Editar Author Nome',      () => embed.author.name,     v => { embed.author.name     = v; }, false],
-            author_icon: ['Editar Author Icon URL',  () => embed.author.icon_url, v => { embed.author.icon_url = v; }, false],
-            author_url:  ['Editar Author URL',       () => embed.author.url,      v => { embed.author.url      = v; }, false],
-            footer_text: ['Editar Footer Texto',     () => embed.footer.text,     v => { embed.footer.text     = v; }, false],
-            footer_icon: ['Editar Footer Icon URL',  () => embed.footer.icon_url, v => { embed.footer.icon_url = v; }, false],
-            thumbnail:   ['Editar Thumbnail URL',    () => embed.thumbnail.url,   v => { embed.thumbnail.url   = v; }, false],
-            image:       ['Editar Image URL',        () => embed.image.url,       v => { embed.image.url       = v; }, false],
+            title:       [`${editPrefix} ${t(client, 'eb_field_title', ctx)}`,          () => embed.title,           v => { embed.title           = v; }, false],
+            description: [`${editPrefix} ${t(client, 'eb_field_description', ctx)}`,    () => embed.description,     v => { embed.description     = v; }, true ],
+            url:         [`${editPrefix} ${t(client, 'eb_field_url', ctx)}`,            () => embed.url,             v => { embed.url             = v; }, false],
+            author_name: [`${editPrefix} ${t(client, 'eb_field_author_name', ctx)}`,    () => embed.author.name,     v => { embed.author.name     = v; }, false],
+            author_icon: [`${editPrefix} ${t(client, 'eb_field_author_icon', ctx)}`,    () => embed.author.icon_url, v => { embed.author.icon_url = v; }, false],
+            author_url:  [`${editPrefix} ${t(client, 'eb_field_author_url', ctx)}`,     () => embed.author.url,      v => { embed.author.url      = v; }, false],
+            footer_text: [`${editPrefix} ${t(client, 'eb_field_footer_text', ctx)}`,    () => embed.footer.text,     v => { embed.footer.text     = v; }, false],
+            footer_icon: [`${editPrefix} ${t(client, 'eb_field_footer_icon', ctx)}`,    () => embed.footer.icon_url, v => { embed.footer.icon_url = v; }, false],
+            thumbnail:   [`${editPrefix} ${t(client, 'eb_field_thumbnail', ctx)}`,      () => embed.thumbnail.url,   v => { embed.thumbnail.url   = v; }, false],
+            image:       [`${editPrefix} ${t(client, 'eb_field_image', ctx)}`,          () => embed.image.url,       v => { embed.image.url       = v; }, false],
           };
           const [modalTitle, getter, setter, multi] = MAP[si.data.values[0]] || [];
           if (!modalTitle) return;
@@ -178,9 +187,9 @@ const EmbedBuilderUI = {
 
       const fieldSel = client.interactions.createSelect({
         user,
-        data: { placeholder: '📊 Gerenciar Fields…', options: [
-          { label: '➕ Adicionar Field', value: 'add',   description: `Atual: ${embed.fields.length}/25` },
-          { label: '🗑️ Remover Última',  value: 'remove' },
+        data: { placeholder: t(client, 'eb_fields_manage_placeholder', ctx), options: [
+          { label: t(client, 'eb_add_field_label', ctx), value: 'add',   description: t(client, 'eb_add_field_desc', { ...ctx, count: embed.fields.length }) },
+          { label: t(client, 'eb_remove_field_label', ctx),  value: 'remove' },
         ]},
         funcao: async (si) => {
           if (si.data.values[0] === 'remove') {
@@ -191,14 +200,14 @@ const EmbedBuilderUI = {
           }
           if (embed.fields.length >= 25) return;
           const modal = client.interactions.createModal({
-            user, title: 'Adicionar Field',
+            user, title: t(client, 'eb_add_field_modal_title', ctx),
             components: [
-              { type: 1, components: [{ type: 4, custom_id: 'name',  label: 'Nome do field',  style: 1, required: true, max_length: 256 }] },
-              { type: 1, components: [{ type: 4, custom_id: 'value', label: 'Valor do field', style: 2, required: true, max_length: 1024 }] },
-              { type: 1, components: [{ type: 4, custom_id: 'inline', label: 'Inline? (sim/não)', style: 1, required: false, max_length: 5, placeholder: 'não' }] },
+              { type: 1, components: [{ type: 4, custom_id: 'name',  label: t(client, 'eb_field_name_label', ctx),  style: 1, required: true, max_length: 256 }] },
+              { type: 1, components: [{ type: 4, custom_id: 'value', label: t(client, 'eb_field_value_label', ctx), style: 2, required: true, max_length: 1024 }] },
+              { type: 1, components: [{ type: 4, custom_id: 'inline', label: t(client, 'eb_field_inline_label', ctx), style: 1, required: false, max_length: 5, placeholder: t(client, 'eb_field_inline_placeholder', ctx) }] },
             ],
             funcao: async (mi, _, fields) => {
-              embed.fields.push({ name: fields.name, value: fields.value, inline: ['sim', 's', 'yes', 'y'].includes((fields.inline || '').toLowerCase()) });
+              embed.fields.push({ name: fields.name, value: fields.value, inline: ['sim', 's', 'yes', 'y', 'sí', 'si'].includes((fields.inline || '').toLowerCase()) });
               await client.interactions._callback(mi, { type: 6 });
               return renderBuilder(mi, followUpMsgId);
             }
@@ -209,13 +218,13 @@ const EmbedBuilderUI = {
 
       const colorSel = client.interactions.createSelect({
         user,
-        data: { placeholder: '🎨 Escolher cor…', options: PRESET_COLORS.map(c => ({ label: c.label, value: c.value })) },
+        data: { placeholder: t(client, 'eb_color_select_placeholder', ctx), options: presetColors(client, ctx).map(c => ({ label: c.label, value: c.value })) },
         funcao: async (si) => {
           const val = si.data.values[0];
           if (val === 'custom') {
             const modal = client.interactions.createModal({
-              user, title: 'Cor HEX Personalizada',
-              components: [{ type: 1, components: [{ type: 4, custom_id: 'hex', label: 'HEX (ex: FF5733)', style: 1, required: true, max_length: 7, placeholder: 'FF5733' }] }],
+              user, title: t(client, 'eb_custom_hex_modal_title', ctx),
+              components: [{ type: 1, components: [{ type: 4, custom_id: 'hex', label: t(client, 'eb_hex_label', ctx), style: 1, required: true, max_length: 7, placeholder: t(client, 'eb_hex_placeholder', ctx) }] }],
               funcao: async (mi, _, fields) => {
                 const hex = (fields.hex || '').replace('#', '').trim();
                 if (!/^[0-9A-Fa-f]{6}$/.test(hex)) return;
@@ -244,23 +253,23 @@ const EmbedBuilderUI = {
       };
 
       const btnConfirm = client.interactions.createButton({
-        user, data: { label: '✅ Confirmar embed', style: 3 },
+        user, data: { label: t(client, 'eb_confirm_label', ctx), style: 3 },
         funcao: (i2) => finish(i2, cleanEmbed(embed))
       });
 
       const btnRemove = client.interactions.createButton({
-        user, data: { label: '🗑️ Remover embed', style: 4 },
+        user, data: { label: t(client, 'eb_remove_label', ctx), style: 4 },
         funcao: (i2) => finish(i2, null)
       });
 
       const btnCancel = client.interactions.createButton({
-        user, data: { label: '✖️ Cancelar', style: 2 },
+        user, data: { label: t(client, 'eb_cancel_label', ctx), style: 2 },
         funcao: (i2) => finish(i2, existingEmbed ?? null)
       });
 
       const builderPayload = {
-        content:    `🎨 **${title}** — o preview abaixo é exatamente como a embed vai ficar!`,
-        embeds:     [buildLiveEmbed(embed)],
+        content:    t(client, 'eb_builder_content', { ...ctx, title }),
+        embeds:     [buildLiveEmbed(embed, client, ctx)],
         components: [
           { type: 1, components: [editSel] },
           { type: 1, components: [fieldSel] },
@@ -277,8 +286,8 @@ const EmbedBuilderUI = {
     };
 
     const initialPayload = {
-      content:    `🎨 **${title}** — o preview abaixo é exatamente como a embed vai ficar!`,
-      embeds:     [buildLiveEmbed(embed)],
+      content:    t(client, 'eb_builder_content', { ...ctx, title }),
+      embeds:     [buildLiveEmbed(embed, client, ctx)],
       components: [],
       flags: 64,
     };

@@ -18,6 +18,12 @@ class SeqQuestionsManager {
 
   constructor(client) {
     this.client = client;
+    this._ctx = {};
+  }
+
+  /** Atalho pra tradução de uma chave do sistema "ticket". */
+  _t(key, extra = {}) {
+    return this.client.t(`ticket.${key}`, { ...this._ctx, ...extra });
   }
 
   /* ═══════════════════════════════════════════
@@ -32,12 +38,14 @@ class SeqQuestionsManager {
    * @param {object} opts.panel      Painel (ou opção do select) com seqQuestionsConfig
    * @param {string} opts.channelId
    * @param {string} opts.userId
+   * @param {object} [opts.ctx]      Contexto de locale (de localeCtx), pro usuário que abriu o ticket
    * @param {object} [opts.messages] Mensagens personalizadas (vindas de
    *        ticketMensagensConfig, já resolvidas com fallback no chamador):
    *          { inicioTitulo, inicioDescricao, canceladoMensagem, resumoTitulo }
    * @returns {Promise<object|null>} Mapa de respostas ou null se cancelado/timeout
    */
-  async run({ panel, channelId, userId, messages = {} }) {
+  async run({ panel, channelId, userId, ctx = {}, messages = {} }) {
+    this._ctx = ctx;
     const cfg = panel.seqQuestionsConfig;
     if (!cfg?.enabled || !cfg.questions?.length) return null;
 
@@ -50,11 +58,9 @@ class SeqQuestionsManager {
       method: 'POST',
       body:   {
         embeds: [{
-          title:       messages.inicioTitulo || '📋 Formulário de Atendimento',
+          title:       messages.inicioTitulo || this._t('default_seq_intro_title'),
           description: messages.inicioDescricao ||
-                       `Olá <@${userId}>! Por favor, responda as perguntas abaixo.\n\n` +
-                       `Você tem **${timeoutSec} segundos** para cada resposta.\n` +
-                       `Digite \`cancelar\` a qualquer momento para encerrar.`,
+                       this._t('default_seq_intro_desc').replaceAll('{user}', `<@${userId}>`).replaceAll('{timeout}', String(timeoutSec)),
           color: 0x7C8FFF
         }]
       }
@@ -76,7 +82,7 @@ class SeqQuestionsManager {
         await DiscordRequest(`/channels/${channelId}/messages`, {
           method: 'POST',
           body:   {
-            content: `<@${userId}> ${messages.canceladoMensagem || '⚠️ Formulário encerrado.'}`,
+            content: `<@${userId}> ${messages.canceladoMensagem || this._t('default_seq_cancelled')}`,
             flags:   0
           }
         });
@@ -120,7 +126,7 @@ class SeqQuestionsManager {
           description: `**[${index}/${total}] ${question.label}**${hint ? `\n${hint}` : ''}` +
                        `${question.placeholder ? `\n\n*${question.placeholder}*` : ''}`,
           color:       0x5865F2,
-          footer:      { text: `Pergunta ${index} de ${total}` }
+          footer:      { text: this._t('sq_question_footer', { index, total }) }
         }]
       }
     });
@@ -146,7 +152,7 @@ class SeqQuestionsManager {
       // resposta inválida — notifica e tenta de novo recursivamente
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: 'POST',
-        body:   { content: `⚠️ <@${userId}> Resposta inválida. Tente novamente.` }
+        body:   { content: this._t('sq_answer_invalid', { userId }) }
       });
       return this._askTextQuestion({ channelId, userId, question, index, total, timeout });
     }
@@ -161,9 +167,9 @@ class SeqQuestionsManager {
       method: 'POST',
       body: {
         embeds: [{
-          description: `**[${index}/${total}] ${question.label}**\n_Envie um arquivo ou imagem como resposta._`,
+          description: `**[${index}/${total}] ${question.label}**\n${this._t('sq_attachment_prompt')}`,
           color:       0x5865F2,
-          footer:      { text: `Pergunta ${index} de ${total}` }
+          footer:      { text: this._t('sq_question_footer', { index, total }) }
         }]
       }
     });
@@ -181,7 +187,7 @@ class SeqQuestionsManager {
       if (question.required === false) return null;
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: 'POST',
-        body:   { content: `⚠️ <@${userId}> Envie um arquivo/imagem como resposta (ou digite \`cancelar\`).` }
+        body:   { content: this._t('sq_attachment_required', { userId }) }
       });
       return this._askAttachmentQuestion({ channelId, userId, question, index, total, timeout });
     }
@@ -195,7 +201,7 @@ class SeqQuestionsManager {
     const isMulti = kind === 'multiple' || kind === 'checkbox';
 
     const commonData = {
-      placeholder: question.placeholder || 'Escolha uma opção...',
+      placeholder: question.placeholder || this._t('sq_component_placeholder'),
       min_values:  kind === 'checkbox' ? 0 : 1,
       max_values:  isMulti ? Math.max(1, Math.min(25, question.options?.length || 25)) : 1,
     };
@@ -235,7 +241,7 @@ class SeqQuestionsManager {
           embeds: [{
             description: `**[${index}/${total}] ${question.label}**`,
             color:       0x5865F2,
-            footer:      { text: `Pergunta ${index} de ${total} · responda pelo menu abaixo` }
+            footer:      { text: this._t('sq_question_footer_component', { index, total }) }
           }],
           components: [{ type: 1, components: [component] }],
         },
@@ -255,7 +261,7 @@ class SeqQuestionsManager {
         if (q.tipo === 'member') return value.map(v => `<@${v}>`).join(', ');
         if (q.tipo === 'role')   return value.map(v => `<@&${v}>`).join(', ');
         if (q.tipo === 'channel') return value.map(v => `<#${v}>`).join(', ');
-        if (q.tipo === 'attachment') return value.map(v => `[anexo](${v})`).join(', ');
+        if (q.tipo === 'attachment') return value.map(v => `[${this._t('sq_attachment_link_label')}](${v})`).join(', ');
         return value.join(', ') || '-';
       }
       if (q.tipo === 'member')  return `<@${value}>`;
@@ -271,10 +277,10 @@ class SeqQuestionsManager {
     }));
 
     const embed = {
-      title:  resumoTitulo || '✅ Respostas Recebidas',
+      title:  resumoTitulo || this._t('default_seq_summary_title'),
       color:  0x57F287,
       fields,
-      footer: { text: `Respondido por ${userId}` },
+      footer: { text: this._t('sq_answered_by_footer', { userId }) },
       timestamp: new Date().toISOString()
     };
 
@@ -286,8 +292,8 @@ class SeqQuestionsManager {
       body:   {
         content: `<@${userId}>`,
         embeds:  [{
-          title:       '✅ Perguntas Respondidas!',
-          description: 'Já anotei tudo! Agora é só esperar a equipe te chamar~ 🌸',
+          title:       this._t('sq_completed_title'),
+          description: this._t('sq_completed_desc'),
           color:       0x57F287
         }]
       }
@@ -305,7 +311,7 @@ class SeqQuestionsManager {
       await DiscordRequest(`/channels/${cfg.logChannelId}/messages`, {
         method: 'POST',
         body:   {
-          content: `📥 Novo formulário de <@${userId}> — ticket: <#${channelId}>`,
+          content: this._t('sq_log_new_form', { userId, channelId }),
           embeds:  [embed]
         }
       }).catch(err => console.error('[SeqQuestions] Erro ao enviar no log:', err));
@@ -327,8 +333,8 @@ class SeqQuestionsManager {
       }
       case 'yesno': {
         const v = value?.toLowerCase();
-        if (['sim', 's', 'yes', 'y'].includes(v)) return 'Sim';
-        if (['não', 'nao', 'n', 'no'].includes(v)) return 'Não';
+        if (['sim', 's', 'yes', 'y', 'sí', 'si'].includes(v)) return this._t('sq_yes');
+        if (['não', 'nao', 'n', 'no'].includes(v)) return this._t('sq_no');
         return false;
       }
       case 'short': {
@@ -348,9 +354,9 @@ class SeqQuestionsManager {
 
   _getHint(question) {
     switch (question.tipo) {
-      case 'number': return '_Responda com um número_';
-      case 'yesno':  return '_Responda com **Sim** ou **Não**_';
-      case 'short':  return '_Resposta curta (até 100 caracteres)_';
+      case 'number': return this._t('sq_hint_number');
+      case 'yesno':  return this._t('sq_hint_yesno');
+      case 'short':  return this._t('sq_hint_short');
       default:       return '';
     }
   }

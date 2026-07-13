@@ -10,6 +10,7 @@ const { REST }    = require('@discordjs/rest');
 const { Routes }  = require('discord-api-types/v10');
 
 const DiscordRequest       = require('./DiscordRequest.js');
+const { localeCtx }        = require('./Utils/ctxLocale.js');
 const connectMongo         = require('./ConnectMongo.js');
 const InteractionManager   = require('./Manager/InteractionManager.js');
 const NextMessageCollector = require('./Manager/MessageCollectorManager.js');
@@ -611,6 +612,7 @@ async _onReactionAdd(d) {
 
     async _replyBlacklisted(interaction, userId) {
         const entry = this.blacklist.getEntry(userId);
+        const ctx = localeCtx(interaction);
         try {
             await DiscordRequest(
                 `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -621,12 +623,12 @@ async _onReactionAdd(d) {
                         data: {
                             flags: 64, // efêmera — só o usuário banido vê
                             embeds: [{
-                                title: '⛔ Você está banido da Ayami',
-                                description: 'Você não pode usar a Ayami em nenhum servidor enquanto estiver na blacklist global.',
+                                title: this.t('blacklist.banned_title', ctx),
+                                description: this.t('blacklist.banned_description', ctx),
                                 fields: [
-                                    { name: 'Staff responsável', value: entry?.staffId ? `<@${entry.staffId}>` : 'Desconhecido', inline: true },
-                                    { name: 'Quando', value: entry?.appliedAt ? `<t:${Math.floor(entry.appliedAt / 1000)}:R>` : 'Desconhecido', inline: true },
-                                    { name: 'Motivo', value: entry?.motivo ?? 'Não especificado', inline: false },
+                                    { name: this.t('blacklist.banned_field_staff', ctx), value: entry?.staffId ? `<@${entry.staffId}>` : this.t('blacklist.banned_unknown', ctx), inline: true },
+                                    { name: this.t('blacklist.banned_field_when', ctx), value: entry?.appliedAt ? `<t:${Math.floor(entry.appliedAt / 1000)}:R>` : this.t('blacklist.banned_unknown', ctx), inline: true },
+                                    { name: this.t('blacklist.banned_field_reason', ctx), value: entry?.motivo ?? this.t('blacklist.banned_no_reason', ctx), inline: false },
                                 ],
                                 color: 0xED4245,
                             }],
