@@ -2,6 +2,7 @@
 
 const getPerm         = require("../../function/Utils/GetPerm.js");
 const DiscordRequest  = require("../../function/DiscordRequest.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 /* ─────────────────────────────────────────────
    CORES DA AYAMI
@@ -76,6 +77,7 @@ module.exports = {
     });
 
     if (!perms || !perms.includes("MANAGE_GUILD")) {
+      const permCtx = localeCtx(interaction);
       return DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
@@ -83,7 +85,11 @@ module.exports = {
           body: {
             type: 4,
             data: cv2Payload([
-              cv2Text("# ❌ Sem permissão\nVocê precisa da permissão **Gerenciar Servidor** para usar este comando.")
+              cv2Text(client.t("common.no_permission_title", {
+                ...permCtx,
+                perm: client.t("common.perm_manage_guild", permCtx),
+                action: client.t("common.action_use_command", permCtx),
+              }))
             ], { accentColor: 0xED4245, ephemeral: true })
           }
         }
@@ -99,33 +105,34 @@ module.exports = {
 
     const user = interaction.member.user.id;
     const e    = client.emoji;
+    const ctx  = localeCtx(interaction, { emoji: e?.animada || '' });
 
     const configSelect = client.interactions.createSelect({
       user,
       data: {
-        placeholder: "Selecione um sistema para configurar",
+        placeholder: client.t("configurar.select_placeholder", ctx),
         options: [
           {
-            label: "Sistema de Tickets",
-            description: "Painéis, categorias, staff e automações",
+            label: client.t("configurar.opt_tickets_label", ctx),
+            description: client.t("configurar.opt_tickets_desc", ctx),
             value: "tickets",
             emoji: { name: "🎫" }
           },
           {
-            label: "Sistema de UID",
-            description: "Compartilhamento automático de UID",
+            label: client.t("configurar.opt_uid_label", ctx),
+            description: client.t("configurar.opt_uid_desc", ctx),
             value: "uid",
             emoji: { name: "✨" }
           },
           {
-            label: "Sistema de segurança",
-            description: "Analise permissões, cargos, bots e segurança",
+            label: client.t("configurar.opt_security_label", ctx),
+            description: client.t("configurar.opt_security_desc", ctx),
             value: "verification",
             emoji: { name: "🔍" }
           },
           {
-            label: "Logic Builder",
-            description: "Criação de fluxos e automações",
+            label: client.t("configurar.opt_logic_label", ctx),
+            description: client.t("configurar.opt_logic_desc", ctx),
             value: "logic",
             emoji: { name: "⚡" }
           }
@@ -173,29 +180,16 @@ module.exports = {
       ? `https://cdn.discordapp.com/icons/${interaction.guild_id}/${guildData.icon}.png?size=1024`
       : null;
 
-    const headerText =
-      `# ⚙️ Central de Configuração ${e?.animada || ''}\n` +
-      `Bem-vindo ao painel principal de configuração!\n\n` +
-      `> Escolha um sistema no menu abaixo para começar.`;
+    const headerText = client.t("configurar.header", ctx);
 
     const blocks = [
       thumbUrl ? cv2SectionThumb(headerText, thumbUrl) : cv2Text(headerText),
       cv2Divider(),
-      cv2Text(
-        `**🎫 Sistema de Tickets**\n` +
-        `Configure painéis, categorias, staff, modais e automações.\n\n` +
-        `**✨ Compartilhamento de UID**\n` +
-        `Configure envio automático de UID em canais específicos.\n` +
-        `Suporte a webhook com nome e foto do usuário.\n\n` +
-        `**🔍 Sistema de Segurança**\n` +
-        `Analise permissões, cargos, bots e segurança do servidor.\n\n` +
-        `**⚡ Logic Builder**\n` +
-        `Crie automações e fluxos personalizados para seu servidor.`
-      ),
+      cv2Text(client.t("configurar.body", ctx)),
       cv2Divider(),
       row(configSelect),
       cv2Divider(),
-      cv2Text(`-# ${guildData.name || `Servidor ${interaction.guild_id}`}`),
+      cv2Text(`-# ${guildData.name || client.t("configurar.fallback_guild_name", { ...ctx, guildId: interaction.guild_id })}`),
     ];
 
     return DiscordRequest(

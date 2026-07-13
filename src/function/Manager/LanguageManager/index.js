@@ -17,7 +17,7 @@ class LanguageManager {
    */
   constructor(options = {}) {
     this.systemsPath    = options.systemsPath ?? path.resolve(__dirname, "../../../systems");
-    this.fallbackLocale = options.fallbackLocale ?? "en-US";
+    this.fallbackLocale = options.fallbackLocale ?? "pt-BR";
     this.shardId        = options.shardId ?? "local";
 
     // ── Módulos internos (todos stateless entre shards) ──

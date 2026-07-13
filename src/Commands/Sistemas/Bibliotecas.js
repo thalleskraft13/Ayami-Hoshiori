@@ -2,6 +2,7 @@
 
 const DiscordRequest = require('../../function/DiscordRequest.js');
 const getPerm        = require('../../function/Utils/GetPerm.js');
+const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTES
@@ -52,61 +53,62 @@ const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
 
 const INSTALL_REQUIRED_FIELDS = {
   // Ações — mensagem
-  'message:send_message':        [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal onde as mensagens serão enviadas.' }],
-  'message:delete_bot_message':  [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal onde a mensagem do bot está.' }],
+  'message:send_message':        [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_send_message_channel' }],
+  'message:delete_bot_message':  [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_delete_bot_message_channel' }],
   // Ações — canal
-  'channel:delete_channel':      [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal a ser deletado.' }],
-  'channel:rename_channel':      [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal a ser renomeado.' }],
+  'channel:delete_channel':      [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_delete_channel' }],
+  'channel:rename_channel':      [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_rename_channel' }],
   'channel:lock_channel':        [
-    { field: 'channelId', label: '📌 Canal', description: 'Mencione ou envie o ID do canal a ser trancado.' },
-    { field: 'roleId',    label: '🏷️ Cargo', description: 'Mencione ou envie o ID do cargo que terá o acesso bloqueado (vazio = @everyone).' }
+    { field: 'channelId', labelKey: 'field_channel', descKey: 'desc_lock_channel' },
+    { field: 'roleId',    labelKey: 'field_role',    descKey: 'desc_lock_role' }
   ],
   'channel:unlock_channel':      [
-    { field: 'channelId', label: '📌 Canal', description: 'Mencione ou envie o ID do canal a ser destrancado.' },
-    { field: 'roleId',    label: '🏷️ Cargo', description: 'Mencione ou envie o ID do cargo (vazio = @everyone).' }
+    { field: 'channelId', labelKey: 'field_channel', descKey: 'desc_unlock_channel' },
+    { field: 'roleId',    labelKey: 'field_role',    descKey: 'desc_unlock_role' }
   ],
   // Ações — usuário
-  'user:give_role':              [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a ser dado.' }],
-  'user:remove_role':            [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a ser removido.' }],
-  'user:give_temp_role':         [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo temporário.' }],
-  'user:toggle_role':            [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a ser alternado.' }],
+  'user:give_role':              [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_give_role' }],
+  'user:remove_role':            [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_remove_role' }],
+  'user:give_temp_role':         [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_give_temp_role' }],
+  'user:toggle_role':            [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_toggle_role' }],
   // Condições — usuário
-  'user:has_role':               [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a verificar.' }],
-  'user:not_has_role':           [{ field: 'roleId',    label: '🏷️ Cargo',  description: 'Mencione ou envie o ID do cargo a verificar.' }],
+  'user:has_role':               [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_check_role' }],
+  'user:not_has_role':           [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_check_role' }],
   // Condições — canal
-  'channel:is_channel':          [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal específico.' }],
-  'channel:not_channel':         [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal a ignorar.' }],
+  'channel:is_channel':          [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_is_channel' }],
+  'channel:not_channel':         [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_not_channel' }],
   // Trigger filters
-  'trigger:message':             [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal filtro do trigger (deixe em branco para qualquer canal).' }],
-  'trigger:reaction':            [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal filtro do trigger.' }],
-  'trigger:component':           [{ field: 'channelId', label: '📌 Canal',  description: 'Mencione ou envie o ID do canal filtro do trigger.' }],
+  'trigger:message':             [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_message' }],
+  'trigger:reaction':            [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_generic' }],
+  'trigger:component':           [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_generic' }],
 };
 
 /* ═══════════════════════════════════════════════════════════
    LABEL AMIGÁVEL PARA AÇÕES/CONDIÇÕES
    ═══════════════════════════════════════════════════════════ */
 
-function _actionLabel(category, type) {
+function _actionLabel(client, ctx, category, type) {
   const map = {
-    'message:send_message':       '💬 Enviar mensagem',
-    'message:send_dm':            '📩 Enviar DM',
-    'message:reply_message':      '↩️ Responder mensagem',
-    'message:delete_message':     '🗑️ Apagar mensagem',
-    'message:delete_bot_message': '🗑️ Apagar mensagem do bot',
-    'user:give_role':             '🏷️ Dar cargo',
-    'user:remove_role':           '🏷️ Remover cargo',
-    'user:give_temp_role':        '⏱️ Cargo temporário',
-    'user:toggle_role':           '🔄 Alternar cargo',
-    'user:has_role':              '👤 Possui cargo',
-    'user:not_has_role':          '👤 Não possui cargo',
-    'channel:lock_channel':       '🔒 Trancar canal',
-    'channel:unlock_channel':     '🔓 Destrancar canal',
-    'channel:delete_channel':     '❌ Apagar canal',
-    'channel:rename_channel':     '✏️ Renomear canal',
-    'channel:is_channel':         '📌 Canal específico',
-    'channel:not_channel':        '📌 Não é canal',
+    'message:send_message':       'action_send_message',
+    'message:send_dm':            'action_send_dm',
+    'message:reply_message':      'action_reply_message',
+    'message:delete_message':     'action_delete_message',
+    'message:delete_bot_message': 'action_delete_bot_message',
+    'user:give_role':             'action_give_role',
+    'user:remove_role':           'action_remove_role',
+    'user:give_temp_role':        'action_give_temp_role',
+    'user:toggle_role':           'action_toggle_role',
+    'user:has_role':              'action_has_role',
+    'user:not_has_role':          'action_not_has_role',
+    'channel:lock_channel':       'action_lock_channel',
+    'channel:unlock_channel':     'action_unlock_channel',
+    'channel:delete_channel':     'action_delete_channel',
+    'channel:rename_channel':     'action_rename_channel',
+    'channel:is_channel':         'action_is_channel',
+    'channel:not_channel':        'action_not_channel',
   };
-  return map[`${category}:${type}`] || `${category}/${type}`;
+  const key = map[`${category}:${type}`];
+  return key ? client.t(`biblioteca.${key}`, ctx) : `${category}/${type}`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -118,13 +120,13 @@ function _actionLabel(category, type) {
      se dois fluxos diferentes têm a mesma ação, pergunta separado.
    ═══════════════════════════════════════════════════════════ */
 
-function _buildInstallQuestions(entry) {
+function _buildInstallQuestions(entry, client, ctx) {
   const questions = [];
   const flows     = entry.flows || [];
 
   for (let fi = 0; fi < flows.length; fi++) {
     const flow     = flows[fi];
-    const flowName = flow.name || `Fluxo ${fi + 1}`;
+    const flowName = flow.name || client.t('biblioteca.unnamed_flow', { ...ctx, n: fi + 1 });
 
     // ── Ações ──────────────────────────────────────────────
     for (let ai = 0; ai < (flow.actions || []).length; ai++) {
@@ -133,7 +135,7 @@ function _buildInstallQuestions(entry) {
       const reqFields = INSTALL_REQUIRED_FIELDS[key];
       if (!reqFields) continue;
 
-      for (const { field, label, description } of reqFields) {
+      for (const { field, labelKey, descKey } of reqFields) {
         questions.push({
           storeKey:    `f${fi}_a${ai}_${field}`,
           flowIndex:   fi,
@@ -143,9 +145,9 @@ function _buildInstallQuestions(entry) {
           category:    action.category,
           type:        action.type,
           field,
-          label,
-          description,
-          actionLabel: `${_actionLabel(action.category, action.type)} (${flowName})`
+          label:       client.t(`biblioteca.${labelKey}`, ctx),
+          description: client.t(`biblioteca.${descKey}`, ctx),
+          actionLabel: client.t('biblioteca.action_suffix', { ...ctx, label: _actionLabel(client, ctx, action.category, action.type), flowName })
         });
       }
     }
@@ -157,7 +159,7 @@ function _buildInstallQuestions(entry) {
       const reqFields = INSTALL_REQUIRED_FIELDS[key];
       if (!reqFields) continue;
 
-      for (const { field, label, description } of reqFields) {
+      for (const { field, labelKey, descKey } of reqFields) {
         questions.push({
           storeKey:    `f${fi}_c${ci}_${field}`,
           flowIndex:   fi,
@@ -167,9 +169,9 @@ function _buildInstallQuestions(entry) {
           category:    cond.category,
           type:        cond.type,
           field,
-          label,
-          description,
-          actionLabel: `${_actionLabel(cond.category, cond.type)} — condição (${flowName})`
+          label:       client.t(`biblioteca.${labelKey}`, ctx),
+          description: client.t(`biblioteca.${descKey}`, ctx),
+          actionLabel: client.t('biblioteca.condition_suffix', { ...ctx, label: _actionLabel(client, ctx, cond.category, cond.type), flowName })
         });
       }
     }
@@ -179,7 +181,7 @@ function _buildInstallQuestions(entry) {
       const triggerKey = `trigger:${flow.trigger.category}`;
       const reqFields  = INSTALL_REQUIRED_FIELDS[triggerKey];
       if (reqFields) {
-        for (const { field, label, description } of reqFields) {
+        for (const { field, labelKey, descKey } of reqFields) {
           questions.push({
             storeKey:    `f${fi}_t_${field}`,
             flowIndex:   fi,
@@ -189,9 +191,9 @@ function _buildInstallQuestions(entry) {
             category:    flow.trigger.category,
             type:        flow.trigger.type,
             field,
-            label,
-            description: description + '\nEnvie `-` para não filtrar por canal.',
-            actionLabel: `🎯 Trigger (${flowName})`
+            label:       client.t(`biblioteca.${labelKey}`, ctx),
+            description: client.t(`biblioteca.${descKey}`, ctx) + client.t('biblioteca.trigger_skip_suffix', ctx),
+            actionLabel: client.t('biblioteca.trigger_label_generic', { ...ctx, flowName })
           });
         }
       }
@@ -406,22 +408,23 @@ function _clampPage(page, total, perPage = 8) {
 async function _startInstallWizard(interaction, client, lib, entry, userId, guildId, e) {
   guildId = guildId || interaction.guild_id;
   const channelId = interaction.channel_id;
+  const ctx = localeCtx(interaction);
 
   // Verifica permissão
   let perms = [];
   try {
-    perms = await getPerm({ guildId, id: userId });
+    perms = await getPerm({ guildId, id: userId, client });
   } catch (err) {
     console.error('[instalar] getPerm error:', err);
   }
 
   if (!perms.includes('MANAGE_GUILD') && !perms.includes('ADMINISTRATOR')) {
     return _edit(interaction, client, cv2Payload([
-      cv2Text(`# ${e.brava} Sem permissão\nVocê precisa da permissão **Gerenciar Servidor** para instalar sistemas.`)
+      cv2Text(client.t('biblioteca.no_permission_install', { ...ctx, eBrava: e.brava }))
     ], { accentColor: COLOR.danger }));
   }
 
-  const questions = _buildInstallQuestions(entry);
+  const questions = _buildInstallQuestions(entry, client, ctx);
 
   // Sem perguntas — instala direto
   if (!questions.length) {
@@ -446,13 +449,7 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
   const summaryLines = questions.map((q, i) => `\`${i + 1}.\` **${q.label}** — _${q.actionLabel}_`).slice(0, 25).join('\n');
 
   await _edit(interaction, client, cv2Payload([
-    cv2Text(
-      `# ${e.pensando} Configurando — ${entry.name}\n` +
-      `Esse sistema precisa de **${questions.length} configuração(ões)** antes de instalar.\n\n` +
-      `Responda as próximas mensagens neste canal.\n` +
-      `Você tem **2 minutos** para cada resposta.\n\n` +
-      `> Envie \`-\` para pular (quando possível) ou \`cancelar\` para abortar.`
-    ),
+    cv2Text(client.t('biblioteca.install_configuring', { ...ctx, ePensando: e.pensando, entryName: entry.name, count: questions.length })),
     cv2Divider(),
     cv2Text(summaryLines),
   ], { accentColor: COLOR.main }));
@@ -473,10 +470,10 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
           description: q.description,
           color:       COLOR.library,
           fields: [
-            { name: 'Para', value: q.actionLabel, inline: true },
-            { name: 'Fluxo', value: q.flowName,   inline: true }
+            { name: client.t('biblioteca.install_question_for', ctx),  value: q.actionLabel, inline: true },
+            { name: client.t('biblioteca.install_question_flow', ctx), value: q.flowName,    inline: true }
           ],
-          footer: { text: 'Envie `-` para pular • `cancelar` para abortar' }
+          footer: { text: client.t('biblioteca.install_question_footer', ctx) }
         }]
       }
     });
@@ -490,8 +487,8 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
         method: 'POST',
         body: {
           embeds: [{
-            title:       `${e.sonolenta} Tempo esgotado`,
-            description: 'A instalação foi cancelada por inatividade. Pode tentar de novo quando quiser~',
+            title:       client.t('biblioteca.install_timeout_title', { ...ctx, eSonolenta: e.sonolenta }),
+            description: client.t('biblioteca.install_timeout_desc', ctx),
             color:       COLOR.danger
           }]
         }
@@ -506,8 +503,8 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
         method: 'POST',
         body: {
           embeds: [{
-            title:       `${e.emburrada} Instalação cancelada`,
-            description: 'Tudo bem, pode instalar quando quiser~',
+            title:       client.t('biblioteca.install_cancelled_title', { ...ctx, eEmburrada: e.emburrada }),
+            description: client.t('biblioteca.install_cancelled_desc', ctx),
             color:       COLOR.main
           }]
         }
@@ -541,21 +538,20 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
       version: entry.version
     });
 
+    const ctx = localeCtx(interaction);
+
     const configLines = questions.length
       ? questions.map(q => {
           const raw   = collected[q.storeKey] || '-';
           const clean = raw.replace(/[<#@&!>]/g, '').trim();
-          return `• **${q.actionLabel}** → \`${q.field}\` = ${clean || '_não definido_'}`;
+          return `• **${q.actionLabel}** → \`${q.field}\` = ${clean || client.t('biblioteca.install_not_set', ctx)}`;
         }).join('\n')
-      : '_Nenhuma configuração necessária_';
+      : client.t('biblioteca.install_no_config', ctx);
 
     const blocks = [
-      cv2Text(
-        `# ${e.festa} ${entry.name} instalado!\n` +
-        `**${flowIds.length}** fluxo(s) criado(s) neste servidor!`
-      ),
+      cv2Text(client.t('biblioteca.install_success', { ...ctx, eFesta: e.festa, entryName: entry.name, count: flowIds.length })),
       cv2Divider(),
-      cv2Text(`**Configurações aplicadas:**\n${configLines}`),
+      cv2Text(client.t('biblioteca.install_config_applied', { ...ctx, lines: configLines })),
     ];
     const payload = cv2Payload(blocks, { accentColor: COLOR.success });
 
@@ -565,7 +561,8 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
     return _edit(interaction, client, payload);
 
   } catch (err) {
-    const blocks = [cv2Text(`# ${e.assustada} Erro na instalação\n${err.message}`)];
+    const ctx = localeCtx(interaction);
+    const blocks = [cv2Text(client.t('biblioteca.install_error', { ...ctx, eAssustada: e.assustada, message: err.message }))];
     const payload = cv2Payload(blocks, { accentColor: COLOR.danger });
 
     if (channelId) {
@@ -695,15 +692,18 @@ module.exports = {
         case 'minhas':    return await _minhas(interaction, client, lib, userId, e);
         case 'perfil':    return await _perfil(interaction, client, lib, opts, userId, e);
         case 'destaques': return await _destaques(interaction, client, lib, e);
-        default:
+        default: {
+          const ctx = localeCtx(interaction);
           return _edit(interaction, client, cv2Payload([
-            cv2Text(`# ${e.assustada} Subcomando desconhecido\nNão reconheci esse comando. Tente novamente!`)
+            cv2Text(client.t('biblioteca.unknown_subcommand', { ...ctx, eAssustada: e.assustada }))
           ], { accentColor: COLOR.danger }));
+        }
       }
     } catch (err) {
       console.error(`[biblioteca/${sub}]`, err);
+      const ctx = localeCtx(interaction);
       return _edit(interaction, client, cv2Payload([
-        cv2Text(`# ${e.assustada} Algo deu errado...\n${err.message || 'Ocorreu um erro inesperado. Me desculpe!'}`)
+        cv2Text(client.t('biblioteca.generic_error', { ...ctx, eAssustada: e.assustada, message: err.message || client.t('biblioteca.generic_error_fallback', ctx) }))
       ], { accentColor: COLOR.danger }));
     }
   }
@@ -713,7 +713,7 @@ module.exports = {
    HELPER — resolve nome de autor
    ═══════════════════════════════════════════════════════════ */
 
-async function _resolveAuthorName(lib, authorId, fallback = null) {
+async function _resolveAuthorName(lib, authorId, client, ctx, fallback = null) {
   if (fallback && fallback !== authorId) return fallback;
 
   try {
@@ -723,10 +723,10 @@ async function _resolveAuthorName(lib, authorId, fallback = null) {
 
   try {
     const userData = await DiscordRequest(`/users/${authorId}`);
-    return userData?.global_name || userData?.username || `Usuário ${authorId.slice(-4)}`;
+    return userData?.global_name || userData?.username || client.t('biblioteca.fallback_user', { ...ctx, suffix: authorId.slice(-4) });
   } catch {}
 
-  return `Usuário ${authorId.slice(-4)}`;
+  return client.t('biblioteca.fallback_user', { ...ctx, suffix: authorId.slice(-4) });
 }
 
 function _opts(interaction) {
@@ -736,21 +736,22 @@ function _opts(interaction) {
   return opts;
 }
 
-function _stars(avg, count) {
-  if (!count) return '☆☆☆☆☆ _sem avaliações_';
+function _stars(client, ctx, avg, count) {
+  if (!count) return client.t('biblioteca.no_ratings', ctx);
   const full = Math.round(avg);
   return '⭐'.repeat(full) + '☆'.repeat(5 - full) + ` ${avg.toFixed(1)}`;
 }
 
-function _triggerLabel(trigger) {
-  if (!trigger) return 'Não configurado';
+function _triggerLabel(client, ctx, trigger) {
+  if (!trigger) return client.t('biblioteca.not_configured', ctx);
   const labels = {
-    'message:message_created':  '💬 Mensagem criada',
-    'member:member_joined':     '👋 Membro entrou',
-    'component:button_clicked': '🖱️ Botão clicado',
-    'time:scheduled_trigger':   '🕐 Agendado'
+    'message:message_created':  'trigger_message_created',
+    'member:member_joined':     'trigger_member_joined',
+    'component:button_clicked': 'trigger_button_clicked',
+    'time:scheduled_trigger':   'trigger_scheduled'
   };
-  return labels[`${trigger.category}:${trigger.type}`] || `${trigger.category}/${trigger.type}`;
+  const key = labels[`${trigger.category}:${trigger.type}`];
+  return key ? client.t(`biblioteca.${key}`, ctx) : `${trigger.category}/${trigger.type}`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -769,10 +770,11 @@ async function _pesquisar(interaction, client, lib, opts, userId, e) {
   });
 
   if (!results.length) {
+    const ctx = localeCtx(interaction);
     return _edit(interaction, client, cv2Payload([
       cv2Text(
-        `# ${e.emduvida} Nenhum resultado encontrado\n` +
-        `Não encontrei nenhum fluxo com esses filtros.\nTente outros termos ou remova alguns filtros~`
+        `# ${e.emduvida} ${client.t('biblioteca.no_results_title', ctx)}\n` +
+        client.t('biblioteca.no_results_desc', ctx)
       )
     ], { accentColor: COLOR.main }));
   }
@@ -788,9 +790,11 @@ async function _pesquisar(interaction, client, lib, opts, userId, e) {
 
 async function _renderSearchPage(interaction, client, lib, filters, page, userId, e) {
   const { results, total, pages } = await lib.search({ ...filters, page, limit: 8 });
+  const ctx = localeCtx(interaction);
+  const numLocale = ctx.system?.locale || 'pt-BR';
 
   const authorNames = await Promise.all(
-    results.map(entry => _resolveAuthorName(lib, entry.authorId, entry.authorName))
+    results.map(entry => _resolveAuthorName(lib, entry.authorId, client, ctx, entry.authorName))
   );
   results.forEach((entry, i) => { entry._resolvedAuthor = authorNames[i]; });
 
@@ -798,45 +802,41 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
   if (filters.query)    filterDesc.push(`🔎 \`${filters.query}\``);
   if (filters.category) filterDesc.push(`${CATEGORY_EMOJI[filters.category] || '📦'} ${filters.category}`);
   if (filters.tag)      filterDesc.push(`🏷️ \`${filters.tag}\``);
-  const filterLine = filterDesc.length ? `**Filtros:** ${filterDesc.join('  •  ')}\n` : '';
+  const filterLine = filterDesc.length ? `**${client.t('biblioteca.search_filters_label', ctx)}:** ${filterDesc.join('  •  ')}\n` : '';
 
   const sortLabels = {
-    installs: '📥 Mais instalados',
-    rating:   '⭐ Melhor avaliados',
-    trending: '🔥 Tendência',
-    recent:   '🕐 Mais recentes'
+    installs: client.t('biblioteca.sort_installs', ctx),
+    rating:   client.t('biblioteca.sort_rating', ctx),
+    trending: client.t('biblioteca.sort_trending', ctx),
+    recent:   client.t('biblioteca.sort_recent', ctx)
   };
-  const sortLine = `**Ordem:** ${sortLabels[filters.sort] || '📥 Mais instalados'}`;
+  const sortLine = `**${client.t('biblioteca.search_order_label', ctx)}:** ${sortLabels[filters.sort] || client.t('biblioteca.sort_installs', ctx)}`;
 
   const lines = results.map((entry, i) => {
     const emoji = CATEGORY_EMOJI[entry.category] || '📦';
-    const stars = _stars(entry.stats.avgRating, entry.stats.ratingCount);
+    const stars = _stars(client, ctx, entry.stats.avgRating, entry.stats.ratingCount);
     const num   = page * 8 + i + 1;
     return (
       `**${num}.** ${emoji} **${entry.name}** \`v${entry.version}\`\n` +
-      `> 👤 ${entry._resolvedAuthor}  •  📥 ${entry.stats.installs.toLocaleString('pt-BR')} instalações  •  ${stars}\n` +
-      `> _${entry.shortDesc || 'Sem descrição'}_`
+      `> 👤 ${entry._resolvedAuthor}  •  ${client.t('biblioteca.search_installs_label', { ...ctx, count: entry.stats.installs.toLocaleString(numLocale) })}  •  ${stars}\n` +
+      `> _${entry.shortDesc || client.t('biblioteca.search_no_desc', ctx)}_`
     );
   }).join('\n\n');
 
   const selectOptions = results.map(entry => ({
     label:       entry.name.slice(0, 100),
     value:       entry.libId,
-    description: (`v${entry.version} • ${entry._resolvedAuthor} • ${entry.stats.installs} instalações`).slice(0, 100),
+    description: (`v${entry.version} • ${entry._resolvedAuthor} • ${client.t('biblioteca.search_installs_label', { ...ctx, count: entry.stats.installs })}`).slice(0, 100),
     emoji:       { name: (CATEGORY_EMOJI[entry.category] || '📦').replace(/\uFE0F/g, '') }
   }));
 
-  const sel = select(client, userId, selectOptions, '✨ Selecione para ver detalhes~', async (i) => {
+  const sel = select(client, userId, selectOptions, client.t('biblioteca.search_select_placeholder', ctx), async (i) => {
     await _deferUpdate(i);
     return _renderDetail(i, client, lib, i.data.values[0], userId, e);
   });
 
   const blocks = [
-    cv2Text(
-      `# ${e.animada} Biblioteca de Fluxos\n` +
-      (filterLine ? `${filterLine}` : '') +
-      `${sortLine}`
-    ),
+    cv2Text(client.t('biblioteca.search_title', { ...ctx, eAnimada: e.animada, filterLine, sortLine })),
     cv2Divider(),
     cv2Text(lines),
     cv2Divider(),
@@ -845,14 +845,14 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
 
   const navBtns = [];
   if (page > 0) {
-    navBtns.push(btn(client, userId, '◀ Anterior', 2, async (i) => {
+    navBtns.push(btn(client, userId, client.t('biblioteca.search_prev', ctx), 2, async (i) => {
       await _deferUpdate(i);
       return _renderSearchPage(i, client, lib, filters, page - 1, userId, e);
     }));
   }
   navBtns.push(btn(client, userId, `${page + 1} / ${pages}`, 2, async (i) => { await _deferUpdate(i); }, { disabled: true }));
   if (page < pages - 1) {
-    navBtns.push(btn(client, userId, 'Próxima ▶', 2, async (i) => {
+    navBtns.push(btn(client, userId, client.t('biblioteca.search_next', ctx), 2, async (i) => {
       await _deferUpdate(i);
       return _renderSearchPage(i, client, lib, filters, page + 1, userId, e);
     }));
@@ -860,7 +860,7 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
   if (navBtns.length) blocks.push(row(...navBtns));
 
   blocks.push(cv2Divider());
-  blocks.push(cv2Text(`-# ${total} resultado${total !== 1 ? 's' : ''} • Página ${page + 1} de ${pages}`));
+  blocks.push(cv2Text(client.t('biblioteca.search_footer', { ...ctx, total, page: page + 1, pages })));
 
   return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
 }
@@ -868,8 +868,9 @@ async function _renderSearchPage(interaction, client, lib, filters, page, userId
 async function _ver(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
+    const ctx = localeCtx(interaction);
     return _edit(interaction, client, cv2Payload([
-      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID. Confere se digitou certinho~`)
+      cv2Text(client.t('biblioteca.entry_not_found', { ...ctx, eEmduvida: e.emduvida }))
     ], { accentColor: COLOR.danger }));
   }
   return _renderDetail(interaction, client, lib, opts.id, userId, e, entry);
@@ -879,18 +880,21 @@ async function _renderDetail(interaction, client, lib, libId, userId, e, entry =
   entry = entry || await lib.getById(libId);
   if (!entry) return;
 
-  const authorName   = await _resolveAuthorName(lib, entry.authorId, entry.authorName);
+  const ctx = localeCtx(interaction);
+  const numLocale = ctx.system?.locale || 'pt-BR';
+
+  const authorName   = await _resolveAuthorName(lib, entry.authorId, client, ctx, entry.authorName);
   const userRating   = await lib.getUserRating(libId, userId);
   const emoji        = CATEGORY_EMOJI[entry.category] || '📦';
-  const stars        = _stars(entry.stats.avgRating, entry.stats.ratingCount);
-  const tags         = entry.tags?.length ? entry.tags.map(t => `\`${t}\``).join(' ') : '_Sem tags_';
+  const stars        = _stars(client, ctx, entry.stats.avgRating, entry.stats.ratingCount);
+  const tags         = entry.tags?.length ? entry.tags.map(t => `\`${t}\``).join(' ') : client.t('biblioteca.detail_no_tags', ctx);
   const likeStyle    = userRating?.vote === 'like'    ? 3 : 2;
   const dislikeStyle = userRating?.vote === 'dislike' ? 4 : 2;
 
-  const questions     = _buildInstallQuestions(entry);
+  const questions     = _buildInstallQuestions(entry, client, ctx);
   const configsNeeded = questions.length;
 
-  const btnInstall = btn(client, userId, '📥 Instalar', 3, async (i) => {
+  const btnInstall = btn(client, userId, client.t('biblioteca.btn_install', ctx), 3, async (i) => {
     await _deferUpdate(i);
     return _startInstallWizard(i, client, lib, entry, userId, i.guild_id, e);
   });
@@ -909,25 +913,25 @@ async function _renderDetail(interaction, client, lib, libId, userId, e, entry =
     return _renderDetail(i, client, lib, libId, userId, e, updated);
   });
 
-  const btnRate = btn(client, userId, '⭐ Avaliar', 2, async (i) => _openRateModal(i, client, lib, libId, userId, e));
+  const btnRate = btn(client, userId, client.t('biblioteca.btn_rate', ctx), 2, async (i) => _openRateModal(i, client, lib, libId, userId, e));
 
-  const btnAuthor = btn(client, userId, '👤 Ver Autor', 2, async (i) => {
+  const btnAuthor = btn(client, userId, client.t('biblioteca.btn_view_author', ctx), 2, async (i) => {
     await _deferUpdate(i);
     return _renderProfile(i, client, lib, entry.authorId, userId, e);
   });
 
   const blocks = [
-    cv2Text(`# ${emoji} ${entry.name} \`v${entry.version}\`\n${entry.fullDesc || entry.shortDesc || '_Sem descrição_'}`),
+    cv2Text(`# ${emoji} ${entry.name} \`v${entry.version}\`\n${entry.fullDesc || entry.shortDesc || client.t('biblioteca.detail_no_desc', ctx)}`),
     cv2Divider(),
     cv2Text(
-      `> 👤 **Autor:** ${authorName}\n` +
-      `> 📂 **Categoria:** ${entry.category}\n` +
-      `> 📥 **Instalações:** ${entry.stats.installs.toLocaleString('pt-BR')}\n` +
-      `> ⭐ **Avaliação:** ${stars} (${entry.stats.ratingCount} avaliações)\n` +
-      `> 🔗 **Fluxos:** ${entry.flows?.length || 0}\n` +
-      `> 🔧 **Configurações:** ${configsNeeded > 0 ? `${configsNeeded} campo(s)` : '_Nenhuma necessária_'}\n` +
-      `> 🏷️ **Tags:** ${tags}\n` +
-      `> 🆔 **ID:** \`${entry.libId}\``
+      `> ${client.t('biblioteca.detail_author', ctx)} ${authorName}\n` +
+      `> ${client.t('biblioteca.detail_category', ctx)} ${entry.category}\n` +
+      `> ${client.t('biblioteca.detail_installs', ctx)} ${entry.stats.installs.toLocaleString(numLocale)}\n` +
+      `> ${client.t('biblioteca.detail_rating', { ...ctx, stars, count: entry.stats.ratingCount })}\n` +
+      `> ${client.t('biblioteca.detail_flows', ctx)} ${entry.flows?.length || 0}\n` +
+      `> ${client.t('biblioteca.detail_config', ctx)} ${configsNeeded > 0 ? client.t('biblioteca.detail_config_fields', { ...ctx, count: configsNeeded }) : client.t('biblioteca.detail_config_none', ctx)}\n` +
+      `> ${client.t('biblioteca.detail_tags', ctx)} ${tags}\n` +
+      `> ${client.t('biblioteca.detail_id', ctx)} \`${entry.libId}\``
     ),
     cv2Divider(),
     row(btnInstall, btnLike, btnDislike, btnRate, btnAuthor),
@@ -939,8 +943,9 @@ async function _renderDetail(interaction, client, lib, libId, userId, e, entry =
 async function _instalar(interaction, client, lib, opts, userId, guildId, e) {
   const entry = await lib.getById(opts.id);
   if (!entry) {
+    const ctx = localeCtx(interaction);
     return _edit(interaction, client, cv2Payload([
-      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID. Confere se digitou certinho~`)
+      cv2Text(client.t('biblioteca.entry_not_found', { ...ctx, eEmduvida: e.emduvida }))
     ], { accentColor: COLOR.danger }));
   }
   return _startInstallWizard(interaction, client, lib, entry, userId, guildId, e);
@@ -949,17 +954,18 @@ async function _instalar(interaction, client, lib, opts, userId, guildId, e) {
 async function _publicar(interaction, client, lib, userId, guildId, e) {
   const { FlowModel } = require('../../Mongodb/flow.js');
   const flows = await FlowModel.find({ guildId }).lean();
+  const ctx = localeCtx(interaction);
 
   if (!flows.length) {
     return _reply(interaction, cv2Payload([
-      cv2Text(`# ${e.emburrada} Sem fluxos\nCrie pelo menos um fluxo antes de publicar na biblioteca~`)
+      cv2Text(`${client.t('biblioteca.no_flows_title', { ...ctx, eEmburrada: e.emburrada })}\n${client.t('biblioteca.no_flows_publish_desc', ctx)}`)
     ], { accentColor: COLOR.danger }));
   }
 
-  let authorName = 'Anônimo';
+  let authorName = client.t('biblioteca.fallback_anon', ctx);
   try {
     const userData = await DiscordRequest(`/users/${userId}`);
-    authorName = userData.global_name || userData.username || 'Anônimo';
+    authorName = userData.global_name || userData.username || client.t('biblioteca.fallback_anon', ctx);
   } catch {}
 
   const state = { selectedFlowIds: [] };
@@ -967,31 +973,28 @@ async function _publicar(interaction, client, lib, userId, guildId, e) {
 }
 
 async function _renderPublishPanel(interaction, client, lib, flows, userId, guildId, authorName, state, isReply = true, e) {
+  const ctx = localeCtx(interaction);
   const selectedNames = state.selectedFlowIds
     .map(id => flows.find(f => f.flowId === id)?.name || id)
     .map((n, i) => `\`${i + 1}.\` ${n}`)
-    .join('\n') || '_Nenhum fluxo adicionado ainda_';
+    .join('\n') || client.t('biblioteca.no_flow_added', ctx);
 
   const available = flows.filter(f => !state.selectedFlowIds.includes(f.flowId));
   const blocks = [];
 
-  blocks.push(cv2Text(
-    `# ${e.animada} Publicar na Biblioteca\n` +
-    `**Autor:** ${authorName}\n\n` +
-    `Adicione os fluxos que farão parte deste sistema e clique em **Publicar** quando estiver pronto!`
-  ));
+  blocks.push(cv2Text(client.t('biblioteca.publish_title', { ...ctx, eAnimada: e.animada, authorName })));
   blocks.push(cv2Divider());
-  blocks.push(cv2Text(`**📦 Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}`));
+  blocks.push(cv2Text(client.t('biblioteca.selected_flows_label', { ...ctx, count: state.selectedFlowIds.length, list: selectedNames })));
   blocks.push(cv2Divider());
 
   if (available.length) {
     const options = available.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
-      description: `${f.enabled ? '🟢' : '🔴'} ${_triggerLabel(f.trigger)}`.slice(0, 100)
+      description: `${f.enabled ? '🟢' : '🔴'} ${_triggerLabel(client, ctx, f.trigger)}`.slice(0, 100)
     }));
 
-    const sel = select(client, userId, options, '✨ Adicionar fluxo ao sistema~', async (i) => {
+    const sel = select(client, userId, options, client.t('biblioteca.add_flow_publish_placeholder', ctx), async (i) => {
       await _deferUpdate(i);
       const newId = i.data.values[0];
       if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
@@ -1000,20 +1003,20 @@ async function _renderPublishPanel(interaction, client, lib, flows, userId, guil
     blocks.push(row(sel));
   }
 
-  const btnRemove = btn(client, userId, '➖ Remover último', 4, async (i) => {
+  const btnRemove = btn(client, userId, client.t('biblioteca.btn_remove_last', ctx), 4, async (i) => {
     await _deferUpdate(i);
     state.selectedFlowIds.pop();
     return _renderPublishPanel(i, client, lib, flows, userId, guildId, authorName, state, false, e);
   });
 
-  const btnPublish = btn(client, userId, '📤 Publicar', 3, async (i) => {
+  const btnPublish = btn(client, userId, client.t('biblioteca.btn_publish', ctx), 3, async (i) => {
     if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
     return _publicarModal(i, client, lib, userId, guildId, authorName, state.selectedFlowIds, e);
   }, { disabled: state.selectedFlowIds.length === 0 });
 
   blocks.push(row(btnRemove, btnPublish));
   blocks.push(cv2Divider());
-  blocks.push(cv2Text('-# Você pode adicionar até 25 fluxos por publicação'));
+  blocks.push(cv2Text(client.t('biblioteca.publish_limit_footer', ctx)));
 
   const payload = cv2Payload(blocks, { accentColor: COLOR.library });
   if (isReply) return _reply(interaction, payload);
@@ -1021,15 +1024,16 @@ async function _renderPublishPanel(interaction, client, lib, flows, userId, guil
 }
 
 async function _publicarModal(interaction, client, lib, userId, guildId, authorName, flowIds, e) {
+  const ctx = localeCtx(interaction);
   const modal = client.interactions.createModal({
     user:  userId,
-    title: 'Publicar na Biblioteca',
+    title: client.t('biblioteca.modal_publish_title', ctx),
     components: [
-      { type: 1, components: [{ type: 4, custom_id: 'name',      label: 'Nome do sistema',              style: 1, required: true,  max_length: 100,  placeholder: 'Ex: Sistema de XP Avançado' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'shortDesc', label: 'Descrição curta',               style: 1, required: true,  max_length: 150,  placeholder: 'Sistema completo de XP com níveis...' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'fullDesc',  label: 'Descrição completa (opcional)', style: 2, required: false, max_length: 2000, placeholder: 'Explique o funcionamento detalhado...' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'category',  label: 'Categoria',                    style: 1, required: true,  max_length: 20,   placeholder: 'Moderação, Economia, RPG...' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'tags',      label: 'Tags (separadas por vírgula)',  style: 1, required: false, max_length: 200,  placeholder: 'xp, level, rank, recompensa' }] }
+      { type: 1, components: [{ type: 4, custom_id: 'name',      label: client.t('biblioteca.modal_field_system_name', ctx),         style: 1, required: true,  max_length: 100,  placeholder: client.t('biblioteca.modal_field_system_name_ph', ctx) }] },
+      { type: 1, components: [{ type: 4, custom_id: 'shortDesc', label: client.t('biblioteca.modal_field_short_desc', ctx),           style: 1, required: true,  max_length: 150,  placeholder: client.t('biblioteca.modal_field_short_desc_ph', ctx) }] },
+      { type: 1, components: [{ type: 4, custom_id: 'fullDesc',  label: client.t('biblioteca.modal_field_full_desc', ctx),            style: 2, required: false, max_length: 2000, placeholder: client.t('biblioteca.modal_field_full_desc_ph', ctx) }] },
+      { type: 1, components: [{ type: 4, custom_id: 'category',  label: client.t('biblioteca.modal_field_category', ctx),             style: 1, required: true,  max_length: 20,   placeholder: client.t('biblioteca.modal_field_category_ph', ctx) }] },
+      { type: 1, components: [{ type: 4, custom_id: 'tags',      label: client.t('biblioteca.modal_field_tags', ctx),                 style: 1, required: false, max_length: 200,  placeholder: client.t('biblioteca.modal_field_tags_ph', ctx) }] }
     ],
     funcao: async (modalInteraction, _client, fields) => {
       const category = CATEGORIES.find(c => c.toLowerCase() === fields.category?.trim().toLowerCase());
@@ -1041,7 +1045,7 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
 
       if (!category) {
         return _followUpEphemeral(modalInteraction, client, cv2Payload([
-          cv2Text(`# ${e.emduvida} Categoria inválida\nAs categorias disponíveis são:\n${CATEGORIES.join(', ')}`)
+          cv2Text(client.t('biblioteca.invalid_category', { ...ctx, eEmduvida: e.emduvida, list: CATEGORIES.join(', ') }))
         ], { accentColor: COLOR.danger }));
       }
 
@@ -1061,17 +1065,18 @@ async function _publicarModal(interaction, client, lib, userId, guildId, authorN
         _announcePublicLibrary(client, entry, authorName, flowIds.length, e).catch(() => {});
 
         return _followUp(modalInteraction, client, cv2Payload([
-          cv2Text(
-            `# ${e.festa} Publicado com sucesso!\n` +
-            `**${entry.name}** já está disponível na biblioteca!\n\n` +
-            `> 🆔 **ID:** \`${entry.libId}\`\n` +
-            `> 📦 **Fluxos:** ${flowIds.length}\n` +
-            `> 🔧 **Campos de configuração:** ${_buildInstallQuestions(entry).length}`
-          )
+          cv2Text(client.t('biblioteca.publish_success', {
+            ...ctx,
+            eFesta: e.festa,
+            entryName: entry.name,
+            libId: entry.libId,
+            flowCount: flowIds.length,
+            fieldCount: _buildInstallQuestions(entry, client, ctx).length
+          }))
         ], { accentColor: COLOR.success }));
       } catch (err) {
         return _followUpEphemeral(modalInteraction, client, cv2Payload([
-          cv2Text(`# ${e.assustada} Erro ao publicar\n${err.message}`)
+          cv2Text(client.t('biblioteca.publish_error', { ...ctx, eAssustada: e.assustada, message: err.message }))
         ], { accentColor: COLOR.danger }));
       }
     }
@@ -1087,15 +1092,12 @@ async function _announcePublicLibrary(client, entry, authorName, flowCount, e) {
   await DiscordRequest(`/channels/${SUPPORT_ANNOUNCE_CHANNEL}/messages`, {
     method: 'POST',
     body: cv2Payload([
-      cv2Text(
-        `# ${emoji} Nova publicação na Biblioteca!\n` +
-        `**${entry.name}** foi publicado por **${authorName}**.\n\n${entry.shortDesc || ''}`
-      ),
+      cv2Text(client.t('biblioteca.announce_title', { emoji, entryName: entry.name, authorName, shortDesc: entry.shortDesc || '' })),
       cv2Divider(),
       cv2Text(
         `> 📂 **Categoria:** ${entry.category}\n` +
         `> 🔗 **Fluxos:** ${flowCount}\n` +
-        `> 🔧 **Configurações:** ${_buildInstallQuestions(entry).length}\n` +
+        `> 🔧 **Configurações:** ${_buildInstallQuestions(entry, client, {}).length}\n` +
         `> 🏷️ **Tags:** ${tags}\n` +
         `> 🆔 **ID:** \`${entry.libId}\``
       ),
@@ -1105,14 +1107,15 @@ async function _announcePublicLibrary(client, entry, authorName, flowCount, e) {
 
 async function _atualizar(interaction, client, lib, opts, userId, guildId, e) {
   const entry = await lib.getById(opts.id);
+  const ctx = localeCtx(interaction);
   if (!entry) {
     return _reply(interaction, cv2Payload([
-      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID~`)
+      cv2Text(client.t('biblioteca.entry_not_found_short', { ...ctx, eEmduvida: e.emduvida }))
     ], { accentColor: COLOR.danger }));
   }
   if (entry.authorId !== userId) {
     return _reply(interaction, cv2Payload([
-      cv2Text(`# ${e.brava} Sem permissão\nVocê não é o autor desta entrada.`)
+      cv2Text(client.t('biblioteca.not_author', { ...ctx, eBrava: e.brava }))
     ], { accentColor: COLOR.danger }));
   }
 
@@ -1121,11 +1124,11 @@ async function _atualizar(interaction, client, lib, opts, userId, guildId, e) {
 
   if (!flows.length) {
     return _reply(interaction, cv2Payload([
-      cv2Text(`# ${e.emburrada} Sem fluxos\nCrie pelo menos um fluxo antes de atualizar~`)
+      cv2Text(`${client.t('biblioteca.no_flows_title', { ...ctx, eEmburrada: e.emburrada })}\n${client.t('biblioteca.no_flows_update_desc', ctx)}`)
     ], { accentColor: COLOR.danger }));
   }
 
-  let authorName = entry.authorName || 'Anônimo';
+  let authorName = entry.authorName || client.t('biblioteca.fallback_anon', ctx);
   try {
     const userData = await DiscordRequest(`/users/${userId}`);
     authorName = userData.global_name || userData.username || authorName;
@@ -1136,31 +1139,28 @@ async function _atualizar(interaction, client, lib, opts, userId, guildId, e) {
 }
 
 async function _renderUpdatePanel(interaction, client, lib, flows, userId, guildId, authorName, libId, entry, state, isReply = false, e) {
+  const ctx = localeCtx(interaction);
   const selectedNames = state.selectedFlowIds
     .map(id => flows.find(f => f.flowId === id)?.name || id)
     .map((n, i) => `\`${i + 1}.\` ${n}`)
-    .join('\n') || '_Nenhum fluxo adicionado ainda_';
+    .join('\n') || client.t('biblioteca.no_flow_added', ctx);
 
   const available = flows.filter(f => !state.selectedFlowIds.includes(f.flowId));
   const blocks = [];
 
-  blocks.push(cv2Text(
-    `# ${e.pensando} Atualizar — ${entry.name}\n` +
-    `Versão atual: \`${entry.version}\`\n\n` +
-    `Selecione os fluxos da nova versão e clique em **Confirmar atualização**~`
-  ));
+  blocks.push(cv2Text(client.t('biblioteca.update_panel_title', { ...ctx, ePensando: e.pensando, entryName: entry.name, version: entry.version })));
   blocks.push(cv2Divider());
-  blocks.push(cv2Text(`**📦 Fluxos selecionados (${state.selectedFlowIds.length}):**\n${selectedNames}`));
+  blocks.push(cv2Text(client.t('biblioteca.selected_flows_label', { ...ctx, count: state.selectedFlowIds.length, list: selectedNames })));
   blocks.push(cv2Divider());
 
   if (available.length) {
     const options = available.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
-      description: `${f.enabled ? '🟢' : '🔴'} ${_triggerLabel(f.trigger)}`.slice(0, 100)
+      description: `${f.enabled ? '🟢' : '🔴'} ${_triggerLabel(client, ctx, f.trigger)}`.slice(0, 100)
     }));
 
-    const sel = select(client, userId, options, '✨ Adicionar fluxo à nova versão~', async (i) => {
+    const sel = select(client, userId, options, client.t('biblioteca.add_flow_update_placeholder', ctx), async (i) => {
       await _deferUpdate(i);
       const newId = i.data.values[0];
       if (!state.selectedFlowIds.includes(newId)) state.selectedFlowIds.push(newId);
@@ -1169,13 +1169,13 @@ async function _renderUpdatePanel(interaction, client, lib, flows, userId, guild
     blocks.push(row(sel));
   }
 
-  const btnRemove = btn(client, userId, '➖ Remover último', 4, async (i) => {
+  const btnRemove = btn(client, userId, client.t('biblioteca.btn_remove_last', ctx), 4, async (i) => {
     await _deferUpdate(i);
     state.selectedFlowIds.pop();
     return _renderUpdatePanel(i, client, lib, flows, userId, guildId, authorName, libId, entry, state, false, e);
   });
 
-  const btnConfirm = btn(client, userId, '🔄 Confirmar atualização', 3, async (i) => {
+  const btnConfirm = btn(client, userId, client.t('biblioteca.btn_confirm_update', ctx), 3, async (i) => {
     if (!state.selectedFlowIds.length) { await _deferUpdate(i); return; }
     return _atualizarModal(i, client, lib, libId, userId, guildId, authorName, state.selectedFlowIds, entry.version, e);
   }, { disabled: state.selectedFlowIds.length === 0 });
@@ -1188,12 +1188,13 @@ async function _renderUpdatePanel(interaction, client, lib, flows, userId, guild
 }
 
 async function _atualizarModal(interaction, client, lib, libId, userId, guildId, authorName, flowIds, currentVersion, e) {
+  const ctx = localeCtx(interaction);
   const modal = client.interactions.createModal({
     user:  userId,
-    title: 'Nova Versão',
+    title: client.t('biblioteca.modal_update_title', ctx),
     components: [
-      { type: 1, components: [{ type: 4, custom_id: 'version',   label: `Nova versão (atual: ${currentVersion})`, style: 1, required: true,  max_length: 20,  placeholder: '2.0.0' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'changelog', label: 'O que mudou?',                           style: 2, required: false, max_length: 500, placeholder: 'Novos recursos, correções...' }] }
+      { type: 1, components: [{ type: 4, custom_id: 'version',   label: client.t('biblioteca.modal_field_new_version', { ...ctx, current: currentVersion }), style: 1, required: true,  max_length: 20,  placeholder: client.t('biblioteca.modal_field_new_version_ph', ctx) }] },
+      { type: 1, components: [{ type: 4, custom_id: 'changelog', label: client.t('biblioteca.modal_field_changelog', ctx),                                    style: 2, required: false, max_length: 500, placeholder: client.t('biblioteca.modal_field_changelog_ph', ctx) }] }
     ],
     funcao: async (modalInteraction, _client, fields) => {
       await DiscordRequest(
@@ -1209,15 +1210,11 @@ async function _atualizarModal(interaction, client, lib, libId, userId, guildId,
         });
 
         return _followUp(modalInteraction, client, cv2Payload([
-          cv2Text(
-            `# ${e.festa} Atualizado para v${updated.version}!\n` +
-            `**${updated.name}** foi atualizado com **${flowIds.length}** fluxo(s).\n` +
-            `Os instaladores serão notificados via DM~`
-          )
+          cv2Text(client.t('biblioteca.update_success', { ...ctx, eFesta: e.festa, version: updated.version, entryName: updated.name, flowCount: flowIds.length }))
         ], { accentColor: COLOR.success }));
       } catch (err) {
         return _followUpEphemeral(modalInteraction, client, cv2Payload([
-          cv2Text(`# ${e.assustada} Erro ao atualizar\n${err.message}`)
+          cv2Text(client.t('biblioteca.update_error', { ...ctx, eAssustada: e.assustada, message: err.message }))
         ], { accentColor: COLOR.danger }));
       }
     }
@@ -1228,26 +1225,27 @@ async function _atualizarModal(interaction, client, lib, libId, userId, guildId,
 
 async function _editar(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
+  const ctx = localeCtx(interaction);
   if (!entry) {
     return _reply(interaction, cv2Payload([
-      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID~`)
+      cv2Text(client.t('biblioteca.entry_not_found_short', { ...ctx, eEmduvida: e.emduvida }))
     ], { accentColor: COLOR.danger }));
   }
   if (entry.authorId !== userId) {
     return _reply(interaction, cv2Payload([
-      cv2Text(`# ${e.brava} Sem permissão\nVocê não é o autor desta entrada.`)
+      cv2Text(client.t('biblioteca.not_author', { ...ctx, eBrava: e.brava }))
     ], { accentColor: COLOR.danger }));
   }
 
   const modal = client.interactions.createModal({
     user:  userId,
-    title: `Editar — ${entry.name.slice(0, 30)}`,
+    title: client.t('biblioteca.modal_edit_title', { ...ctx, name: entry.name.slice(0, 30) }),
     components: [
-      { type: 1, components: [{ type: 4, custom_id: 'name',      label: 'Nome',               style: 1, required: true,  max_length: 100,  value: entry.name }] },
-      { type: 1, components: [{ type: 4, custom_id: 'shortDesc', label: 'Descrição curta',    style: 1, required: false, max_length: 150,  value: entry.shortDesc || '' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'fullDesc',  label: 'Descrição completa', style: 2, required: false, max_length: 2000, value: entry.fullDesc  || '' }] },
-      { type: 1, components: [{ type: 4, custom_id: 'category',  label: 'Categoria',          style: 1, required: false, max_length: 20,   value: entry.category }] },
-      { type: 1, components: [{ type: 4, custom_id: 'tags',      label: 'Tags (vírgula)',     style: 1, required: false, max_length: 200,  value: entry.tags?.join(', ') || '' }] }
+      { type: 1, components: [{ type: 4, custom_id: 'name',      label: client.t('biblioteca.modal_field_name', ctx),            style: 1, required: true,  max_length: 100,  value: entry.name }] },
+      { type: 1, components: [{ type: 4, custom_id: 'shortDesc', label: client.t('biblioteca.modal_field_short_desc_edit', ctx), style: 1, required: false, max_length: 150,  value: entry.shortDesc || '' }] },
+      { type: 1, components: [{ type: 4, custom_id: 'fullDesc',  label: client.t('biblioteca.modal_field_full_desc_edit', ctx),  style: 2, required: false, max_length: 2000, value: entry.fullDesc  || '' }] },
+      { type: 1, components: [{ type: 4, custom_id: 'category',  label: client.t('biblioteca.modal_field_category_edit', ctx),   style: 1, required: false, max_length: 20,   value: entry.category }] },
+      { type: 1, components: [{ type: 4, custom_id: 'tags',      label: client.t('biblioteca.modal_field_tags_edit', ctx),       style: 1, required: false, max_length: 200,  value: entry.tags?.join(', ') || '' }] }
     ],
     funcao: async (modalInteraction, _client, fields) => {
       await DiscordRequest(
@@ -1269,11 +1267,11 @@ async function _editar(interaction, client, lib, opts, userId, e) {
         });
 
         return _followUp(modalInteraction, client, cv2Payload([
-          cv2Text(`# ${e.feliz} Entrada atualizada!\nAs informações foram salvas com sucesso~`)
+          cv2Text(client.t('biblioteca.edit_success', { ...ctx, eFeliz: e.feliz }))
         ], { accentColor: COLOR.success }));
       } catch (err) {
         return _followUpEphemeral(modalInteraction, client, cv2Payload([
-          cv2Text(`# ${e.assustada} Erro ao editar\n${err.message}`)
+          cv2Text(client.t('biblioteca.edit_error', { ...ctx, eAssustada: e.assustada, message: err.message }))
         ], { accentColor: COLOR.danger }));
       }
     }
@@ -1284,45 +1282,42 @@ async function _editar(interaction, client, lib, opts, userId, e) {
 
 async function _apagar(interaction, client, lib, opts, userId, e) {
   const entry = await lib.getById(opts.id);
+  const ctx = localeCtx(interaction);
   if (!entry) {
     return _edit(interaction, client, cv2Payload([
-      cv2Text(`# ${e.emduvida} Entrada não encontrada\nNão encontrei nada com esse ID~`)
+      cv2Text(client.t('biblioteca.entry_not_found_short', { ...ctx, eEmduvida: e.emduvida }))
     ], { accentColor: COLOR.danger }));
   }
   if (entry.authorId !== userId) {
     return _edit(interaction, client, cv2Payload([
-      cv2Text(`# ${e.brava} Sem permissão\nVocê não é o autor desta entrada.`)
+      cv2Text(client.t('biblioteca.not_author', { ...ctx, eBrava: e.brava }))
     ], { accentColor: COLOR.danger }));
   }
 
-  const btnConfirm = btn(client, userId, '✅ Confirmar exclusão', 4, async (i) => {
+  const btnConfirm = btn(client, userId, client.t('biblioteca.btn_confirm_delete', ctx), 4, async (i) => {
     await _deferUpdate(i);
+    const iCtx = localeCtx(i);
     try {
       await lib.delete(opts.id, userId);
       return _edit(i, client, cv2Payload([
-        cv2Text(`# ${e.emburrada} Entrada removida\n**${entry.name}** foi removida da biblioteca.`)
+        cv2Text(client.t('biblioteca.delete_success', { ...iCtx, eEmburrada: e.emburrada, entryName: entry.name }))
       ], { accentColor: COLOR.danger }));
     } catch (err) {
       return _edit(i, client, cv2Payload([
-        cv2Text(`# ${e.assustada} Erro ao apagar\n${err.message}`)
+        cv2Text(client.t('biblioteca.delete_error', { ...iCtx, eAssustada: e.assustada, message: err.message }))
       ], { accentColor: COLOR.danger }));
     }
   });
 
-  const btnCancel = btn(client, userId, '❌ Cancelar', 2, async (i) => {
+  const btnCancel = btn(client, userId, client.t('biblioteca.btn_cancel', ctx), 2, async (i) => {
     await _deferUpdate(i);
     return _edit(i, client, cv2Payload([
-      cv2Text(`# ${e.feliz} Cancelado!\nA entrada continua na biblioteca~`)
+      cv2Text(client.t('biblioteca.delete_cancelled', { ...localeCtx(i), eFeliz: e.feliz }))
     ], { accentColor: COLOR.main }));
   });
 
   return _edit(interaction, client, cv2Payload([
-    cv2Text(
-      `# ${e.assustada} Confirmar exclusão\n` +
-      `Tem certeza que quer remover **${entry.name}** da biblioteca?\n\n` +
-      `**Essa ação não pode ser desfeita.**\n` +
-      `Instalações existentes nos servidores não serão afetadas.`
-    ),
+    cv2Text(client.t('biblioteca.delete_confirm_title', { ...ctx, eAssustada: e.assustada, entryName: entry.name })),
     cv2Divider(),
     row(btnConfirm, btnCancel),
   ], { accentColor: COLOR.danger }));
@@ -1330,13 +1325,11 @@ async function _apagar(interaction, client, lib, opts, userId, e) {
 
 async function _minhas(interaction, client, lib, userId, e) {
   const entries = await lib.getMyPublications(userId);
+  const ctx = localeCtx(interaction);
 
   if (!entries.length) {
     return _edit(interaction, client, cv2Payload([
-      cv2Text(
-        `# ${e.pensando} Minhas Publicações\n` +
-        `Você ainda não publicou nada na biblioteca.\nUse \`/biblioteca publicar\` para começar~!`
-      )
+      cv2Text(client.t('biblioteca.my_pubs_empty', { ...ctx, ePensando: e.pensando }))
     ], { accentColor: COLOR.library }));
   }
 
@@ -1345,50 +1338,51 @@ async function _minhas(interaction, client, lib, userId, e) {
     const emoji      = CATEGORY_EMOJI[entry.category] || '📦';
     return (
       `**${i + 1}.** ${statusIcon} ${emoji} **${entry.name}** \`v${entry.version}\`\n` +
-      `> 📥 ${entry.stats.installs} instalações  •  ${_stars(entry.stats.avgRating, 0)}`
+      `> ${client.t('biblioteca.my_pubs_installs', { ...ctx, count: entry.stats.installs })}  •  ${_stars(client, ctx, entry.stats.avgRating, 0)}`
     );
   }).join('\n\n');
 
   const selectOptions = entries.slice(0, 25).map(entry => ({
     label:       entry.name.slice(0, 100),
     value:       entry.libId,
-    description: (`v${entry.version} • ${entry.stats.installs} instalações`).slice(0, 100)
+    description: (`v${entry.version} • ${client.t('biblioteca.my_pubs_installs', { ...ctx, count: entry.stats.installs })}`).slice(0, 100)
   }));
 
-  const sel = select(client, userId, selectOptions, '✨ Selecione para gerenciar~', async (i) => {
+  const sel = select(client, userId, selectOptions, client.t('biblioteca.manage_select_placeholder', ctx), async (i) => {
     await _deferUpdate(i);
     const selected = entries.find(entry => entry.libId === i.data.values[0]);
     return _renderManageEntry(i, client, lib, selected, userId, e);
   });
 
   return _edit(interaction, client, cv2Payload([
-    cv2Text(`# ${e.curtida} Minhas Publicações (${entries.length})\n${lines}`),
+    cv2Text(client.t('biblioteca.my_pubs_title', { ...ctx, eCurtida: e.curtida, count: entries.length, lines })),
     cv2Divider(),
     row(sel),
     cv2Divider(),
-    cv2Text('-# Selecione uma entrada para gerenciá-la'),
+    cv2Text(client.t('biblioteca.manage_select_footer', ctx)),
   ], { accentColor: COLOR.library }));
 }
 
 async function _renderManageEntry(interaction, client, lib, entry, userId, e) {
-  const changelog = entry.lastChangelog ? `\n**Último changelog:** ${entry.lastChangelog}` : '';
+  const ctx = localeCtx(interaction);
+  const changelog = entry.lastChangelog ? client.t('biblioteca.manage_last_changelog', { ...ctx, changelog: entry.lastChangelog }) : '';
 
   const history = entry.versionHistory?.length
     ? entry.versionHistory.slice(-3).reverse()
-        .map(v => `• \`v${v.version}\` — ${v.changelog || 'sem changelog'}`)
+        .map(v => `• \`v${v.version}\` — ${v.changelog || client.t('biblioteca.manage_no_changelog', ctx)}`)
         .join('\n')
-    : '_Nenhum histórico_';
+    : client.t('biblioteca.manage_history_none', ctx);
 
-  const btnEditar = btn(client, userId, '✏️ Editar', 2, async (i) => _editar(i, client, lib, { id: entry.libId }, userId, e));
+  const btnEditar = btn(client, userId, client.t('biblioteca.btn_edit', ctx), 2, async (i) => _editar(i, client, lib, { id: entry.libId }, userId, e));
 
-  const btnAtualizar = btn(client, userId, '🔄 Atualizar versão', 1, async (i) => _atualizar(i, client, lib, { id: entry.libId }, userId, i.guild_id, e));
+  const btnAtualizar = btn(client, userId, client.t('biblioteca.btn_update_version', ctx), 1, async (i) => _atualizar(i, client, lib, { id: entry.libId }, userId, i.guild_id, e));
 
-  const btnApagar = btn(client, userId, '🗑️ Apagar', 4, async (i) => {
+  const btnApagar = btn(client, userId, client.t('biblioteca.btn_delete', ctx), 4, async (i) => {
     await _deferUpdate(i);
     return _apagar(i, client, lib, { id: entry.libId }, userId, e);
   });
 
-  const btnVoltar = btn(client, userId, '⬅️ Voltar', 2, async (i) => {
+  const btnVoltar = btn(client, userId, client.t('biblioteca.btn_back', ctx), 2, async (i) => {
     await _deferUpdate(i);
     return _minhas(i, client, lib, userId, e);
   });
@@ -1396,12 +1390,9 @@ async function _renderManageEntry(interaction, client, lib, entry, userId, e) {
   return _edit(interaction, client, cv2Payload([
     cv2Text(`# ${CATEGORY_EMOJI[entry.category] || '📦'} ${entry.name} \`v${entry.version}\`\n${entry.shortDesc}${changelog}`),
     cv2Divider(),
-    cv2Text(
-      `> 📊 **Stats:** 📥 ${entry.stats.installs} instalações  •  👍 ${entry.stats.likes}  •  ⭐ ${entry.stats.avgRating}\n` +
-      `> 🆔 **ID:** \`${entry.libId}\``
-    ),
+    cv2Text(client.t('biblioteca.manage_stats', { ...ctx, installs: entry.stats.installs, likes: entry.stats.likes, rating: entry.stats.avgRating, libId: entry.libId })),
     cv2Divider(),
-    cv2Text(`**📜 Histórico:**\n${history}`),
+    cv2Text(client.t('biblioteca.manage_history_label', { ...ctx, history })),
     cv2Divider(),
     row(btnEditar, btnAtualizar, btnApagar, btnVoltar),
   ], { accentColor: COLOR.library }));
@@ -1414,14 +1405,15 @@ async function _perfil(interaction, client, lib, opts, userId, e) {
 
 async function _renderProfile(interaction, client, lib, targetId, userId, e) {
   const profile = await lib.getCreatorProfile(targetId);
+  const ctx = localeCtx(interaction);
 
   let displayName = profile.username;
   if (!displayName || displayName === targetId) {
     try {
       const userData = await DiscordRequest(`/users/${targetId}`);
-      displayName = userData?.global_name || userData?.username || `Usuário ${targetId.slice(-4)}`;
+      displayName = userData?.global_name || userData?.username || client.t('biblioteca.fallback_user', { ...ctx, suffix: targetId.slice(-4) });
     } catch {
-      displayName = `Usuário ${targetId.slice(-4)}`;
+      displayName = client.t('biblioteca.fallback_user', { ...ctx, suffix: targetId.slice(-4) });
     }
   }
 
@@ -1429,27 +1421,28 @@ async function _renderProfile(interaction, client, lib, targetId, userId, e) {
     .sort((a, b) => b.installs - a.installs)
     .slice(0, 5)
     .map((entry, i) => `${i + 1}. **${entry.name}** \`v${entry.version}\` — 📥 ${entry.installs}`)
-    .join('\n') || '_Nenhuma publicação_';
+    .join('\n') || client.t('biblioteca.profile_no_pubs', ctx);
 
   const isFollowing = (await lib.getFollowers(targetId)).includes(userId);
   const isSelf      = targetId === userId;
+  const numLocale    = ctx.system?.locale || 'pt-BR';
 
   const blocks = [
-    cv2Text(`# ${e.carinho} ${displayName}\n${profile.bio || '_Sem bio_'}`),
+    cv2Text(`# ${e.carinho} ${displayName}\n${profile.bio || client.t('biblioteca.profile_no_bio', ctx)}`),
     cv2Divider(),
     cv2Text(
-      `> 📦 **Publicações:** ${profile.stats.totalFlows}\n` +
-      `> 📥 **Instalações:** ${profile.stats.totalInstalls.toLocaleString('pt-BR')}\n` +
-      `> 👍 **Likes:** ${profile.stats.totalLikes}\n` +
-      `> ⭐ **Avaliação:** ${profile.stats.avgRating.toFixed(1)} ⭐\n` +
-      `> 👥 **Seguidores:** ${profile.followers}`
+      `> ${client.t('biblioteca.profile_publications', ctx)} ${profile.stats.totalFlows}\n` +
+      `> ${client.t('biblioteca.profile_installs', ctx)} ${profile.stats.totalInstalls.toLocaleString(numLocale)}\n` +
+      `> ${client.t('biblioteca.profile_likes', ctx)} ${profile.stats.totalLikes}\n` +
+      `> ${client.t('biblioteca.profile_rating', ctx)} ${profile.stats.avgRating.toFixed(1)} ⭐\n` +
+      `> ${client.t('biblioteca.profile_followers', ctx)} ${profile.followers}`
     ),
     cv2Divider(),
-    cv2Text(`**🏆 Top Fluxos:**\n${topEntries}`),
+    cv2Text(client.t('biblioteca.profile_top_flows', { ...ctx, list: topEntries })),
   ];
 
   if (!isSelf) {
-    const btnFollow = btn(client, userId, isFollowing ? '➖ Deixar de seguir' : '➕ Seguir', isFollowing ? 4 : 3, async (i) => {
+    const btnFollow = btn(client, userId, isFollowing ? client.t('biblioteca.btn_unfollow', ctx) : client.t('biblioteca.btn_follow', ctx), isFollowing ? 4 : 3, async (i) => {
       await _deferUpdate(i);
       await lib.toggleFollow(userId, targetId);
       return _renderProfile(i, client, lib, targetId, userId, e);
@@ -1466,12 +1459,13 @@ async function _renderProfile(interaction, client, lib, targetId, userId, e) {
 
 async function _destaques(interaction, client, lib, e) {
   const { trending, topInstalls, topRated, recent } = await lib.getHighlights();
+  const ctx = localeCtx(interaction);
 
   const fmt = async (list) => {
-    if (!list.length) return '_Nenhum_';
-    const names = await Promise.all(list.map(entry => _resolveAuthorName(lib, entry.authorId, entry.authorName)));
+    if (!list.length) return client.t('biblioteca.highlights_none', ctx);
+    const names = await Promise.all(list.map(entry => _resolveAuthorName(lib, entry.authorId, client, ctx, entry.authorName)));
     return list.map((entry, i) =>
-      `${i + 1}. **${entry.name}** por ${names[i]} — 📥 ${entry.stats.installs} • ⭐ ${entry.stats.avgRating}`
+      `${i + 1}. **${entry.name}** ${client.t('biblioteca.highlights_by', ctx)} ${names[i]} — 📥 ${entry.stats.installs} • ⭐ ${entry.stats.avgRating}`
     ).join('\n');
   };
 
@@ -1480,28 +1474,29 @@ async function _destaques(interaction, client, lib, e) {
   ]);
 
   return _edit(interaction, client, cv2Payload([
-    cv2Text(`# ${e.festa} Destaques da Semana`),
+    cv2Text(`# ${e.festa} ${client.t('biblioteca.highlights_title', ctx)}`),
     cv2Divider(),
-    cv2Text(`**📈 Tendência**\n${fTrending}`),
+    cv2Text(client.t('biblioteca.highlights_trending', { ...ctx, list: fTrending })),
     cv2Divider(),
-    cv2Text(`**📥 Mais instalados**\n${fInstalls}`),
+    cv2Text(client.t('biblioteca.highlights_installs', { ...ctx, list: fInstalls })),
     cv2Divider(),
-    cv2Text(`**⭐ Melhor avaliados**\n${fRated}`),
+    cv2Text(client.t('biblioteca.highlights_rated', { ...ctx, list: fRated })),
     cv2Divider(),
-    cv2Text(`**🕐 Mais recentes**\n${fRecent}`),
+    cv2Text(client.t('biblioteca.highlights_recent', { ...ctx, list: fRecent })),
   ], { accentColor: COLOR.library }));
 }
 
 async function _openRateModal(interaction, client, lib, libId, userId, e) {
+  const ctx = localeCtx(interaction);
   const modal = client.interactions.createModal({
     user:  userId,
-    title: 'Avaliar fluxo',
+    title: client.t('biblioteca.modal_rate_title', ctx),
     components: [{
       type: 1,
       components: [{
         type:        4,
         custom_id:   'rating',
-        label:       'Nota de 1 a 5',
+        label:       client.t('biblioteca.modal_field_rating', ctx),
         style:       1,
         required:    true,
         max_length:  1,
@@ -1518,17 +1513,13 @@ async function _openRateModal(interaction, client, lib, libId, userId, e) {
 
       if (!rating || rating < 1 || rating > 5) {
         return _followUpEphemeral(modalInteraction, client, cv2Payload([
-          cv2Text(`# ${e.emduvida} Nota inválida\nInforme um número entre 1 e 5~`)
+          cv2Text(client.t('biblioteca.invalid_rating', { ...ctx, eEmduvida: e.emduvida }))
         ], { accentColor: COLOR.danger }));
       }
 
       const result = await lib.rate(libId, userId, rating);
       return _followUp(modalInteraction, client, cv2Payload([
-        cv2Text(
-          `# ${e.corao} Avaliação registrada!\n` +
-          `Você deu **${rating} ⭐** para este fluxo.\n` +
-          `Nova média: **${result.avg} ⭐** (${result.count} avaliações)`
-        )
+        cv2Text(client.t('biblioteca.rate_success', { ...ctx, eCorao: e.corao, rating, avg: result.avg, count: result.count }))
       ], { accentColor: COLOR.success }));
     }
   });

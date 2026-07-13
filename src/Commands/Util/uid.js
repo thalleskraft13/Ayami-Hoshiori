@@ -3,6 +3,7 @@
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const db = require("../../Mongodb/userglobal.js");
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
   data: {
@@ -81,7 +82,12 @@ module.exports = {
       userdb.server = servidores[server];
       await userdb.save();
 
-      
+      const ctx = localeCtx(interaction, {
+        eAnimada: emoji.animada,
+        eCorao: emoji.corao,
+        uid,
+        servidor: servidores[server],
+      });
 
       return DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -90,7 +96,7 @@ module.exports = {
           body: {
             type: 4,
             data: {
-              content: `${emoji.animada} UID salvo com sucesso! Agora todo mundo pode te encontrar no jogo~\n**${uid}** \`(${servidores[server]})\` ${emoji.corao}`
+              content: client.t("uid.saved", ctx)
             }
           }
         }
@@ -121,13 +127,21 @@ module.exports = {
 
       const user = await DiscordRequest(`/users/${userID}`, { method: "GET" });
       const userName = user.global_name || user.username;
+      const userUrl = `https://discord.com/users/${userID}`;
 
       // ── Sem UID ──
       if (!userdb.uidGenshin || userdb.uidGenshin === 0) {
 
+        const ctxNotFound = localeCtx(interaction, {
+          eEmduvida: emoji.emduvida,
+          eEmburrada: emoji.emburrada,
+          userName,
+          userUrl,
+        });
+
         const embed = new MessageEmbed()
-          .setTitle(`${emoji.emduvida} UID não encontrado...`)
-          .setDescription(`${emoji.emburrada} [${userName}](https://discord.com/users/${userID}) ainda não salvou nenhum UID...\n\nUse \`/uid salvar\` pra registrar o seu!`)
+          .setTitle(client.t("uid.not_found_title", ctxNotFound))
+          .setDescription(client.t("uid.not_found_desc", ctxNotFound))
           .setColor("Red")
           .build();
 
@@ -147,9 +161,19 @@ module.exports = {
       }
 
       // ── Com UID ──
+      const ctxFound = localeCtx(interaction, {
+        eFeliz: emoji.feliz,
+        eCurtida: emoji.curtida,
+        eAnimada: emoji.animada,
+        userName,
+        userUrl,
+        uid: userdb.uidGenshin,
+        servidor: userdb.server,
+      });
+
       const embed = new MessageEmbed()
-        .setTitle(`${emoji.feliz} UID de ${userName}`)
-        .setDescription(`${emoji.curtida} O UID de [${userName}](https://discord.com/users/${userID}) é **${userdb.uidGenshin}** \`(${userdb.server})\`!\n\nVá lá e adiciona ele no jogo~ ${emoji.animada}`)
+        .setTitle(client.t("uid.found_title", ctxFound))
+        .setDescription(client.t("uid.found_desc", ctxFound))
         .setColor("Blue")
         .setThumbnail(getAvatarURL(user))
         .build();

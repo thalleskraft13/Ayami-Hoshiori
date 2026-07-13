@@ -3,6 +3,7 @@
 const getPerm        = require("../../function/Utils/GetPerm.js");
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const GiveawayDb     = require("../../Mongodb/giveaway.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
 
@@ -76,6 +77,7 @@ module.exports = {
     const subcommand = interaction.data.options?.[0]?.name;
     const user       = interaction.member.user.id;
     const guildId    = interaction.guild_id;
+    const ctx        = localeCtx(interaction);
 
     /* ── Subcommands admin ─────────────────────────────── */
 
@@ -93,7 +95,11 @@ module.exports = {
             body: {
               type: 4,
               data: {
-                content: "❌ Você precisa da permissão **Gerenciar Servidor** para usar este subcomando.",
+                content: client.t("common.no_permission", {
+                  ...ctx,
+                  perm: client.t("common.perm_manage_guild", ctx),
+                  action: client.t("common.action_use_subcommand", ctx),
+                }),
                 flags: 64
               }
             }
@@ -131,12 +137,14 @@ module.exports = {
             type: 4,
             data: {
               embeds: [{
-                title: "<:ayamianimada:1513895694824378408> Sistema de Sorteios",
-                description:
-                  `**Sorteios ativos:** ${actives.length}\n\n` +
-                  (actives.length
-                    ? `Selecione um sorteio para gerenciar:`
-                    : `Nenhum sorteio ativo.\nUse \`/sorteio criar\` para criar um!`),
+                title: client.t("sorteio.gerenciar_title", ctx),
+                description: client.t("sorteio.gerenciar_desc", {
+                  ...ctx,
+                  count: actives.length,
+                  sub: actives.length
+                    ? client.t("sorteio.gerenciar_select_prompt", ctx)
+                    : client.t("sorteio.gerenciar_none", ctx),
+                }),
                 color: 0xFFB7C5
               }],
               components: [],
@@ -169,8 +177,8 @@ module.exports = {
               type: 4,
               data: {
                 embeds: [{
-                  title: "<:ayamipensando:1513891183036989533> Nenhum Sorteio Ativo",
-                  description: "Não há sorteios acontecendo agora!\nFique de olho~",
+                  title: client.t("sorteio.lista_none_title", ctx),
+                  description: client.t("sorteio.lista_none_desc", ctx),
                   color: 0xFFB7C5
                 }],
                 flags: 64
@@ -186,10 +194,10 @@ module.exports = {
         return {
           name: `🎉 ${g.prize.slice(0, 80)}`,
           value: [
-            `📌 Canal: <#${g.channelId}>`,
-            `👥 Participantes: **${g.participants.length}**`,
-            `🏆 Vencedores: **${g.winners}**`,
-            `⏰ ${isPaused ? "⏸ Pausado" : `Encerra <t:${endsTs}:R>`}`,
+            client.t("sorteio.field_channel", { ...ctx, channelId: g.channelId }),
+            client.t("sorteio.field_participants_inline", { ...ctx, count: g.participants.length }),
+            client.t("sorteio.field_winners_inline", { ...ctx, count: g.winners }),
+            `⏰ ${isPaused ? client.t("sorteio.paused", ctx) : client.t("sorteio.ends_relative", { ...ctx, ts: endsTs })}`,
             `\`ID: ${g.giveawayId}\``,
           ].join("\n")
         };
@@ -203,11 +211,11 @@ module.exports = {
             type: 4,
             data: {
               embeds: [{
-                title: "<:ayamianimada:1513895694824378408> Sorteios Ativos",
-                description: `Há **${actives.length}** sorteio(s) acontecendo agora!`,
+                title: client.t("sorteio.lista_title", ctx),
+                description: client.t("sorteio.lista_desc", { ...ctx, count: actives.length }),
                 fields,
                 color: 0xFFB7C5,
-                footer: { text: "Clique em 🎉 Participar na mensagem do sorteio!" }
+                footer: { text: client.t("sorteio.lista_footer", ctx) }
               }]
             }
           }
@@ -229,7 +237,7 @@ module.exports = {
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
-            body: { type: 4, data: { content: "<:ayamipensando:1513891183036989533> Sorteio não encontrado!", flags: 64 } }
+            body: { type: 4, data: { content: client.t("sorteio.not_found", ctx), flags: 64 } }
           }
         );
       }
@@ -239,7 +247,7 @@ module.exports = {
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
-            body: { type: 4, data: { content: "<:ayamipensando:1513891183036989533> Este sorteio já foi encerrado!", flags: 64 } }
+            body: { type: 4, data: { content: client.t("sorteio.already_ended", ctx), flags: 64 } }
           }
         );
       }
@@ -249,7 +257,7 @@ module.exports = {
         `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
           method: "POST",
-          body: { type: 4, data: { content: "⏳ Encerrando e sorteando vencedores...", flags: 64 } }
+          body: { type: 4, data: { content: client.t("sorteio.ending_progress", ctx), flags: 64 } }
         }
       );
 
@@ -270,7 +278,7 @@ module.exports = {
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
-            body: { type: 4, data: { content: "<:ayamipensando:1513891183036989533> Sorteio não encontrado!", flags: 64 } }
+            body: { type: 4, data: { content: client.t("sorteio.not_found", ctx), flags: 64 } }
           }
         );
       }
@@ -280,7 +288,7 @@ module.exports = {
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
-            body: { type: 4, data: { content: "<:ayamipensando:1513891183036989533> Só é possível dar reroll em sorteios **encerrados**!", flags: 64 } }
+            body: { type: 4, data: { content: client.t("sorteio.reroll_only_ended", ctx), flags: 64 } }
           }
         );
       }
@@ -289,7 +297,7 @@ module.exports = {
         `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
           method: "POST",
-          body: { type: 4, data: { content: "⏳ Realizando reroll...", flags: 64 } }
+          body: { type: 4, data: { content: client.t("sorteio.reroll_progress", ctx), flags: 64 } }
         }
       );
 
@@ -310,14 +318,16 @@ module.exports = {
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
             method: "POST",
-            body: { type: 4, data: { content: "<:ayamipensando:1513891183036989533> Sorteio não encontrado!", flags: 64 } }
+            body: { type: 4, data: { content: client.t("sorteio.not_found", ctx), flags: 64 } }
           }
         );
       }
 
       const statusMap = {
-        active: '🟢 Ativo', paused: '🟡 Pausado',
-        ended: '🔴 Encerrado', cancelled: '⚫ Cancelado'
+        active: client.t("sorteio.status_active", ctx),
+        paused: client.t("sorteio.status_paused", ctx),
+        ended: client.t("sorteio.status_ended", ctx),
+        cancelled: client.t("sorteio.status_cancelled", ctx)
       };
 
       const endsTs   = Math.floor(new Date(doc.endsAt).getTime() / 1000);
@@ -325,24 +335,24 @@ module.exports = {
       const totalEnt = doc.participants.reduce((a, p) => a + p.totalEntries, 0);
 
       const fields = [
-        { name: '🎯 Status',        value: statusMap[doc.status],  inline: true },
-        { name: '📌 Canal',         value: `<#${doc.channelId}>`,  inline: true },
-        { name: '🏆 Vencedores',    value: String(doc.winners),    inline: true },
-        { name: '👥 Participantes', value: String(total),          inline: true },
-        { name: '🎟️ Entradas',     value: String(totalEnt),       inline: true },
-        { name: '⏰ Encerramento',  value: `<t:${endsTs}:F>`,      inline: true },
+        { name: client.t("sorteio.field_status", ctx),        value: statusMap[doc.status],  inline: true },
+        { name: client.t("sorteio.field_channel_label", ctx), value: `<#${doc.channelId}>`,  inline: true },
+        { name: client.t("sorteio.field_winners", ctx),       value: String(doc.winners),    inline: true },
+        { name: client.t("sorteio.field_participants", ctx),  value: String(total),          inline: true },
+        { name: client.t("sorteio.field_entries", ctx),       value: String(totalEnt),       inline: true },
+        { name: client.t("sorteio.field_end_time", ctx),      value: `<t:${endsTs}:F>`,      inline: true },
       ];
 
       if (doc.bonusEntries?.length) {
         fields.push({
-          name:  '✨ Entradas Bônus',
+          name:  client.t("sorteio.field_bonus_entries", ctx),
           value: doc.bonusEntries.map(b => `<@&${b.roleId}> → +${b.entries}`).join('\n')
         });
       }
 
       if (doc.requirements?.length) {
         fields.push({
-          name:  '📋 Requisitos',
+          name:  client.t("sorteio.field_requirements", ctx),
           value: doc.requirements
             .map(r => `• ${client.giveaway._reqLabel(r)}`)
             .join('\n')
@@ -355,7 +365,7 @@ module.exports = {
           .filter(p => p.status === 'winner')
           .map(p => `<@${p.userId}>`)
           .join(', ');
-        if (winnerList) fields.push({ name: '🏆 Vencedores', value: winnerList });
+        if (winnerList) fields.push({ name: client.t("sorteio.field_winners", ctx), value: winnerList });
       }
 
       return DiscordRequest(

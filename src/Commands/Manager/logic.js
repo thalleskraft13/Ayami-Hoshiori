@@ -13,6 +13,7 @@ const DiscordRequest  = require('../../function/DiscordRequest.js');
 const PremiumManager  = require('../../function/Utils/PremiumManager.js');
 const { LogicScriptModel, LogicRunLogModel } = require('../../Mongodb/logicScript.js');
 const { LogicScriptConfig } = require('../../Mongodb/logicScriptConfig.js');
+const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
 const DASHBOARD_BASE_URL = 'https://ayami-hoshiori.discloud.app';
 
@@ -41,16 +42,16 @@ function fmtLimit(n) {
   return n === Infinity ? '∞' : String(n);
 }
 
-function fmtRelativeTime(date) {
-  if (!date) return 'nunca';
+function fmtRelativeTime(client, ctx, date) {
+  if (!date) return client.t('logic.never', ctx);
   const diffMs = Date.now() - new Date(date).getTime();
   const min = Math.floor(diffMs / 60000);
-  if (min < 1) return 'agora mesmo';
-  if (min < 60) return `há ${min} min`;
+  if (min < 1) return client.t('logic.just_now', ctx);
+  if (min < 60) return client.t('logic.min_ago', { ...ctx, n: min });
   const h = Math.floor(min / 60);
-  if (h < 24) return `há ${h}h`;
+  if (h < 24) return client.t('logic.hours_ago', { ...ctx, n: h });
   const d = Math.floor(h / 24);
-  return `há ${d}d`;
+  return client.t('logic.days_ago', { ...ctx, n: d });
 }
 
 module.exports = {
@@ -87,9 +88,17 @@ module.exports = {
     });
 
     if (!perms || !perms.includes('MANAGE_GUILD')) {
+      const permCtx = localeCtx(interaction);
       return DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
-        { method: 'POST', body: { type: 4, data: { content: '❌ Você precisa da permissão **Gerenciar Servidor** para usar este comando.', flags: 64 } } }
+        { method: 'POST', body: { type: 4, data: {
+          content: client.t('common.no_permission', {
+            ...permCtx,
+            perm: client.t('common.perm_manage_guild', permCtx),
+            action: client.t('common.action_use_command', permCtx),
+          }),
+          flags: 64
+        } } }
       );
     }
 
@@ -124,16 +133,15 @@ module.exports = {
       { method: 'PATCH', body }
     );
 
+    const ctx = localeCtx(interaction);
+
     let blocks;
     try {
-      blocks = await this._buildScriptPanel(guildId);
+      blocks = await this._buildScriptPanel(guildId, client, ctx);
     } catch (err) {
       // Mensagem amigável — nunca stack trace nem detalhe interno
       blocks = [
-        cv2Text(
-          `# 📜 Logic Script\n` +
-          `⚠️ Não foi possível carregar as informações agora. Tente novamente em instantes.`
-        ),
+        cv2Text(client.t('logic.script_load_error', ctx)),
       ];
       console.error('[logic script] erro ao montar painel:', err.message);
     }
@@ -141,7 +149,7 @@ module.exports = {
     return editOriginal(cv2Payload(blocks, { ephemeral: true }));
   },
 
-  async _buildScriptPanel(guildId) {
+  async _buildScriptPanel(guildId, client, ctx) {
     // Plano premium da guild
     const premium = await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }));
     const plan    = premium.status ? premium.plan : require('../../function/Utils/PremiumPlans.js').getPlan(null);
@@ -172,48 +180,55 @@ module.exports = {
 
     // Recursos disponíveis / bloqueados pelo plano
     const featureLines = [
-      `${plan.logicScript?.httpAccess    ? '✅' : '🔒'} Requisições HTTP`,
-      `${plan.logicScript?.webhookAccess  ? '✅' : '🔒'} Webhooks`,
-      `${plan.logicScript?.canRunFlowById ? '✅' : '🔒'} Executar Fluxo do Logic Builder (runFlow)`,
+      `${plan.logicScript?.httpAccess    ? '✅' : '🔒'} ${client.t('logic.feature_http', ctx)}`,
+      `${plan.logicScript?.webhookAccess  ? '✅' : '🔒'} ${client.t('logic.feature_webhooks', ctx)}`,
+      `${plan.logicScript?.canRunFlowById ? '✅' : '🔒'} ${client.t('logic.feature_runflow', ctx)}`,
     ].join('\n');
 
     const errorsText = scriptsWithError.length
-      ? scriptsWithError.map(s => `• \`${s.path}\` — ${s.lastError ?? 'erro de sintaxe'}`).slice(0, 5).join('\n')
-      : '_Nenhum arquivo com erro no momento._';
+      ? scriptsWithError.map(s => `• \`${s.path}\` — ${s.lastError ?? client.t('logic.syntax_error_fallback', ctx)}`).slice(0, 5).join('\n')
+      : client.t('logic.no_file_errors', ctx);
 
     const recentErrorsText = recentErrors.length
-      ? recentErrors.map(e => `• \`${e.scriptPath}\` (${e.event ?? '—'}) — ${e.error ?? 'erro'} · ${fmtRelativeTime(e.createdAt)}`).join('\n')
-      : '_Nenhum erro de execução recente._';
+      ? recentErrors.map(e => `• \`${e.scriptPath}\` (${e.event ?? '—'}) — ${e.error ?? client.t('logic.error_fallback', ctx)} · ${fmtRelativeTime(client, ctx, e.createdAt)}`).join('\n')
+      : client.t('logic.no_recent_errors', ctx);
 
     const guildUrl = `${DASHBOARD_BASE_URL}/dashboard/${guildId}`;
     const manageUrl = `${DASHBOARD_BASE_URL}/dashboard/${guildId}/logicscript`;
 
     return [
-      cv2Text(
-        `# 📜 Logic Script — Painel\n` +
-        `Status: ${enabled ? '🟢 Ativo' : '🔴 Desativado'} · Prefixo: \`${prefix}\`\n` +
-        `Plano atual: ${plan.emoji} **${plan.name}**`
-      ),
+      cv2Text(client.t('logic.panel_header', {
+        ...ctx,
+        statusIcon: enabled ? '🟢' : '🔴',
+        statusText: enabled ? client.t('logic.status_active', ctx) : client.t('logic.status_disabled', ctx),
+        prefix,
+        planEmoji: plan.emoji,
+        planName: plan.name,
+      })),
       cv2Divider(),
-      cv2Text(
-        `**📁 Arquivos:** ${fileCount}/${fmtLimit(fileLimit)}\n` +
-        `**🔧 Funções (total):** ${functionCount} _(até ${fmtLimit(perFileFnLimit)} por arquivo)_`
-      ),
+      cv2Text(client.t('logic.files_line', {
+        ...ctx,
+        fileCount,
+        fileLimit: fmtLimit(fileLimit),
+        functionCount,
+        perFileFnLimit: fmtLimit(perFileFnLimit),
+      })),
       cv2Divider(),
-      cv2Text(`**✨ Recursos do plano:**\n${featureLines}`),
+      cv2Text(client.t('logic.features_label', { ...ctx, featureLines })),
       cv2Divider(),
-      cv2Text(
-        `**📊 Execuções (últimos 7 dias):** ${totalRuns}\n` +
-        `**🕐 Última execução:** ${lastRun ? `\`${lastRun.scriptPath}\` · ${fmtRelativeTime(lastRun.createdAt)}` : 'nenhuma ainda'}`
-      ),
+      cv2Text(client.t('logic.runs_line', {
+        ...ctx,
+        totalRuns,
+        lastRunText: lastRun ? `\`${lastRun.scriptPath}\` · ${fmtRelativeTime(client, ctx, lastRun.createdAt)}` : client.t('logic.no_run_yet', ctx),
+      })),
       cv2Divider(),
-      cv2Text(`**⚠️ Avisos (arquivos com erro de sintaxe):**\n${errorsText}`),
+      cv2Text(client.t('logic.warnings_label', { ...ctx, errorsText })),
       cv2Divider(),
-      cv2Text(`**🐛 Erros recentes de execução:**\n${recentErrorsText}`),
+      cv2Text(client.t('logic.recent_errors_label', { ...ctx, recentErrorsText })),
       cv2Divider(),
       row(
-        linkButton('Dashboard', guildUrl, '📊'),
-        linkButton('Gerenciar', manageUrl, '⚙️'),
+        linkButton(client.t('logic.btn_dashboard', ctx), guildUrl, '📊'),
+        linkButton(client.t('logic.btn_manage', ctx), manageUrl, '⚙️'),
       ),
     ];
   },

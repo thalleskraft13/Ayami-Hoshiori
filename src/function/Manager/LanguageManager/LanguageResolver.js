@@ -5,8 +5,21 @@
  * Seguro para múltiplos shards usarem a mesma lógica.
  */
 
-const SUPPORTED_LOCALES = new Set(["pt-BR", "en-US", "es-ES"]);
-const FALLBACK_LOCALE   = "en-US";
+// Idiomas permitidos pela Ayami. pt-BR é o padrão — todo o "jeito" de
+// personalidade da Ayami nasce em pt-BR e as demais traduções devem
+// preservar esse mesmo tom, só mudando o idioma.
+const SUPPORTED_LOCALES = new Set(["pt-BR", "en-US", "en-GB", "es-ES"]);
+const FALLBACK_LOCALE   = "pt-BR";
+
+// Cadeia de fallback explícita por locale (além do fallback global).
+// en-GB e en-US compartilham a mesma "família", então en-GB tenta
+// en-US antes de cair pro padrão pt-BR.
+const FALLBACK_CHAINS = {
+  "en-GB": ["en-US"],
+  "en-US": [],
+  "es-ES": [],
+  "pt-BR": [],
+};
 
 class LanguageResolver {
   constructor(fallback = FALLBACK_LOCALE) {
@@ -39,18 +52,12 @@ class LanguageResolver {
 
   /**
    * Fallback em cadeia:
-   * "es-ES" → "es" → "en-US"
-   * Preparado para future locales parciais
+   * "en-GB" → "en-US" → "pt-BR"
+   * "es-ES" → "pt-BR"
+   * Usa FALLBACK_CHAINS para rotas específicas antes do fallback global.
    */
   resolveChain(locale) {
-    const chain = [locale];
-    const base  = locale?.split("-")[0];
-
-    if (base && base !== locale && SUPPORTED_LOCALES.has(base)) {
-      chain.push(base);
-    }
-
-    chain.push(this.fallback);
+    const chain = [locale, ...(FALLBACK_CHAINS[locale] ?? []), this.fallback];
     return [...new Set(chain)];
   }
 
@@ -64,9 +71,13 @@ class LanguageResolver {
 
   /**
    * Adiciona locale em runtime (marketplace de novos idiomas)
+   *
+   * @param {string} locale
+   * @param {string[]} [chain] Fallbacks extras antes do fallback global
    */
-  registerLocale(locale) {
+  registerLocale(locale, chain = []) {
     SUPPORTED_LOCALES.add(locale);
+    FALLBACK_CHAINS[locale] = chain;
   }
 }
 

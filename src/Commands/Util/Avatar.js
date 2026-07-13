@@ -1,6 +1,7 @@
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const ComponentBuilder = require("../../function/Messages/ComponentBuilder.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
   info: {
@@ -35,9 +36,11 @@ module.exports = {
       let user = await DiscordRequest(`/users/${userId}`, {
         method: 'GET'
       });
-      
+
+      const ctx = localeCtx(interaction, { name: user.global_name ? user.global_name : user.username });
+
       let embed = new MessageEmbed()
-      .setTitle(`Avatar de ${user.global_name ? user.global_name : user.username}`)
+      .setTitle(client.t("avatar.title", ctx))
       .setImage(getAvatarURL(user))
       .randomColor()
       .build();
@@ -45,7 +48,7 @@ module.exports = {
     let botaoLink = new ComponentBuilder()
        .newRow()
        .addButton({
-           label: "Baixar Avatar",
+           label: client.t("avatar.download_button", ctx),
            style: 5,
            url: getAvatarURL(user)
          })

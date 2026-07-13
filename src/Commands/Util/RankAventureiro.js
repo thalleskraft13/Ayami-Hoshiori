@@ -2,6 +2,7 @@
 
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const db = require("../../Mongodb/userglobal.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
   data: {
@@ -62,10 +63,23 @@ module.exports = {
 
       const isSelf = targetId === authorId;
       const userName = user.global_name || user.username;
+      const userUrl = `https://discord.com/users/${targetId}`;
+
+      const ctx = localeCtx(interaction, {
+        eAnimada: emoji.animada,
+        eSria: emoji.sria,
+        eFeliz: emoji.feliz,
+        eDefault: emoji.default,
+        ar: Ar,
+        xpAtual,
+        xpRestante,
+        userName,
+        userUrl,
+      });
 
       const texto = isSelf
-        ? `${emoji.animada} Você está no **Rank de Aventureiro ${Ar}** com \`${xpAtual} XP\`!\nFaltam apenas \`${xpRestante} XP\` pro próximo rank!\n\n-# ${emoji.sria} Continue crescendo. Eu observo cada passo seu… e espero progresso.`
-        : `${emoji.feliz} [${userName}](https://discord.com/users/${targetId}) está no **Rank de Aventureiro ${Ar}** com \`${xpAtual} XP\`!\nFaltam apenas \`${xpRestante} XP\` pro próximo rank!\n\n-# ${emoji.sria} Eu observo cada aventureiro… e espero progresso de todos.`;
+        ? client.t("rank_aventureiro.self_text", ctx)
+        : client.t("rank_aventureiro.other_text", ctx);
 
       return DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -92,7 +106,7 @@ module.exports = {
                       components: [
                         {
                           type: 10,
-                          content: `# ${emoji.default} Rank de Aventureiro`
+                          content: client.t("rank_aventureiro.header", ctx)
                         }
                       ]
                     },
@@ -124,6 +138,11 @@ module.exports = {
       });
 
       if (!users.length) {
+        const ctxEmpty = localeCtx(interaction, {
+          eEmduvida: emoji.emduvida,
+          eEmburrada: emoji.emburrada,
+          eAnimada: emoji.animada,
+        });
         return DiscordRequest(
           `/interactions/${interaction.id}/${interaction.token}/callback`,
           {
@@ -134,8 +153,8 @@ module.exports = {
                 flags: 64,
                 embeds: [
                   {
-                    title: `${emoji.emduvida} Nenhum aventureiro ainda!`,
-                    description: `${emoji.emburrada} Parece que ninguém subiu de rank ainda...\n\nVá lá e seja o primeiro! ${emoji.animada}`,
+                    title: client.t("rank_aventureiro.empty_title", ctxEmpty),
+                    description: client.t("rank_aventureiro.empty_desc", ctxEmpty),
                     color: 0x7B5EA7
                   }
                 ]
@@ -149,7 +168,7 @@ module.exports = {
 
       const medalhas = ["🥇", "🥈", "🥉"];
 
-      const generateDescription = async (pageIndex) => {
+      const generateDescription = async (pageIndex, ctx) => {
 
         const start = pageIndex * pageSize;
         const current = users.slice(start, start + pageSize);
@@ -164,14 +183,21 @@ module.exports = {
           try {
             user = await DiscordRequest(`/users/${u.userId}`, { method: "GET" });
           } catch {
-            user = { username: "Aventureiro Desconhecido" };
+            user = { username: client.t("rank_aventureiro.unknown_adventurer", ctx) };
           }
 
           const name = user.global_name || user.username;
           const prefix = medalhas[position - 1] ?? `**#${position}**`;
 
           lines.push(
-            `${prefix} [${name}](https://discord.com/users/${u.userId}) • Rank ${u.rankaventureiro.nivelAtual} \`(${u.rankaventureiro.xpTotal} XP)\``
+            client.t("rank_aventureiro.rank_line", {
+              ...ctx,
+              prefix,
+              name,
+              userUrl: `https://discord.com/users/${u.userId}`,
+              nivel: u.rankaventureiro.nivelAtual,
+              xp: u.rankaventureiro.xpTotal,
+            })
           );
         }
 
@@ -197,19 +223,24 @@ module.exports = {
           data: { label: "➡️", style: 2 }
         });
 
-        const description = await generateDescription(newPage);
+        const ctx = localeCtx(btnInteraction, {
+          eFesta: emoji.festa,
+          eAnimada: emoji.animada,
+        });
+
+        const description = await generateDescription(newPage, ctx);
 
         const isFirst = newPage === 0;
         const isLast = newPage === totalPages - 1;
 
         const embed = {
-          title: `${emoji.festa} Ranking de Aventureiros`,
+          title: client.t("rank_aventureiro.leaderboard_title", ctx),
           description:
-            `${emoji.animada} *Os maiores aventureiros estão aqui!*\n\n` +
+            `${client.t("rank_aventureiro.leaderboard_intro", ctx)}\n\n` +
             description,
           color: 0x7B5EA7,
           footer: {
-            text: `Página ${newPage + 1} de ${totalPages} • Ayami Hoshiori`
+            text: client.t("rank_aventureiro.footer", { ...ctx, page: newPage + 1, totalPages })
           }
         };
 

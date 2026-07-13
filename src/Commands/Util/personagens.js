@@ -1,6 +1,7 @@
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
   info: {
@@ -21,6 +22,7 @@ module.exports = {
       body: { type: 5 }
     });
 
+    const ctx = localeCtx(interaction);
     const userId = interaction.member.user.id;
 
     let userData = await UserGlobalDb.findOne({ userId });
@@ -33,7 +35,7 @@ module.exports = {
       return await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: "POST",
         body: {
-          content: "Você ainda não possui personagens."
+          content: client.t("personagens.no_characters", ctx)
         }
       });
     }
@@ -49,7 +51,7 @@ module.exports = {
     let description = "";
 
     if (fiveStars.length > 0) {
-      description += "🌟 **5 Estrelas**\n";
+      description += `${client.t("personagens.five_stars", ctx)}\n`;
       fiveStars.forEach(p => {
         description += `• ${p.nome} (C${p.constelacao})\n`;
       });
@@ -57,14 +59,14 @@ module.exports = {
     }
 
     if (fourStars.length > 0) {
-      description += "⭐ **4 Estrelas**\n";
+      description += `${client.t("personagens.four_stars", ctx)}\n`;
       fourStars.forEach(p => {
         description += `• ${p.nome} (C${p.constelacao})\n`;
       });
     }
 
     const embed = new MessageEmbed()
-      .setTitle("🎒 Seus Personagens")
+      .setTitle(client.t("personagens.title", ctx))
       .setDescription(description)
       .randomColor()
       .build();

@@ -4,6 +4,7 @@ const DiscordRequest  = require("../../function/DiscordRequest.js");
 const PremiumManager  = require("../../function/Utils/PremiumManager.js");
 const UserGlobalDb    = require("../../Mongodb/userglobal.js");
 const {GuildDb}         = require("../../Mongodb/guild.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 /* ─────────────────────────────────────────────
    CORES DA AYAMI
@@ -98,7 +99,7 @@ module.exports = {
     const guilds = await client.getAllGuilds();
     const totalGuilds = guilds.length;
 
-    const buildBlocks = async (page) => {
+    const buildBlocks = async (page, ctx) => {
 
       const uptime  = formatTempo(process.uptime() * 1000);
       const mem     = process.memoryUsage();
@@ -109,23 +110,20 @@ module.exports = {
         cv2Divider(),
       ];
 
+      const pageHeader = (titleKey, emoji) => cv2Text(
+        `# ${emoji} ${client.t(titleKey, ctx)}\n` +
+        `${e.feliz} **${botData.username}**\n\n` +
+        `👑 ${client.t("info.creator_label", ctx)}: [Thalles](https://discord.com/users/1438170698580361287)`
+      );
+
       if (page === "geral") {
         const totalUsersDB = await UserGlobalDb.countDocuments();
 
         return [
           ...header,
-          cv2Text(
-            `# ${e.default} Ayami Hoshiori — Informações\n` +
-            `${e.feliz} **${botData.username}**\n\n` +
-            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)`
-          ),
+          pageHeader("info.title_geral", e.default),
           cv2Divider(),
-          cv2Text(
-            `> 🌐 **Servidores (total cluster):** \`${totalGuilds}\`\n` +
-            `> 👥 **Usuários (DB):** \`${totalUsersDB}\`\n\n` +
-            `> ⏳ **Uptime:** \`${uptime}\`\n` +
-            `> 🟢 **Node:** \`${process.version}\``
-          ),
+          cv2Text(client.t("info.body_geral", { ...ctx, totalGuilds, totalUsersDB, uptime, nodeVersion: process.version })),
         ];
       }
 
@@ -136,22 +134,19 @@ module.exports = {
           await DiscordRequest("/gateway", { method: "GET" });
           ping = Date.now() - start;
         } catch {
-          ping = "Erro";
+          ping = client.t("info.ping_error", ctx);
         }
 
         return [
           ...header,
-          cv2Text(
-            `# ${e.pensando} Ayami Hoshiori — Performance\n` +
-            `${e.feliz} **${botData.username}**\n\n` +
-            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)`
-          ),
+          pageHeader("info.title_performance", e.pensando),
           cv2Divider(),
-          cv2Text(
-            `> 🏓 **Latência API:** \`${ping}ms\`\n\n` +
-            `> 🧠 **Heap usado:** \`${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB\`\n` +
-            `> 📦 **Heap total:** \`${(mem.heapTotal / 1024 / 1024).toFixed(2)} MB\``
-          ),
+          cv2Text(client.t("info.body_performance", {
+            ...ctx,
+            ping,
+            heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2),
+            heapTotal: (mem.heapTotal / 1024 / 1024).toFixed(2),
+          })),
         ];
       }
 
@@ -162,17 +157,14 @@ module.exports = {
 
         return [
           ...header,
-          cv2Text(
-            `# ${e.carinho} Ayami Hoshiori — Premium\n` +
-            `${e.feliz} **${botData.username}**\n\n` +
-            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)`
-          ),
+          pageHeader("info.title_premium", e.carinho),
           cv2Divider(),
-          cv2Text(
-            `> ⭐ **Seu premium:** \`${premium.status ? "Ativo ✅" : "Inativo ❌"}\`\n\n` +
-            `> 👥 **Usuários premium:** \`${totalPremium}\`\n` +
-            `> 🌐 **Servidores premium:** \`${guildsPremium}\``
-          ),
+          cv2Text(client.t("info.body_premium", {
+            ...ctx,
+            premiumStatus: premium.status ? client.t("info.premium_active", ctx) : client.t("info.premium_inactive", ctx),
+            totalPremium,
+            guildsPremium,
+          })),
         ];
       }
 
@@ -183,8 +175,8 @@ module.exports = {
         } catch {
           return [
             cv2Text(
-              `# ${e.assustada} Ayami Hoshiori — Clusters\n` +
-              `Não foi possível obter os dados dos clusters agora. Tente novamente!`
+              `# ${e.assustada} ${client.t("info.title_clusters_error", ctx)}\n` +
+              client.t("info.clusters_error_desc", ctx)
             ),
           ];
         }
@@ -200,25 +192,18 @@ module.exports = {
           return Math.round(pings.reduce((a, b) => a + b, 0) / pings.length);
         })();
 
+        const noShards = client.t("info.no_shards", ctx);
         const linhasClusters = allStats.map(c => {
           if (c.error) return `**Cluster ${CLUSTERS_NAME[c.clusterId]}:** ⚠️ ${c.error}`;
           const shards = c.shards.map(s => `\`#${s.shardId}\` ${s.ping}ms`).join("  ");
-          return `**Cluster ${CLUSTERS_NAME[c.clusterId]}:** ${shards || "Sem shards"}`;
+          return `**Cluster ${CLUSTERS_NAME[c.clusterId]}:** ${shards || noShards}`;
         }).join("\n");
 
         return [
           ...header,
-          cv2Text(
-            `# 📡 Ayami Hoshiori — Clusters & Shards\n` +
-            `${e.feliz} **${botData.username}**\n\n` +
-            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)`
-          ),
+          pageHeader("info.title_clusters", "📡"),
           cv2Divider(),
-          cv2Text(
-            `> 📊 **Clusters:** \`${allStats.length}\`\n` +
-            `> 📡 **Shards:** \`${totalShards}\`\n` +
-            `> 🏓 **Ping médio:** \`${avgPing}ms\``
-          ),
+          cv2Text(client.t("info.body_clusters", { ...ctx, numClusters: allStats.length, totalShards, avgPing })),
           cv2Divider(),
           cv2Text(linhasClusters),
         ];
@@ -231,46 +216,45 @@ module.exports = {
 
         return [
           ...header,
-          cv2Text(
-            `# ${e.sria || e.default} Ayami Hoshiori — Versões\n` +
-            `${e.feliz} **${botData.username}**\n\n` +
-            `👑 Criador: [Thalles](https://discord.com/users/1438170698580361287)`
-          ),
+          pageHeader("info.title_versoes", e.sria || e.default),
           cv2Divider(),
-          cv2Text(`**Versões do sistema atual:**\n${versionLines}`),
+          cv2Text(client.t("info.versions_label", { ...ctx, versionLines })),
         ];
       }
     };
 
+    const ctx = localeCtx(interaction);
+
     const btnAdd = {
       type: 2,
       style: 5,
-      label: "Adicionar Ayami",
+      label: client.t("info.btn_add", ctx),
       url: "https://discord.com/oauth2/authorize?client_id=1441027871069048902&permissions=6755522653448304&integration_type=0&scope=bot+applications.commands"
     };
 
     const btnServer = {
       type: 2,
       style: 5,
-      label: "Servidor Oficial",
+      label: client.t("info.btn_server", ctx),
       url: "https://discord.gg/WjeVXJPn5p"
     };
 
     const select = client.interactions.createSelect({
       user: userId,
       data: {
-        placeholder: "✨ Escolha uma categoria~",
+        placeholder: client.t("info.select_placeholder", ctx),
         options: [
-          { label: "Geral",             value: "geral",        emoji: { name: "📖" } },
-          { label: "Performance",       value: "performance",  emoji: { name: "⚡" } },
-          { label: "Premium",           value: "premium",      emoji: { name: "⭐" } },
-          { label: "Clusters & Shards", value: "clusters",     emoji: { name: "📡" } },
-          { label: "Versões",           value: "versoes",      emoji: { name: "🔖" } }
+          { label: client.t("info.opt_geral", ctx),       value: "geral",        emoji: { name: "📖" } },
+          { label: client.t("info.opt_performance", ctx), value: "performance",  emoji: { name: "⚡" } },
+          { label: client.t("info.opt_premium", ctx),     value: "premium",      emoji: { name: "⭐" } },
+          { label: client.t("info.opt_clusters", ctx),    value: "clusters",     emoji: { name: "📡" } },
+          { label: client.t("info.opt_versoes", ctx),     value: "versoes",      emoji: { name: "🔖" } }
         ]
       },
       funcao: async (btnInteraction) => {
         const value  = btnInteraction.data.values[0];
-        const blocks = await buildBlocks(value);
+        const btnCtx = localeCtx(btnInteraction);
+        const blocks = await buildBlocks(value, btnCtx);
 
         await DiscordRequest(`/interactions/${btnInteraction.id}/${btnInteraction.token}/callback`, {
           method: "POST",
@@ -295,7 +279,7 @@ module.exports = {
       { accentColor: COLOR.main }
     );
 
-    const blocksIniciais = await buildBlocks("geral");
+    const blocksIniciais = await buildBlocks("geral", ctx);
 
     await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
       method: "POST",

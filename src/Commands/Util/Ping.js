@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest = require('../../function/DiscordRequest.js');
+const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
 module.exports = {
   data: {
@@ -19,15 +20,17 @@ module.exports = {
     const shard = info.shards.find(s => s.shardId === shardId);
     const CLUSTERS_NAME = client.CLUSTERS_NAME;
 
+    const ctx = localeCtx(interaction, { emoji: e.feliz });
+
     const embed = {
-      title: `${e.feliz} Pong!`,
+      title: client.t('ping.title', ctx),
       color: COR,
       fields: [
-        { name: "🏓 Ping",      value: `\`${shard?.ping ?? "?"}ms\``,          inline: true },
-        { name: "📡 Shard",     value: `\`#${shardId}\``,                       inline: true },
-        { name: "🖥️ Cluster",  value: `\`${CLUSTERS_NAME[info.clusterId]}\``,  inline: true },
-        { name: "⏳ Uptime",    value: `\`${_formatUptime(info.uptime)}\``,     inline: true },
-        { name: "💾 Memória",   value: `\`${_formatMemory(info.memory)}\``,     inline: true }
+        { name: client.t('ping.field_ping', ctx),    value: `\`${shard?.ping ?? "?"}ms\``,          inline: true },
+        { name: client.t('ping.field_shard', ctx),   value: `\`#${shardId}\``,                       inline: true },
+        { name: client.t('ping.field_cluster', ctx), value: `\`${CLUSTERS_NAME[info.clusterId]}\``,  inline: true },
+        { name: client.t('ping.field_uptime', ctx),  value: `\`${_formatUptime(info.uptime)}\``,     inline: true },
+        { name: client.t('ping.field_memory', ctx),  value: `\`${_formatMemory(info.memory)}\``,     inline: true }
       ],
       timestamp: new Date().toISOString()
     };

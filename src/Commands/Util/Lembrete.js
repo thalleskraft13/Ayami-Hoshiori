@@ -1,4 +1,5 @@
 const DiscordRequest = require("../../function/DiscordRequest.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
     data: {
@@ -29,6 +30,7 @@ module.exports = {
         }
       })
 
+        const ctx = localeCtx(interaction);
         const tempoInput = interaction.data.options.find(o => o.name === "tempo")?.value;
         const mensagem = interaction.data.options.find(o => o.name === "mensagem")?.value;
 
@@ -63,7 +65,7 @@ module.exports = {
             return await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
                 method: "POST",
                 body: { 
-                   content: "❌ Tempo inválido. Use: 10s, 5m, 1h, 2d, 1h30m",
+                   content: client.t("lembrete.invalid_time", ctx),
                   }
                });
             
@@ -76,14 +78,15 @@ module.exports = {
             dados: {
                 userId: interaction.member.user.id,
                 channelId: interaction.channel_id,
-                mensagem
+                mensagem,
+                locale: interaction.locale
             }
         });
         
         return await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
                 method: "POST",
                 body: { 
-                   content: `⏰ Lembrete criado para **${tempoInput}**`
+                   content: client.t("lembrete.created", { ...ctx, tempo: tempoInput })
                   }
                });
 

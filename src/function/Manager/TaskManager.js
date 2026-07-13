@@ -425,10 +425,11 @@ class TaskManager {
      ═══════════════════════════════════════════ */
 
   async handleLembrete(dados) {
-    const { userId, channelId, mensagem } = dados;
+    const { userId, channelId, mensagem, locale } = dados;
+    const ctx = { system: { locale }, userId, mensagem };
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
-      body:   { content: `⏰ <@${userId}> Lembre-se de:\n${mensagem}` }
+      body:   { content: this.client.t('lembrete.fired', ctx) }
     });
   }
 

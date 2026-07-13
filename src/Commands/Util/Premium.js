@@ -2,6 +2,7 @@
 
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
+const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 /* ═══════════════════════════════════════════════════════════
    HELPERS COMPONENTS V2
@@ -103,7 +104,7 @@ module.exports = {
         return renderPanel(interaction, client, userId);
 
       case "comprar":
-        return renderBuy(interaction, emoji);
+        return renderBuy(interaction, client, emoji);
 
       case "resgatar": {
 
@@ -118,12 +119,20 @@ module.exports = {
           codigo
         );
 
+        const ctx = localeCtx(interaction, {
+          eAnimada: emoji.animada,
+          eFesta: emoji.festa,
+          eChorando: emoji.chorando,
+          codigo,
+          motivo: result.motivo,
+        });
+
         const blocks = [
           cv2Text(
-            `# ${emoji.animada} Resgate de Constellation\n` +
+            `${client.t("premium.redeem_title", ctx)}\n` +
             (result.status
-              ? `${emoji.festa} Key resgatada com sucesso!\n\nCódigo: \`${codigo}\`\n\nBem-vinda à Constellation~ ${emoji.corao}`
-              : `${emoji.chorando} Ops! ${result.motivo}`)
+              ? client.t("premium.redeem_success", ctx)
+              : client.t("premium.redeem_fail", ctx))
           ),
         ];
 
@@ -146,51 +155,30 @@ module.exports = {
 //  COMPRAR
 // ──────────────────────────────────────────
 
-async function renderBuy(interaction, emoji) {
+async function renderBuy(interaction, client, emoji) {
+
+  const ctx = localeCtx(interaction, {
+    eFeliz: emoji.feliz,
+    eAnimada: emoji.animada,
+    eCurtida: emoji.curtida,
+    eCorao: emoji.corao,
+    ePensando: emoji.pensando,
+    eSria: emoji.sria,
+  });
 
   const blocks = [
-    cv2Text(
-      `# ${emoji.feliz} Constellation — Ayami Hoshiori\n` +
-      `${emoji.animada} **A assinatura oficial da Ayami chegou!**`
-    ),
+    cv2Text(client.t("premium.buy_title", ctx)),
     cv2Divider(),
-    cv2Text(
-      `✨ **Escolha seu plano:**\n\n` +
-      `> 🌟 **Nova Estrela** — R$ 7,99/mês\n` +
-      `> 　 1 servidor · 25 fluxos no Logic Builder · 15 arquivos no Logic Script\n` +
-      `> 　 +25% no daily · Tickets Avançados (até 10 perguntas)\n\n` +
-      `> 🌙 **Lua Crescente** — R$ 14,99/mês\n` +
-      `> 　 3 servidores · 35 fluxos no Logic Builder · 35 arquivos no Logic Script\n` +
-      `> 　 +60% no daily · +0.5% chance 5⭐ · HTTP e Webhooks liberados no Logic Script\n` +
-      `> 　 Tickets com perguntas ilimitadas\n\n` +
-      `> ✨ **Constellation** — R$ 24,99/mês\n` +
-      `> 　 Servidores ilimitados · Logic Builder e Logic Script ilimitados\n` +
-      `> 　 +100% no daily · +1% chance 5⭐ · Acesso antecipado e à Ayami CANARY\n\n` +
-      `${emoji.curtida} **Ou adquira um Código avulso de qualquer plano**\n` +
-      `> 🔑 Fale com a staff pra gerar sua key`
-    ),
+    cv2Text(client.t("premium.buy_plans", ctx)),
     cv2Divider(),
-    cv2Text(
-      `${emoji.corao} **Benefícios exclusivos:**\n\n` +
-      `🏅 Cargo exclusivo no Servidor Oficial\n` +
-      `⭐ Mais chances ao obter Personagens 5 Estrelas\n` +
-      `💎 Bônus de Primogemas no Daily\n` +
-      `⚙️ Configurações avançadas nos sistemas\n` +
-      `　*(Tipo de Chat, Form Sequencial, Form por Modal,*\n` +
-      `　*Cargos Temporários, Ticket Setup e muito mais)*\n` +
-      `🔗 Uso de Webhook em Sistemas\n` +
-      `📌 Botão Fixo + Webhook no Sistema de Aniversário`
-    ),
+    cv2Text(client.t("premium.buy_benefits", ctx)),
     cv2Divider(),
-    cv2Text(
-      `${emoji.pensando} *Constellation não é só um plano.*\n` +
-      `*É o seu lugar entre as estrelas.* ${emoji.sria}`
-    ),
+    cv2Text(client.t("premium.buy_footer", ctx)),
     cv2Divider(),
     row({
       type: 2,
       style: 5,
-      label: "✨ Assinar Constellation",
+      label: client.t("premium.buy_button", ctx),
       url: "https://discord.gg/WjeVXJPn5p"
     }),
   ];
@@ -236,16 +224,22 @@ async function renderPanel(interaction, client, userId, edit = false) {
     return `${d}d ${h}h ${m}m ${s}s`;
   };
 
+  const ctx = localeCtx(interaction, {
+    eEmduvida: emoji.emduvida,
+    eEmburrada: emoji.emburrada,
+    eCarinho: emoji.carinho,
+    eFesta: emoji.festa,
+    eAnimada: emoji.animada,
+    eFeliz: emoji.feliz,
+    eCurtida: emoji.curtida,
+  });
+
   // ── Sem premium ──
   if (!userPremium.status) {
 
     const blocks = [
       cv2SectionThumb(
-        `# ${emoji.emduvida} Constellation\n` +
-        `${emoji.emburrada} Você ainda não possui a Constellation ativa...\n\n` +
-        `Use \`/premium comprar\` para conhecer os planos\n` +
-        `ou \`/premium resgatar\` se já tiver um código!\n\n` +
-        `${emoji.carinho} *Venha brilhar com a Ayami~*`,
+        client.t("premium.panel_no_premium", ctx),
         avatar
       ),
     ];
@@ -277,12 +271,15 @@ async function renderPanel(interaction, client, userId, edit = false) {
   );
 
   // ── Montar bloco principal (substitui a "desc" do embed clássico) ──
-  let mainText = "";
-  mainText += `# ${emoji.festa} Painel Constellation\n`;
-  mainText += `${emoji.animada} **Assinante:** <@${userId}>\n`;
-  mainText += `✨ **Plano:** ${userPremium.plan.emoji} ${userPremium.plan.name}\n`;
-  mainText += `⏳ **Expira em:** \`${formatTempo(userPremium.tempo)}\`\n\n`;
-  mainText += `🏠 **Servidores com Constellation:** ${guilds.length}/${userPremium.plan.guildLimit === Infinity ? '∞' : userPremium.plan.guildLimit}`;
+  const mainText = client.t("premium.panel_header", {
+    ...ctx,
+    userId,
+    planEmoji: userPremium.plan.emoji,
+    planName: userPremium.plan.name,
+    tempo: formatTempo(userPremium.tempo),
+    count: guilds.length,
+    limit: userPremium.plan.guildLimit === Infinity ? '∞' : userPremium.plan.guildLimit,
+  });
 
   const blocks = [
     cv2SectionThumb(mainText, avatar),
@@ -290,20 +287,20 @@ async function renderPanel(interaction, client, userId, edit = false) {
 
   if (guildNames.length) {
     const listaServidores = guildNames
-      .map(g => `${emoji.curtida} **${g.name}** \`(${g.guildId})\``)
+      .map(g => client.t("premium.server_line", { ...ctx, name: g.name, guildId: g.guildId }))
       .join('\n');
 
     blocks.push(cv2Divider());
-    blocks.push(cv2Text(`**Servidores vinculados:**\n${listaServidores}`));
+    blocks.push(cv2Text(client.t("premium.linked_servers_label", { ...ctx, lista: listaServidores })));
   }
 
   blocks.push(cv2Divider());
 
   const servidorAtualText = guildPremium.status
-    ? `${emoji.feliz} Constellation **ativa** aqui!\n⏳ \`${formatTempo(guildPremium.tempo)}\``
-    : `${emoji.emburrada} Constellation **não ativa** neste servidor.\nUse o botão abaixo para ativar!`;
+    ? client.t("premium.current_active", { ...ctx, tempo: formatTempo(guildPremium.tempo) })
+    : client.t("premium.current_inactive", ctx);
 
-  blocks.push(cv2Text(`**Servidor Atual**\n${servidorAtualText}`));
+  blocks.push(cv2Text(client.t("premium.current_server_label", { ...ctx, status: servidorAtualText })));
 
   const components = [];
 
@@ -313,7 +310,7 @@ async function renderPanel(interaction, client, userId, edit = false) {
     const btnAdd = client.interactions.createButton({
       user: userId,
       data: {
-        label: "✨ Ativar neste Servidor",
+        label: client.t("premium.btn_activate", ctx),
         style: 1
       },
       funcao: async (btn) => {
@@ -331,7 +328,7 @@ async function renderPanel(interaction, client, userId, edit = false) {
     const btnRemove = client.interactions.createButton({
       user: userId,
       data: {
-        label: "🗑️ Remover deste Servidor",
+        label: client.t("premium.btn_remove", ctx),
         style: 4
       },
       funcao: async (btn) => {
@@ -347,7 +344,7 @@ async function renderPanel(interaction, client, userId, edit = false) {
   components.push({
     type: 2,
     style: 5,
-    label: "✨ Ver Planos Constellation",
+    label: client.t("premium.btn_view_plans", ctx),
     url: "https://discord.gg/WjeVXJPn5p"
   });
 

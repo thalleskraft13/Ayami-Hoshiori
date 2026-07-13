@@ -1,0 +1,242 @@
+"use strict";
+
+module.exports = [
+  /* ── Etiquetas de acción/condición (usadas en el asistente de instalación) ── */
+  { id: "action_send_message", render: () => "💬 Enviar mensaje" },
+  { id: "action_send_dm", render: () => "📩 Enviar MD" },
+  { id: "action_reply_message", render: () => "↩️ Responder mensaje" },
+  { id: "action_delete_message", render: () => "🗑️ Borrar mensaje" },
+  { id: "action_delete_bot_message", render: () => "🗑️ Borrar mensaje del bot" },
+  { id: "action_give_role", render: () => "🏷️ Dar rol" },
+  { id: "action_remove_role", render: () => "🏷️ Quitar rol" },
+  { id: "action_give_temp_role", render: () => "⏱️ Rol temporal" },
+  { id: "action_toggle_role", render: () => "🔄 Alternar rol" },
+  { id: "action_has_role", render: () => "👤 Tiene rol" },
+  { id: "action_not_has_role", render: () => "👤 No tiene rol" },
+  { id: "action_lock_channel", render: () => "🔒 Bloquear canal" },
+  { id: "action_unlock_channel", render: () => "🔓 Desbloquear canal" },
+  { id: "action_delete_channel", render: () => "❌ Borrar canal" },
+  { id: "action_rename_channel", render: () => "✏️ Renombrar canal" },
+  { id: "action_is_channel", render: () => "📌 Canal específico" },
+  { id: "action_not_channel", render: () => "📌 No es este canal" },
+
+  /* ── Campos de configuración del asistente ── */
+  { id: "field_channel", render: () => "📌 Canal" },
+  { id: "field_role", render: () => "🏷️ Rol" },
+
+  { id: "desc_send_message_channel", render: () => "Menciona o envía el ID del canal donde se enviarán los mensajes." },
+  { id: "desc_delete_bot_message_channel", render: () => "Menciona o envía el ID del canal donde está el mensaje del bot." },
+  { id: "desc_delete_channel", render: () => "Menciona o envía el ID del canal a borrar." },
+  { id: "desc_rename_channel", render: () => "Menciona o envía el ID del canal a renombrar." },
+  { id: "desc_lock_channel", render: () => "Menciona o envía el ID del canal a bloquear." },
+  { id: "desc_lock_role", render: () => "Menciona o envía el ID del rol que perderá el acceso (vacío = @everyone)." },
+  { id: "desc_unlock_channel", render: () => "Menciona o envía el ID del canal a desbloquear." },
+  { id: "desc_unlock_role", render: () => "Menciona o envía el ID del rol (vacío = @everyone)." },
+  { id: "desc_give_role", render: () => "Menciona o envía el ID del rol a dar." },
+  { id: "desc_remove_role", render: () => "Menciona o envía el ID del rol a quitar." },
+  { id: "desc_give_temp_role", render: () => "Menciona o envía el ID del rol temporal." },
+  { id: "desc_toggle_role", render: () => "Menciona o envía el ID del rol a alternar." },
+  { id: "desc_check_role", render: () => "Menciona o envía el ID del rol a verificar." },
+  { id: "desc_is_channel", render: () => "Menciona o envía el ID del canal específico." },
+  { id: "desc_not_channel", render: () => "Menciona o envía el ID del canal a ignorar." },
+  { id: "desc_trigger_message", render: () => "Menciona o envía el ID del canal filtro del trigger (déjalo en blanco para cualquier canal)." },
+  { id: "desc_trigger_generic", render: () => "Menciona o envía el ID del canal filtro del trigger." },
+  { id: "trigger_skip_suffix", render: () => "\nEnvía `-` para no filtrar por canal." },
+
+  { id: "trigger_label_generic", render: (ctx) => `🎯 Trigger (${ctx.flowName})` },
+  { id: "condition_suffix", render: (ctx) => `${ctx.label} — condición (${ctx.flowName})` },
+  { id: "action_suffix", render: (ctx) => `${ctx.label} (${ctx.flowName})` },
+  { id: "unnamed_flow", render: (ctx) => `Flujo ${ctx.n}` },
+
+  /* ── Asistente de instalación ── */
+  { id: "no_permission_install", render: (ctx) =>
+    `# ${ctx.eBrava} Sin permiso\nNecesitas el permiso **Gestionar Servidor** para instalar sistemas.` },
+
+  { id: "install_configuring", render: (ctx) =>
+    `# ${ctx.ePensando} Configurando — ${ctx.entryName}\n` +
+    `Este sistema necesita **${ctx.count} configuración(es)** antes de instalarse.\n\n` +
+    `Responde a los próximos mensajes en este canal.\n` +
+    `Tienes **2 minutos** por respuesta.\n\n` +
+    `> Envía \`-\` para omitir (cuando sea posible) o \`cancelar\` para abortar.` },
+
+  { id: "install_question_for", render: () => "Para" },
+  { id: "install_question_flow", render: () => "Flujo" },
+  { id: "install_question_footer", render: () => "Envía `-` para omitir • `cancelar` para abortar" },
+
+  { id: "install_timeout_title", render: (ctx) => `${ctx.eSonolenta} Tiempo agotado` },
+  { id: "install_timeout_desc", render: () => "La instalación se canceló por inactividad. ¡Puedes intentarlo de nuevo cuando quieras~" },
+
+  { id: "install_cancelled_title", render: (ctx) => `${ctx.eEmburrada} Instalación cancelada` },
+  { id: "install_cancelled_desc", render: () => "Está bien, puedes instalarlo cuando quieras~" },
+
+  { id: "install_success", render: (ctx) =>
+    `# ${ctx.eFesta} ¡${ctx.entryName} instalado!\n¡**${ctx.count}** flujo(s) creado(s) en este servidor!` },
+  { id: "install_config_applied", render: (ctx) => `**Configuraciones aplicadas:**\n${ctx.lines}` },
+  { id: "install_no_config", render: () => "_No se necesita ninguna configuración_" },
+  { id: "install_not_set", render: () => "_no definido_" },
+  { id: "install_error", render: (ctx) => `# ${ctx.eAssustada} Error en la instalación\n${ctx.message}` },
+  /* ── Comando general / errores ── */
+  { id: "unknown_subcommand", render: (ctx) => `# ${ctx.eAssustada} Subcomando desconocido\nNo reconocí ese comando. ¡Inténtalo de nuevo!` },
+  { id: "generic_error", render: (ctx) => `# ${ctx.eAssustada} Algo salió mal...\n${ctx.message}` },
+  { id: "generic_error_fallback", render: () => "Ocurrió un error inesperado. ¡Lo siento!" },
+  { id: "entry_not_found", render: (ctx) => `# ${ctx.eEmduvida} Entrada no encontrada\nNo encontré nada con ese ID. ¡Revisa si lo escribiste bien~` },
+  { id: "entry_not_found_short", render: (ctx) => `# ${ctx.eEmduvida} Entrada no encontrada\nNo encontré nada con ese ID~` },
+  { id: "not_author", render: (ctx) => `# ${ctx.eBrava} Sin permiso\nNo eres el autor de esta entrada.` },
+  { id: "fallback_user", render: (ctx) => `Usuario ${ctx.suffix}` },
+  { id: "fallback_anon", render: () => "Anónimo" },
+  { id: "no_ratings", render: () => "☆☆☆☆☆ _sin valoraciones_" },
+  { id: "not_configured", render: () => "No configurado" },
+
+  /* ── /biblioteca pesquisar ── */
+  { id: "no_results_title", render: (ctx) => `# ${ctx.eEmduvida} Sin resultados` },
+  { id: "no_results_desc", render: () => "No encontré ningún flujo con esos filtros.\nPrueba otros términos o quita algunos filtros~" },
+
+  { id: "sort_installs", render: () => "📥 Más instalados" },
+  { id: "sort_rating", render: () => "⭐ Mejor valorados" },
+  { id: "sort_trending", render: () => "🔥 Tendencia" },
+  { id: "sort_recent", render: () => "🕐 Más recientes" },
+
+  { id: "search_filters_label", render: () => "Filtros" },
+  { id: "search_order_label", render: () => "Orden" },
+  { id: "search_title", render: (ctx) => `# ${ctx.eAnimada} Biblioteca de Flujos\n${ctx.filterLine}${ctx.sortLine}` },
+  { id: "search_no_desc", render: () => "Sin descripción" },
+  { id: "search_installs_label", render: (ctx) => `📥 ${ctx.count} instalaciones` },
+  { id: "search_select_placeholder", render: () => "✨ Selecciona para ver detalles~" },
+  { id: "search_prev", render: () => "◀ Anterior" },
+  { id: "search_next", render: () => "Siguiente ▶" },
+  { id: "search_footer", render: (ctx) => `-# ${ctx.total} resultado${ctx.total !== 1 ? 's' : ''} • Página ${ctx.page} de ${ctx.pages}` },
+
+  /* ── /biblioteca ver (detalle) ── */
+  { id: "detail_no_desc", render: () => "_Sin descripción_" },
+  { id: "detail_author", render: () => "👤 **Autor:**" },
+  { id: "detail_category", render: () => "📂 **Categoría:**" },
+  { id: "detail_installs", render: () => "📥 **Instalaciones:**" },
+  { id: "detail_rating", render: (ctx) => `⭐ **Valoración:** ${ctx.stars} (${ctx.count} valoraciones)` },
+  { id: "detail_flows", render: () => "🔗 **Flujos:**" },
+  { id: "detail_config", render: () => "🔧 **Configuraciones:**" },
+  { id: "detail_config_fields", render: (ctx) => `${ctx.count} campo(s)` },
+  { id: "detail_config_none", render: () => "_Ninguna necesaria_" },
+  { id: "detail_tags", render: () => "🏷️ **Etiquetas:**" },
+  { id: "detail_no_tags", render: () => "_Sin etiquetas_" },
+  { id: "detail_id", render: () => "🆔 **ID:**" },
+  { id: "btn_install", render: () => "📥 Instalar" },
+  { id: "btn_rate", render: () => "⭐ Valorar" },
+  { id: "btn_view_author", render: () => "👤 Ver Autor" },
+
+  /* ── /biblioteca publicar ── */
+  { id: "no_flows_title", render: (ctx) => `# ${ctx.eEmburrada} Sin flujos` },
+  { id: "no_flows_publish_desc", render: () => "Crea al menos un flujo antes de publicar en la biblioteca~" },
+  { id: "no_flows_update_desc", render: () => "Crea al menos un flujo antes de actualizar~" },
+
+  { id: "publish_title", render: (ctx) => `# ${ctx.eAnimada} Publicar en la Biblioteca\n**Autor:** ${ctx.authorName}\n\n¡Agrega los flujos que formarán parte de este sistema y pulsa **Publicar** cuando esté listo!` },
+  { id: "selected_flows_label", render: (ctx) => `**📦 Flujos seleccionados (${ctx.count}):**\n${ctx.list}` },
+  { id: "no_flow_added", render: () => "_Ningún flujo agregado todavía_" },
+  { id: "add_flow_publish_placeholder", render: () => "✨ Agregar flujo al sistema~" },
+  { id: "add_flow_update_placeholder", render: () => "✨ Agregar flujo a la nueva versión~" },
+  { id: "btn_remove_last", render: () => "➖ Quitar último" },
+  { id: "btn_publish", render: () => "📤 Publicar" },
+  { id: "publish_limit_footer", render: () => "-# Puedes agregar hasta 25 flujos por publicación" },
+
+  { id: "modal_publish_title", render: () => "Publicar en la Biblioteca" },
+  { id: "modal_field_system_name", render: () => "Nombre del sistema" },
+  { id: "modal_field_system_name_ph", render: () => "Ej: Sistema de XP Avanzado" },
+  { id: "modal_field_short_desc", render: () => "Descripción corta" },
+  { id: "modal_field_short_desc_ph", render: () => "Sistema completo de XP con niveles..." },
+  { id: "modal_field_full_desc", render: () => "Descripción completa (opcional)" },
+  { id: "modal_field_full_desc_ph", render: () => "Explica cómo funciona en detalle..." },
+  { id: "modal_field_category", render: () => "Categoría" },
+  { id: "modal_field_category_ph", render: () => "Moderación, Economía, RPG..." },
+  { id: "modal_field_tags", render: () => "Etiquetas (separadas por comas)" },
+  { id: "modal_field_tags_ph", render: () => "xp, nivel, rango, recompensa" },
+
+  { id: "invalid_category", render: (ctx) => `# ${ctx.eEmduvida} Categoría inválida\nLas categorías disponibles son:\n${ctx.list}` },
+  { id: "publish_success", render: (ctx) =>
+    `# ${ctx.eFesta} ¡Publicado con éxito!\n¡**${ctx.entryName}** ya está disponible en la biblioteca!\n\n` +
+    `> 🆔 **ID:** \`${ctx.libId}\`\n> 📦 **Flujos:** ${ctx.flowCount}\n> 🔧 **Campos de configuración:** ${ctx.fieldCount}` },
+  { id: "publish_error", render: (ctx) => `# ${ctx.eAssustada} Error al publicar\n${ctx.message}` },
+
+  { id: "announce_title", render: (ctx) => `# ${ctx.emoji} ¡Nueva publicación en la Biblioteca!\n**${ctx.entryName}** fue publicado por **${ctx.authorName}**.\n\n${ctx.shortDesc}` },
+  /* ── /biblioteca atualizar ── */
+  { id: "update_panel_title", render: (ctx) =>
+    `# ${ctx.ePensando} Actualizar — ${ctx.entryName}\nVersión actual: \`${ctx.version}\`\n\nSelecciona los flujos de la nueva versión y pulsa **Confirmar actualización**~` },
+  { id: "btn_confirm_update", render: () => "🔄 Confirmar actualización" },
+  { id: "modal_update_title", render: () => "Nueva Versión" },
+  { id: "modal_field_new_version", render: (ctx) => `Nueva versión (actual: ${ctx.current})` },
+  { id: "modal_field_new_version_ph", render: () => "2.0.0" },
+  { id: "modal_field_changelog", render: () => "¿Qué cambió?" },
+  { id: "modal_field_changelog_ph", render: () => "Nuevas funciones, correcciones..." },
+  { id: "update_success", render: (ctx) =>
+    `# ${ctx.eFesta} ¡Actualizado a v${ctx.version}!\n**${ctx.entryName}** fue actualizado con **${ctx.flowCount}** flujo(s).\nLos que lo instalaron serán notificados por MD~` },
+  { id: "update_error", render: (ctx) => `# ${ctx.eAssustada} Error al actualizar\n${ctx.message}` },
+
+  /* ── /biblioteca editar ── */
+  { id: "modal_edit_title", render: (ctx) => `Editar — ${ctx.name}` },
+  { id: "modal_field_name", render: () => "Nombre" },
+  { id: "modal_field_short_desc_edit", render: () => "Descripción corta" },
+  { id: "modal_field_full_desc_edit", render: () => "Descripción completa" },
+  { id: "modal_field_category_edit", render: () => "Categoría" },
+  { id: "modal_field_tags_edit", render: () => "Etiquetas (comas)" },
+  { id: "edit_success", render: (ctx) => `# ${ctx.eFeliz} ¡Entrada actualizada!\nLa información se guardó con éxito~` },
+  { id: "edit_error", render: (ctx) => `# ${ctx.eAssustada} Error al editar\n${ctx.message}` },
+
+  /* ── /biblioteca apagar ── */
+  { id: "delete_confirm_title", render: (ctx) =>
+    `# ${ctx.eAssustada} Confirmar eliminación\n¿Seguro que quieres eliminar **${ctx.entryName}** de la biblioteca?\n\n` +
+    `**Esta acción no se puede deshacer.**\nLas instalaciones existentes en los servidores no se verán afectadas.` },
+  { id: "btn_confirm_delete", render: () => "✅ Confirmar eliminación" },
+  { id: "btn_cancel", render: () => "❌ Cancelar" },
+  { id: "delete_success", render: (ctx) => `# ${ctx.eEmburrada} Entrada eliminada\n**${ctx.entryName}** fue eliminada de la biblioteca.` },
+  { id: "delete_error", render: (ctx) => `# ${ctx.eAssustada} Error al eliminar\n${ctx.message}` },
+  { id: "delete_cancelled", render: (ctx) => `# ${ctx.eFeliz} ¡Cancelado!\nLa entrada sigue en la biblioteca~` },
+
+  /* ── /biblioteca minhas ── */
+  { id: "my_pubs_empty", render: (ctx) => `# ${ctx.ePensando} Mis Publicaciones\nTodavía no has publicado nada en la biblioteca.\n¡Usa \`/biblioteca publicar\` para empezar~!` },
+  { id: "my_pubs_title", render: (ctx) => `# ${ctx.eCurtida} Mis Publicaciones (${ctx.count})\n${ctx.lines}` },
+  { id: "my_pubs_installs", render: (ctx) => `📥 ${ctx.count} instalaciones` },
+  { id: "manage_select_placeholder", render: () => "✨ Selecciona para gestionar~" },
+  { id: "manage_select_footer", render: () => "-# Selecciona una entrada para gestionarla" },
+
+  { id: "manage_last_changelog", render: (ctx) => `\n**Último changelog:** ${ctx.changelog}` },
+  { id: "manage_history_none", render: () => "_Sin historial_" },
+  { id: "manage_no_changelog", render: () => "sin changelog" },
+  { id: "manage_stats", render: (ctx) => `> 📊 **Stats:** 📥 ${ctx.installs} instalaciones  •  👍 ${ctx.likes}  •  ⭐ ${ctx.rating}\n> 🆔 **ID:** \`${ctx.libId}\`` },
+  { id: "manage_history_label", render: (ctx) => `**📜 Historial:**\n${ctx.history}` },
+  { id: "btn_edit", render: () => "✏️ Editar" },
+  { id: "btn_update_version", render: () => "🔄 Actualizar versión" },
+  { id: "btn_delete", render: () => "🗑️ Eliminar" },
+  { id: "btn_back", render: () => "⬅️ Volver" },
+
+  /* ── /biblioteca perfil ── */
+  { id: "profile_no_bio", render: () => "_Sin bio_" },
+  { id: "profile_publications", render: () => "📦 **Publicaciones:**" },
+  { id: "profile_installs", render: () => "📥 **Instalaciones:**" },
+  { id: "profile_likes", render: () => "👍 **Likes:**" },
+  { id: "profile_rating", render: () => "⭐ **Valoración:**" },
+  { id: "profile_followers", render: () => "👥 **Seguidores:**" },
+  { id: "profile_top_flows", render: (ctx) => `**🏆 Top Flujos:**\n${ctx.list}` },
+  { id: "profile_no_pubs", render: () => "_Ninguna publicación_" },
+  { id: "btn_follow", render: () => "➕ Seguir" },
+  { id: "btn_unfollow", render: () => "➖ Dejar de seguir" },
+
+  /* ── /biblioteca destaques ── */
+  { id: "highlights_title", render: () => "Destacados de la Semana" },
+  { id: "highlights_trending", render: (ctx) => `**📈 Tendencia**\n${ctx.list}` },
+  { id: "highlights_installs", render: (ctx) => `**📥 Más instalados**\n${ctx.list}` },
+  { id: "highlights_rated", render: (ctx) => `**⭐ Mejor valorados**\n${ctx.list}` },
+  { id: "highlights_recent", render: (ctx) => `**🕐 Más recientes**\n${ctx.list}` },
+  { id: "highlights_none", render: () => "_Ninguno_" },
+  { id: "highlights_by", render: () => "por" },
+
+  /* ── /biblioteca ver → valorar (modal) ── */
+  { id: "modal_rate_title", render: () => "Valorar flujo" },
+  { id: "modal_field_rating", render: () => "Nota del 1 al 5" },
+  { id: "invalid_rating", render: (ctx) => `# ${ctx.eEmduvida} Nota inválida\nIngresa un número entre 1 y 5~` },
+  { id: "rate_success", render: (ctx) =>
+    `# ${ctx.eCorao} ¡Valoración registrada!\nLe diste **${ctx.rating} ⭐** a este flujo.\nNuevo promedio: **${ctx.avg} ⭐** (${ctx.count} valoraciones)` },
+
+  /* ── triggers ── */
+  { id: "trigger_message_created", render: () => "💬 Mensaje creado" },
+  { id: "trigger_member_joined", render: () => "👋 Miembro se unió" },
+  { id: "trigger_button_clicked", render: () => "🖱️ Botón pulsado" },
+  { id: "trigger_scheduled", render: () => "🕐 Programado" },
+];
