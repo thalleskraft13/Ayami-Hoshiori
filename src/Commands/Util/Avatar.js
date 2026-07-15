@@ -15,6 +15,12 @@ module.exports = {
     data: {
         name: 'usuario',
        description: 'Lista de Comandos sobre Usuarios',
+       name_localizations: { 'en-US': 'user', 'en-GB': 'user', 'es-ES': 'usuario' },
+       description_localizations: {
+         'en-US': 'List of user-related commands',
+         'en-GB': 'List of user-related commands',
+         'es-ES': 'Lista de comandos sobre usuarios',
+       },
        type: 1,
        options: [{
          name: "avatar",

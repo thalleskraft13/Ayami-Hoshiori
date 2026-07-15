@@ -6,7 +6,13 @@ const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 module.exports = {
   data: {
     name: 'ping',
-    description: 'Mostra a latência do bot neste servidor'
+    description: 'Mostra a latência do bot neste servidor',
+    name_localizations: { 'en-US': 'ping', 'en-GB': 'ping', 'es-ES': 'ping' },
+    description_localizations: {
+      'en-US': "Shows the bot's latency in this server",
+      'en-GB': "Shows the bot's latency in this server",
+      'es-ES': 'Muestra la latencia del bot en este servidor',
+    }
   },
 
   async execute(interaction, client) {

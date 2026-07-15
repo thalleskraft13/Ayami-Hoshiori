@@ -65,6 +65,12 @@ module.exports = {
   data: {
     name: "premium",
     description: "Sistema Constellation — Ayami Hoshiori",
+    name_localizations: { 'en-US': 'premium', 'en-GB': 'premium', 'es-ES': 'premium' },
+    description_localizations: {
+      'en-US': 'Constellation System — Ayami Hoshiori',
+      'en-GB': 'Constellation System — Ayami Hoshiori',
+      'es-ES': 'Sistema Constellation — Ayami Hoshiori',
+    },
     options: [
       {
         type: 1,

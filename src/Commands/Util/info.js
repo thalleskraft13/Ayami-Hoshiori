@@ -74,7 +74,13 @@ function row(...components) {
 module.exports = {
   data: {
     name: "ayami-info",
-    description: "Informações detalhadas do bot"
+    description: "Informações detalhadas do bot",
+    name_localizations: { 'en-US': 'ayami-info', 'en-GB': 'ayami-info', 'es-ES': 'ayami-info' },
+    description_localizations: {
+      'en-US': 'Detailed bot information',
+      'en-GB': 'Detailed bot information',
+      'es-ES': 'Información detallada del bot',
+    }
   },
 
   async execute(interaction, client) {

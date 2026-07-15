@@ -55,6 +55,12 @@ module.exports = {
   data: {
     name: 'primogemas',
     description: 'Comandos relacionados às Primogemas ⭐',
+    name_localizations: { 'en-US': 'primogems', 'en-GB': 'primogems', 'es-ES': 'primogemas' },
+    description_localizations: {
+      'en-US': 'Commands related to Primogems ⭐',
+      'en-GB': 'Commands related to Primogems ⭐',
+      'es-ES': 'Comandos relacionados con los Primogemas ⭐',
+    },
     type: 1,
     options: [
       {

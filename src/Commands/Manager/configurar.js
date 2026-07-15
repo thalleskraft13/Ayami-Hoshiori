@@ -61,7 +61,13 @@ module.exports = {
 
   data: {
     name: "configurar",
-    description: "Painel de configuração do bot"
+    description: "Painel de configuração do bot",
+    name_localizations: { 'en-US': 'configure', 'en-GB': 'configure', 'es-ES': 'configurar' },
+    description_localizations: {
+      'en-US': 'Bot configuration panel',
+      'en-GB': 'Bot configuration panel',
+      'es-ES': 'Panel de configuración del bot',
+    }
   },
 
   info: {

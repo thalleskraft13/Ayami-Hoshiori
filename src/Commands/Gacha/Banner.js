@@ -30,6 +30,12 @@ module.exports = {
   data: {
     name: "banner",
     description: "Gire nos banners e tente a sorte!",
+    name_localizations: { 'en-US': 'banner', 'en-GB': 'banner', 'es-ES': 'banner' },
+    description_localizations: {
+      'en-US': 'Spin the banners and try your luck!',
+      'en-GB': 'Spin the banners and try your luck!',
+      'es-ES': '¡Gira en los banners y prueba tu suerte!',
+    },
     options: [
       {
         name: "tipo",

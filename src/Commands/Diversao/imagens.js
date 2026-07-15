@@ -7,6 +7,12 @@ module.exports = {
     data: {
         name: 'imagem',
         description: 'Comandos de imagem',
+        name_localizations: { 'en-US': 'image', 'en-GB': 'image', 'es-ES': 'imagen' },
+        description_localizations: {
+            'en-US': 'Image commands',
+            'en-GB': 'Image commands',
+            'es-ES': 'Comandos de imagen',
+        },
         type: 1,
         options: [{
             name: 'cinema',

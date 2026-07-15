@@ -247,6 +247,12 @@ module.exports = {
   data: {
     name       : "criar",
     description: "Editor avançado de Embed e Components V2",
+    name_localizations: { 'en-US': 'create', 'en-GB': 'create', 'es-ES': 'crear' },
+    description_localizations: {
+      'en-US': 'Advanced Embed and Components V2 editor',
+      'en-GB': 'Advanced Embed and Components V2 editor',
+      'es-ES': 'Editor avanzado de Embed y Components V2',
+    },
     type       : 1,
     options    : [
       { name: "embed",        description: "Editor avançado de Embed com preview em tempo real", type: 1 },

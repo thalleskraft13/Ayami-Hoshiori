@@ -57,6 +57,12 @@ module.exports = {
   data: {
     name:        'missoes',
     description: 'Veja suas missões pessoais, de grupo e de guilda com a Ayami!',
+    name_localizations: { 'en-US': 'missions', 'en-GB': 'missions', 'es-ES': 'misiones' },
+    description_localizations: {
+      'en-US': 'See your personal, group, and guild missions with Ayami!',
+      'en-GB': 'See your personal, group, and guild missions with Ayami!',
+      'es-ES': '¡Consulta tus misiones personales, de grupo y de gremio con Ayami!',
+    },
     options: [
       {
         type:        1,

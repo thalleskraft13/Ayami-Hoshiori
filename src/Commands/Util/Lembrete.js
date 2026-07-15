@@ -5,6 +5,12 @@ module.exports = {
     data: {
         name: 'lembrete',
         description: 'Receba um lembrete',
+        name_localizations: { 'en-US': 'reminder', 'en-GB': 'reminder', 'es-ES': 'recordatorio' },
+        description_localizations: {
+            'en-US': 'Get a reminder',
+            'en-GB': 'Get a reminder',
+            'es-ES': 'Recibe un recordatorio',
+        },
         options: [
             {
                 name: "tempo",

@@ -12,6 +12,12 @@ module.exports = {
   data: {
     name: 'personagens',
     description: 'Mostra seus personagens obtidos',
+    name_localizations: { 'en-US': 'characters', 'en-GB': 'characters', 'es-ES': 'personajes' },
+    description_localizations: {
+      'en-US': 'Shows your obtained characters',
+      'en-GB': 'Shows your obtained characters',
+      'es-ES': 'Muestra tus personajes obtenidos',
+    },
     type: 1
   },
 

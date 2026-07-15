@@ -8,6 +8,12 @@ module.exports = {
   data: {
     name: "rank-de-aventureiro",
     description: "Comandos relacionados ao Rank de Aventureiro",
+    name_localizations: { 'en-US': 'adventurer-rank', 'en-GB': 'adventurer-rank', 'es-ES': 'rango-de-aventurero' },
+    description_localizations: {
+      'en-US': 'Commands related to the Adventurer Rank',
+      'en-GB': 'Commands related to the Adventurer Rank',
+      'es-ES': 'Comandos relacionados con el Rango de Aventurero',
+    },
     type: 1,
     options: [
       {

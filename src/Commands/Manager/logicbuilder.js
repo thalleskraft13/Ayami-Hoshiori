@@ -8,7 +8,13 @@ module.exports = {
 
   data: {
     name:        "logicbuilder",
-    description: "Abre o Logic Builder — crie fluxos e automações do servidor"
+    description: "Abre o Logic Builder — crie fluxos e automações do servidor",
+    name_localizations: { 'en-US': 'logicbuilder', 'en-GB': 'logicbuilder', 'es-ES': 'logicbuilder' },
+    description_localizations: {
+      'en-US': 'Opens the Logic Builder — create server flows and automations',
+      'en-GB': 'Opens the Logic Builder — create server flows and automations',
+      'es-ES': 'Abre el Logic Builder — crea flujos y automatizaciones del servidor',
+    }
   },
 
   info: {

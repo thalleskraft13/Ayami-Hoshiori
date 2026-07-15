@@ -9,6 +9,12 @@ module.exports = {
   data: {
     name: "uid",
     description: "Comandos relacionados a Uid",
+    name_localizations: { 'en-US': 'uid', 'en-GB': 'uid', 'es-ES': 'uid' },
+    description_localizations: {
+      'en-US': 'Commands related to UID',
+      'en-GB': 'Commands related to UID',
+      'es-ES': 'Comandos relacionados con el UID',
+    },
     type: 1,
     options: [{
       name: "salvar",

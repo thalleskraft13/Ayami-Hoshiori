@@ -580,6 +580,12 @@ module.exports = {
   data: {
     name:        'biblioteca',
     description: 'Biblioteca de Fluxos — explore, publique e instale sistemas prontos',
+    name_localizations: { 'en-US': 'library', 'en-GB': 'library', 'es-ES': 'biblioteca' },
+    description_localizations: {
+      'en-US': 'Flow Library — browse, publish, and install ready-made systems',
+      'en-GB': 'Flow Library — browse, publish, and install ready-made systems',
+      'es-ES': 'Biblioteca de Flujos — explora, publica e instala sistemas listos para usar',
+    },
     options: [
       {
         type:        1,

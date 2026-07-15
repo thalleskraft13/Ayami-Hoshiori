@@ -15,7 +15,10 @@ async function connectMongo() {
     try {
 
         await mongoose.connect(process.env.MONGO_URI, {
-            autoIndex: true
+            autoIndex: true,
+            maxPoolSize: 20,
+            minPoolSize: 2,
+            serverSelectionTimeoutMS: 10_000,
         });
 
         isConnected = true;

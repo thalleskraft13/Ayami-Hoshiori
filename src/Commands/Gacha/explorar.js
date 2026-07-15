@@ -7,6 +7,12 @@ module.exports = {
   data: {
     name: "explorar",
     description: "Comandos relacionados à exploração",
+    name_localizations: { 'en-US': 'explore', 'en-GB': 'explore', 'es-ES': 'explorar' },
+    description_localizations: {
+      'en-US': 'Commands related to exploration',
+      'en-GB': 'Commands related to exploration',
+      'es-ES': 'Comandos relacionados con la exploración',
+    },
     type: 1,
     options: [
       {

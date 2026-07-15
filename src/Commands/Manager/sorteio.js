@@ -10,32 +10,68 @@ module.exports = {
   data: {
     name: "sorteio",
     description: "Sistema de sorteios da Ayami",
+    name_localizations: { 'en-US': 'giveaway', 'en-GB': 'giveaway', 'es-ES': 'sorteo' },
+    description_localizations: {
+      'en-US': "Ayami's giveaway system",
+      'en-GB': "Ayami's giveaway system",
+      'es-ES': 'Sistema de sorteos de Ayami',
+    },
     options: [
       {
         type: 1, // SUB_COMMAND
         name: "criar",
-        description: "Cria um novo sorteio"
+        description: "Cria um novo sorteio",
+        name_localizations: { 'en-US': 'create', 'en-GB': 'create', 'es-ES': 'crear' },
+        description_localizations: {
+          'en-US': 'Create a new giveaway',
+          'en-GB': 'Create a new giveaway',
+          'es-ES': 'Crea un nuevo sorteo',
+        }
       },
       {
         type: 1,
         name: "gerenciar",
-        description: "Gerencia os sorteios ativos do servidor"
+        description: "Gerencia os sorteios ativos do servidor",
+        name_localizations: { 'en-US': 'manage', 'en-GB': 'manage', 'es-ES': 'gestionar' },
+        description_localizations: {
+          'en-US': "Manage the server's active giveaways",
+          'en-GB': "Manage the server's active giveaways",
+          'es-ES': 'Gestiona los sorteos activos del servidor',
+        }
       },
       {
         type: 1,
         name: "lista",
-        description: "Veja todos os sorteios ativos do servidor"
+        description: "Veja todos os sorteios ativos do servidor",
+        name_localizations: { 'en-US': 'list', 'en-GB': 'list', 'es-ES': 'lista' },
+        description_localizations: {
+          'en-US': "See all of the server's active giveaways",
+          'en-GB': "See all of the server's active giveaways",
+          'es-ES': 'Consulta todos los sorteos activos del servidor',
+        }
       },
       {
         type: 1,
         name: "encerrar",
         description: "Encerra um sorteio manualmente",
+        name_localizations: { 'en-US': 'end', 'en-GB': 'end', 'es-ES': 'finalizar' },
+        description_localizations: {
+          'en-US': 'Manually end a giveaway',
+          'en-GB': 'Manually end a giveaway',
+          'es-ES': 'Finaliza un sorteo manualmente',
+        },
         options: [
           {
             type: 3, // STRING
             name: "id",
             description: "ID do sorteio",
-            required: true
+            required: true,
+            name_localizations: { 'en-US': 'id', 'en-GB': 'id', 'es-ES': 'id' },
+            description_localizations: {
+              'en-US': 'Giveaway ID',
+              'en-GB': 'Giveaway ID',
+              'es-ES': 'ID del sorteo',
+            }
           }
         ]
       },
@@ -43,12 +79,24 @@ module.exports = {
         type: 1,
         name: "reroll",
         description: "Refaz o sorteio de um giveaway encerrado",
+        name_localizations: { 'en-US': 'reroll', 'en-GB': 'reroll', 'es-ES': 'reroll' },
+        description_localizations: {
+          'en-US': 'Redraw the winners of an ended giveaway',
+          'en-GB': 'Redraw the winners of an ended giveaway',
+          'es-ES': 'Vuelve a sortear los ganadores de un sorteo finalizado',
+        },
         options: [
           {
             type: 3,
             name: "id",
             description: "ID do sorteio",
-            required: true
+            required: true,
+            name_localizations: { 'en-US': 'id', 'en-GB': 'id', 'es-ES': 'id' },
+            description_localizations: {
+              'en-US': 'Giveaway ID',
+              'en-GB': 'Giveaway ID',
+              'es-ES': 'ID del sorteo',
+            }
           }
         ]
       },
@@ -56,12 +104,24 @@ module.exports = {
         type: 1,
         name: "info",
         description: "Veja detalhes e estatísticas de um sorteio",
+        name_localizations: { 'en-US': 'info', 'en-GB': 'info', 'es-ES': 'info' },
+        description_localizations: {
+          'en-US': 'See details and stats for a giveaway',
+          'en-GB': 'See details and stats for a giveaway',
+          'es-ES': 'Consulta detalles y estadísticas de un sorteo',
+        },
         options: [
           {
             type: 3,
             name: "id",
             description: "ID do sorteio",
-            required: true
+            required: true,
+            name_localizations: { 'en-US': 'id', 'en-GB': 'id', 'es-ES': 'id' },
+            description_localizations: {
+              'en-US': 'Giveaway ID',
+              'en-GB': 'Giveaway ID',
+              'es-ES': 'ID del sorteo',
+            }
           }
         ]
       }

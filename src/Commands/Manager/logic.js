@@ -59,6 +59,12 @@ module.exports = {
   data: {
     name:        'logic',
     description: 'Sistema Logic — Logic Builder e Logic Script',
+    name_localizations: { 'en-US': 'logic', 'en-GB': 'logic', 'es-ES': 'logic' },
+    description_localizations: {
+      'en-US': 'Logic System — Logic Builder and Logic Script',
+      'en-GB': 'Logic System — Logic Builder and Logic Script',
+      'es-ES': 'Sistema Logic — Logic Builder y Logic Script',
+    },
     options: [
       {
         type: 1,

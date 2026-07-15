@@ -5,6 +5,12 @@ module.exports = {
   data: {
     name: "notificações",
     description: "Ative ou Desative as notificações por DM",
+    name_localizations: { 'en-US': 'notifications', 'en-GB': 'notifications', 'es-ES': 'notificaciones' },
+    description_localizations: {
+      'en-US': 'Turn DM notifications on or off',
+      'en-GB': 'Turn DM notifications on or off',
+      'es-ES': 'Activa o desactiva las notificaciones por MD',
+    },
     type: 1
   },
 

@@ -71,6 +71,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.token    = process.env.DISCORD_TOKEN;
         this.clientId = process.env.CLIENT_ID;
         this.options  = options;
+        this.isPrimary = options.isPrimary ?? false;
         this.CLUSTERS_NAME = ["Azure Dream", "Sweet Night"];
 
         this.commands = new Map();
@@ -491,20 +492,34 @@ async _onReactionAdd(d) {
     // esse shard já tinha antes desse READY — GUILD_CREATE pra uma dessas
     // logo em seguida é resync, não entrada nova.
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
-     await this.MediaManager.init()
-    await this._loadCommands();
-    await this.registerSlashCommands()
-  //  await this._connectMongo(); // todos conectam
+    await this.MediaManager.init()
+    if (!this._commandsLoaded) {
+        this._commandsLoaded = true;
+        await this._loadCommands();
+    }
+
+    // registerSlashCommands() sincroniza os slash commands GLOBAIS do bot
+    // com a API do Discord — é um recurso único, não por shard/cluster.
+    // Antes era chamado até 3x por shard (aqui + dentro do bloco de baixo),
+    // o que multiplicava chamadas REST desnecessárias e competia por rate
+    // limit logo no boot. Agora roda uma única vez, só no cluster primário.
+    if (this.isPrimary && !this._commandsRegistered) {
+        this._commandsRegistered = true;
+        await this.registerSlashCommands();
+    }
+
     const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
-    
+
 
     if (LISTASHARDS.includes(d.shard[0])) {
+        // O Mongo agora já é conectado no boot do cluster (ClusterWorker.js),
+        // antes até do gateway subir — isso aqui fica só como rede de
+        // segurança (é idempotente, ver _mongoConnected/_mongoConnecting).
         await this._connectMongo()
         await this._startTaskManager();
         await this.gScheduler.boot();
         await this.logicEngine.start();
         await this.libraryManager.start()
-        await this.registerSlashCommands();
         console.log("\n|————————————————————————|")
         await this.emit('ready')
     }
@@ -585,8 +600,15 @@ async _onReactionAdd(d) {
             setTimeout(() => this._warnMaintenance(interaction), 1500);
         }
 
-        // Always process XP first, regardless of interaction type
-        await this._processAdventureRankXp(interaction);
+        // Processa XP de Aventureiro em paralelo — NÃO bloqueia a interação.
+        // Antes isso era `await`ado aqui, ou seja, TODA interação (comando,
+        // botão, select, modal) esperava um findOne()+save() no Mongo antes
+        // de sequer começar a ser processada. Com qualquer latência do Mongo,
+        // isso empurrava a resposta pra perto (ou além) do limite de 3s do
+        // Discord — a causa mais provável das "respostas lentas".
+        this._processAdventureRankXp(interaction).catch(err =>
+            console.error('[AdventureRank] Falha ao processar XP (não bloqueante):', err)
+        );
 
         switch (interaction.type) {
             case INTERACTION_TYPE.APPLICATION_COMMAND:

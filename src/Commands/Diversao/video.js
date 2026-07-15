@@ -7,6 +7,12 @@ module.exports = {
     data: {
         name: 'video',
         description: 'Comandos de vídeo',
+        name_localizations: { 'en-US': 'video', 'en-GB': 'video', 'es-ES': 'video' },
+        description_localizations: {
+            'en-US': 'Video commands',
+            'en-GB': 'Video commands',
+            'es-ES': 'Comandos de vídeo',
+        },
         type: 1,
         options: [{
             name: 'homer',
