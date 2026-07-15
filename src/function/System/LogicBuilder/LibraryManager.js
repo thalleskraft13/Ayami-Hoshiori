@@ -74,7 +74,7 @@ class LibraryManager {
    * @param {string}   opts.guildId       — guild de origem (para buscar os fluxos)
    * @returns {Promise<object>} — documento LibraryFlow criado
    */
-  async publish({ authorId, name, shortDesc, fullDesc, category, tags, flowIds, guildId }) {
+  async publish({ authorId, name, shortDesc, fullDesc, category, tags, flowIds, guildId, ctx = {} }) {
     const { FlowModel } = require('../../../Mongodb/flow.js');
 
     // Busca os fluxos originais
@@ -84,7 +84,7 @@ class LibraryManager {
     }).lean();
 
     if (!flows.length) {
-      throw new Error('Nenhum fluxo encontrado para publicar.');
+      throw new Error(this.client.t('logicbuilder.err_no_flows_to_publish', ctx));
     }
 
     // Sanitiza: remove guildId, cooldownMap e stats antes de exportar
@@ -128,10 +128,10 @@ class LibraryManager {
    * @param {string[]} [fields.tags]
    * @returns {Promise<object>} — documento atualizado
    */
-  async editMetadata(libId, authorId, { name, shortDesc, fullDesc, category, tags } = {}) {
+  async editMetadata(libId, authorId, { name, shortDesc, fullDesc, category, tags, ctx = {} } = {}) {
     const entry = await LibraryFlowModel.findOne({ libId });
-    if (!entry)                        throw new Error('Entrada não encontrada.');
-    if (entry.authorId !== authorId)   throw new Error('Sem permissão.');
+    if (!entry)                        throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
+    if (entry.authorId !== authorId)   throw new Error(this.client.t('logicbuilder.err_no_permission', ctx));
 
     const VALID_CATEGORIES = [
       'Moderação','Economia','Automação','Logs','Tickets',
@@ -164,18 +164,18 @@ class LibraryManager {
    * @param {string}   [opts.changelog] — resumo das mudanças
    * @returns {Promise<object>} — documento atualizado
    */
-  async publishUpdate({ libId, authorId, flowIds, guildId, newVersion, changelog = '' }) {
+  async publishUpdate({ libId, authorId, flowIds, guildId, newVersion, changelog = '', ctx = {} }) {
     const entry = await LibraryFlowModel.findOne({ libId });
-    if (!entry)                       throw new Error('Entrada não encontrada.');
-    if (entry.authorId !== authorId)  throw new Error('Sem permissão.');
+    if (!entry)                       throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
+    if (entry.authorId !== authorId)  throw new Error(this.client.t('logicbuilder.err_no_permission', ctx));
     if (!this._isNewerVersion(entry.version, newVersion)) {
-      throw new Error(`A versão ${newVersion} deve ser maior que a atual (${entry.version}).`);
+      throw new Error(this.client.t('logicbuilder.err_version_must_be_higher', { ...ctx, newVersion, currentVersion: entry.version }));
     }
 
     const { FlowModel } = require('../../../Mongodb/flow.js');
     const flows = await FlowModel.find({ guildId, flowId: { $in: flowIds } }).lean();
 
-    if (!flows.length) throw new Error('Nenhum fluxo encontrado para publicar.');
+    if (!flows.length) throw new Error(this.client.t('logicbuilder.err_no_flows_to_publish', ctx));
 
     const sanitized    = flows.map(f => this._sanitizeFlow(f));
     const templateVars = this._extractTemplateVars(sanitized);
@@ -208,10 +208,10 @@ class LibraryManager {
    * @param {string} libId
    * @param {string} authorId
    */
-  async delete(libId, authorId) {
+  async delete(libId, authorId, ctx = {}) {
     const entry = await LibraryFlowModel.findOne({ libId });
-    if (!entry)                       throw new Error('Entrada não encontrada.');
-    if (entry.authorId !== authorId)  throw new Error('Sem permissão.');
+    if (!entry)                       throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
+    if (entry.authorId !== authorId)  throw new Error(this.client.t('logicbuilder.err_no_permission', ctx));
 
     await this._deleteEntry(libId);
   }
@@ -343,14 +343,15 @@ class LibraryManager {
    * @param {object}  opts.varValues    — { canal_logs: '123456', cargo_xp: '789' }
    * @returns {Promise<string[]>} — flowIds criados no guild
    */
-  async install({ libId, guildId, userId, varValues = {} }) {
+  async install({ libId, guildId, userId, varValues = {}, ctx = {} }) {
     const entry = await LibraryFlowModel.findOne({ libId, status: 'approved' });
-    if (!entry) throw new Error('Entrada não encontrada na biblioteca.');
+    if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found_library', ctx));
 
     // Clona os fluxos e substitui as templateVars
     const cloned = this._applyTemplateVars(entry.flows, varValues);
 
     const createdIds = [];
+    const note = this.client.t('logicbuilder.installed_from_library_note', { ...ctx, entryName: entry.name, version: entry.version });
 
     for (const flowData of cloned) {
       const flow = await this.client.logicEngine.createFlow({
@@ -358,8 +359,8 @@ class LibraryManager {
         guildId,
         name:        `${flowData.name}`,
         description: flowData.description
-          ? `${flowData.description}\n\n_Instalado da biblioteca: ${entry.name} v${entry.version}_`
-          : `_Instalado da biblioteca: ${entry.name} v${entry.version}_`,
+          ? `${flowData.description}\n\n${note}`
+          : note,
         createdBy:   userId
       });
       createdIds.push(flow.flowId);
@@ -445,8 +446,8 @@ class LibraryManager {
   /**
    * Registra uma avaliação por estrelas (1–5).
    */
-  async rate(libId, userId, rating) {
-    if (rating < 1 || rating > 5) throw new Error('Avaliação deve ser entre 1 e 5.');
+  async rate(libId, userId, rating, ctx = {}) {
+    if (rating < 1 || rating > 5) throw new Error(this.client.t('logicbuilder.err_rating_range', ctx));
 
     const existing = await LibraryRatingModel.findOne({ libId, userId });
 
@@ -541,8 +542,8 @@ class LibraryManager {
    * Segue ou deixa de seguir um criador.
    * Retorna { action: 'followed' | 'unfollowed' }.
    */
-  async toggleFollow(followerId, targetId) {
-    if (followerId === targetId) throw new Error('Você não pode se seguir.');
+  async toggleFollow(followerId, targetId, ctx = {}) {
+    if (followerId === targetId) throw new Error(this.client.t('logicbuilder.err_cannot_follow_self', ctx));
 
     const [follower, target] = await Promise.all([
       this._ensureProfile(followerId),
@@ -579,8 +580,8 @@ class LibraryManager {
    * Moderadores podem também excluir via moderate('rejected') + remove manual,
    * ou usar deleteByModerator() abaixo.
    */
-  async moderate(libId, status) {
-    if (!['approved', 'rejected'].includes(status)) throw new Error('Status inválido.');
+  async moderate(libId, status, ctx = {}) {
+    if (!['approved', 'rejected'].includes(status)) throw new Error(this.client.t('logicbuilder.err_invalid_status', ctx));
     return LibraryFlowModel.findOneAndUpdate(
       { libId },
       { status, updatedAt: new Date() },
@@ -591,9 +592,9 @@ class LibraryManager {
   /**
    * Exclusão forçada por moderador (remove todos os dados relacionados).
    */
-  async deleteByModerator(libId) {
+  async deleteByModerator(libId, ctx = {}) {
     const entry = await LibraryFlowModel.findOne({ libId });
-    if (!entry) throw new Error('Entrada não encontrada.');
+    if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
     await this._deleteEntry(libId);
   }
 
@@ -711,11 +712,11 @@ class LibraryManager {
           method: 'POST',
           body: {
             embeds: [{
-              title:       '🔄 Atualização disponível',
-              description: `O sistema **${entryName}** foi atualizado para **v${newVersion}**.\nAcesse a biblioteca para instalar a nova versão.`
-                + (changelog ? `\n\n📋 **Novidades:** ${changelog}` : ''),
+              title:       this.client.t('logicbuilder.update_available_title'),
+              description: this.client.t('logicbuilder.update_available_desc', { entryName, newVersion })
+                + (changelog ? this.client.t('logicbuilder.update_available_changelog', { changelog }) : ''),
               color:       0xFEE75C,
-              footer:      { text: `Logic Builder • Biblioteca de Fluxos` },
+              footer:      { text: this.client.t('logicbuilder.library_footer') },
               timestamp:   new Date().toISOString()
             }]
           }
@@ -754,19 +755,20 @@ class LibraryManager {
   }
   
   
-  async installPrepared({ libId, guildId, userId, flows, version }) {
+  async installPrepared({ libId, guildId, userId, flows, version, ctx = {} }) {
   const entry = await LibraryFlowModel.findOne({ libId, status: 'approved' });
-  if (!entry) throw new Error('Entrada não encontrada na biblioteca.');
+  if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found_library', ctx));
 
   const createdIds = [];
+  const note = this.client.t('logicbuilder.installed_from_library_note', { ...ctx, entryName: entry.name, version: entry.version });
 
   for (const flowData of flows) {
     const flow = await this.client.logicEngine.createFlow({
       ...flowData,
       guildId,
       description: flowData.description
-        ? `${flowData.description}\n\n_Instalado da biblioteca: ${entry.name} v${entry.version}_`
-        : `_Instalado da biblioteca: ${entry.name} v${entry.version}_`,
+        ? `${flowData.description}\n\n${note}`
+        : note,
       createdBy: userId
     });
     createdIds.push(flow.flowId);

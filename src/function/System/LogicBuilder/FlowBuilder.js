@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 const { FlowModel }  = require('../../../Mongodb/flow.js');
 const { randomUUID } = require('crypto');
 const getPerm        = require('../../Utils/GetPerm.js');
@@ -255,10 +256,12 @@ const OPTIONAL_PARAMS = [
   'targetUserId', 'timeout', 'cancelMessage', 'baseValue', 'removeComponents'
 ];
 
-const BOOLEAN_PARAMS = {
-  ephemeral:        { label: 'Mensagem visível só para o usuário?',     yes: '👁️ Sim — só ele(a) vê (ephemeral)',   no: '📢 Não — todo mundo vê',                default: 'false' },
-  removeComponents: { label: 'Remover os botões/selects da mensagem?', yes: '🗑️ Sim — remove tudo (padrão)',       no: '✅ Não — mantém os componentes atuais', default: 'true'  },
-};
+function booleanParams(t, ctx) {
+  return {
+    ephemeral:        { label: t('bp_ephemeral_label', ctx),        yes: t('bp_ephemeral_yes', ctx),        no: t('bp_ephemeral_no', ctx),        default: 'false' },
+    removeComponents: { label: t('bp_removeComponents_label', ctx), yes: t('bp_removeComponents_yes', ctx), no: t('bp_removeComponents_no', ctx), default: 'true'  },
+  };
+}
 
 
 /* ─────────────────────────────────────────────
@@ -276,8 +279,50 @@ class FlowBuilder {
     return this.client?.emoji?.[name] ?? AYAMI_FALLBACK[name] ?? '';
   }
 
-  _guideButton() {
-    return { type: 2, style: 5, label: '📖 Guia', url: GUIDE_URL };
+  /** Atalho pra tradução de uma chave do sistema "logicbuilder". */
+  t(key, ctx, extra = {}) {
+    return this.client.t(`logicbuilder.${key}`, { ...ctx, ...extra });
+  }
+
+  /** Contexto de locale + atalhos de emoji, a partir da interação. */
+  _tctx(interaction, extra = {}) {
+    return localeCtx(interaction, {
+      animada:   this._e('animada'),
+      pensando:  this._e('pensando'),
+      assustada: this._e('assustada'),
+      emburrada: this._e('emburrada'),
+      emduvida:  this._e('emduvida'),
+      festa:     this._e('festa'),
+      feliz:     this._e('feliz'),
+      curtida:   this._e('curtida'),
+      chorando:  this._e('chorando'),
+      brava:     this._e('brava'),
+      carinho:   this._e('carinho'),
+      corao:     this._e('corao'),
+      ...extra,
+    });
+  }
+
+  /* ── Traduções dos catálogos (Trigger / Condição / Ação) ── */
+  _trgLabel(item, ctx) { return this.t(`trg_cat_${item.category}_${item.type}_label`, ctx); }
+  _trgDesc(item, ctx)  { return this.t(`trg_cat_${item.category}_${item.type}_desc`, ctx); }
+  _cndLabel(item, ctx) { return this.t(`cnd_cat_${item.category}_${item.type}_label`, ctx); }
+  _actLabel(item, ctx) { return this.t(`act_cat_${item.category}_${item.type}_label`, ctx); }
+
+  _trgCatMeta(cat, ctx) { return { label: this.t(`trgcatmeta_${cat}_label`, ctx), description: this.t(`trgcatmeta_${cat}_desc`, ctx) }; }
+  _cndCatMeta(cat, ctx) { return { label: this.t(`cndcatmeta_${cat}_label`, ctx), description: this.t(`cndcatmeta_${cat}_desc`, ctx) }; }
+  _actCatMeta(cat, ctx) { return { label: this.t(`actcatmeta_${cat}_label`, ctx), description: this.t(`actcatmeta_${cat}_desc`, ctx) }; }
+
+  /** Label traduzido de um trigger { category, type }, com fallback pro catálogo cru. */
+  _triggerLabelTranslated(trigger, ctx) {
+    if (!trigger) return this.t('trigger_not_configured', ctx);
+    const found = TRIGGER_CATALOG.find(t => t.category === trigger.category && t.type === trigger.type);
+    if (!found) return `${trigger.category}/${trigger.type}`;
+    return this._trgLabel(found, ctx);
+  }
+
+  _guideButton(ctx = {}) {
+    return { type: 2, style: 5, label: this.t('guide_button', ctx), url: GUIDE_URL };
   }
 
   /* ── helper: painel CV2 sem ephemeral (mensagem original visível ao servidor) ── */
@@ -290,18 +335,20 @@ class FlowBuilder {
      ══════════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Criar novo Fluxo ✨',
+      title: this.t('fb_create_flow_modal_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'name',        label: 'Nome do fluxo',        style: 1, required: true,  max_length: 100, placeholder: 'Ex: Boas-vindas, Anti-link, Daily...' }] },
-        { type: 1, components: [{ type: 4, custom_id: 'description', label: 'Descrição (opcional)', style: 2, required: false, max_length: 300, placeholder: 'Descreva o que este fluxo vai fazer...' }] }
+        { type: 1, components: [{ type: 4, custom_id: 'name',        label: this.t('fb_field_flow_name_label', ctx),        style: 1, required: true,  max_length: 100, placeholder: this.t('fb_field_flow_name_placeholder', ctx) }] },
+        { type: 1, components: [{ type: 4, custom_id: 'description', label: this.t('fb_field_flow_desc_label', ctx), style: 2, required: false, max_length: 300, placeholder: this.t('fb_field_flow_desc_placeholder', ctx) }] }
       ],
       funcao: async (mi, client, fields) => {
+        const miCtx = this._tctx(mi);
         const name = fields.name?.trim();
         if (!name) {
           return DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, {
-            method: 'POST', body: { type: 4, data: { content: `❌ Nome inválido! ${this._e('assustada')}`, flags: 64 } }
+            method: 'POST', body: { type: 4, data: { content: this.t('fb_invalid_name', miCtx), flags: 64 } }
           });
         }
 
@@ -327,49 +374,47 @@ class FlowBuilder {
 
   async triggerMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
+    const ctx  = this._tctx(interaction);
     if (!flow) return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
-      this.ui.cv2Text(`❌ Fluxo não encontrado. ${this._e('assustada')}`)
+      this.ui.cv2Text(this.t('fb_flow_not_found', ctx))
     ]));
 
-    const current = this.ui._triggerLabel(flow.trigger);
+    const current = this._triggerLabelTranslated(flow.trigger, ctx);
 
     /* ── Passo 1: escolher CATEGORIA do trigger (lista curta e organizada) ── */
     const categorySel = this.ui.select(
       user,
-      [...TRIGGER_GROUPS.keys()].map(cat => ({
-        label:       TRIGGER_CATEGORY_META[cat]?.label?.slice(0, 100) || cat,
-        value:       cat,
-        description: TRIGGER_CATEGORY_META[cat]?.description?.slice(0, 100),
-      })),
-      '🎯 1️⃣ Escolha a categoria do Trigger',
+      [...TRIGGER_GROUPS.keys()].map(cat => {
+        const meta = this._trgCatMeta(cat, ctx);
+        return {
+          label:       meta.label?.slice(0, 100) || cat,
+          value:       cat,
+          description: meta.description?.slice(0, 100),
+        };
+      }),
+      this.t('fb_trigger_choose_category', ctx),
       async (si) => {
         await this.ui.deferUpdate(si);
         return this._triggerCategoryMenu(si, user, flowId, si.data.values[0]);
       }
     );
 
-    const btnFilters = this.ui.btn(user, '🔧 Filtros do Trigger', 2, async (i) => {
+    const btnFilters = this.ui.btn(user, this.t('fb_btn_trigger_filters', ctx), 2, async (i) => {
       return this._triggerFilters(i, user, flowId);
     });
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.flowMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 🎯 Configurar Trigger ${this._e('pensando')}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `**O que é um Trigger?** É o "gatilho" que faz seu fluxo começar!\n` +
-        `Por exemplo: quando alguém entra no servidor, quando uma mensagem é enviada...\n\n` +
-        `> 🎯 **Trigger atual:** ${current}`
-      ),
+      this.ui.cv2Text(this.t('fb_trigger_menu_header', { ...ctx, successMsg, current })),
       this.ui.cv2Divider(),
-      this.ui.cv2Text(`**Escolha a categoria abaixo** — depois você escolhe o evento específico dela:`),
+      this.ui.cv2Text(this.t('fb_trigger_choose_category_hint', ctx)),
       this.ui.row(categorySel),
       this.ui.cv2Divider(),
-      this.ui.row(btnFilters, btnBack, this._guideButton()),
+      this.ui.row(btnFilters, btnBack, this._guideButton(ctx)),
     ];
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
@@ -378,12 +423,13 @@ class FlowBuilder {
   /** Passo 2: dentro da categoria escolhida, lista só os triggers daquele grupo. */
   async _triggerCategoryMenu(interaction, user, flowId, category) {
     const items = TRIGGER_GROUPS.get(category) || [];
-    const meta  = TRIGGER_CATEGORY_META[category];
+    const ctx   = this._tctx(interaction);
+    const meta  = this._trgCatMeta(category, ctx);
 
     const itemSel = this.ui.select(
       user,
-      items.map(a => ({ label: a.label.slice(0, 100), value: `${a.category}:${a.type}`, description: a.description?.slice(0, 100) })),
-      `🎯 2️⃣ Escolha o evento — ${meta?.label || category}`,
+      items.map(a => ({ label: this._trgLabel(a, ctx).slice(0, 100), value: `${a.category}:${a.type}`, description: this._trgDesc(a, ctx)?.slice(0, 100) })),
+      this.t('fb_trigger_choose_event', { ...ctx, category: meta?.label || category }),
       async (si) => {
         await this.ui.deferUpdate(si);
         const [cat, typ] = si.data.values[0].split(':');
@@ -391,13 +437,13 @@ class FlowBuilder {
       }
     );
 
-    const btnBack = this.ui.btn(user, '⬅️ Outra categoria', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('fb_btn_other_category', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.triggerMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(`# ${meta?.label || category} ${this._e('pensando')}\n${meta?.description || ''}\n\nEscolha o evento específico:`),
+      this.ui.cv2Text(this.t('fb_trigger_category_header', { ...ctx, category: meta?.label || category, description: meta?.description || '' })),
       this.ui.cv2Divider(),
       this.ui.row(itemSel),
       this.ui.cv2Divider(),
@@ -408,19 +454,21 @@ class FlowBuilder {
   }
 
   async _setTrigger(interaction, user, flowId, category, type) {
+    const ctx = this._tctx(interaction);
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, {
       trigger: { category, type, filters: {} }
     });
     return this.triggerMenu(interaction, user, flowId, {
-      successMsg: `${this._e('curtida')} Trigger definido: **${this.ui._triggerLabel({ category, type })}**`
+      successMsg: this.t('fb_trigger_set_success', { ...ctx, trigger: this._triggerLabelTranslated({ category, type }, ctx) })
     });
   }
 
   /* ── Filtros do Trigger (mantém embed, são painéis secundários) ── */
   async _triggerFilters(interaction, user, flowId) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
+    const ctx  = this._tctx(interaction);
     if (!flow?.trigger) {
-      return this.ui.followUpEphemeral(interaction, { content: `${this._e('assustada')} Configure o trigger primeiro!` });
+      return this.ui.followUpEphemeral(interaction, { content: this.t('fb_no_trigger_configured', ctx) });
     }
     const { category, type, filters = {} } = flow.trigger;
 
@@ -429,7 +477,7 @@ class FlowBuilder {
         trigger: { category, type, filters: f }
       });
       return this.triggerMenu(i, user, flowId, {
-        successMsg: `${this._e('curtida')} Filtros salvos!`
+        successMsg: this.t('fb_filters_saved', this._tctx(i))
       });
     };
 
@@ -442,41 +490,43 @@ class FlowBuilder {
 
     await this.ui.deferUpdate(interaction);
     return this.triggerMenu(interaction, user, flowId, {
-      successMsg: `${this._e('emduvida')} Este trigger não tem filtros configuráveis.`
+      successMsg: this.t('fb_no_configurable_filters', ctx)
     });
   }
 
   // ── Filtros: Mensagem ─────────────────────────────────────────────────────
   async _filterPanelMessage(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
+      const ctx = this._tctx(i);
       const lines = [
-        `> 📌 **Canal:** ${f.channelId ? `<#${f.channelId}>` : '_qualquer canal_'}`,
-        `> 🏷️ **Cargo:** ${f.roleId    ? `<@&${f.roleId}>`   : '_qualquer membro_'}`,
-        `> 👤 **Só humanos:** ${f.ignoreBots === 'true' ? 'Sim ✅' : 'Não ❌'}`,
-        `> 🔍 **Prefixo:** ${f.prefix ? `\`${f.prefix}\`` : '_sem prefixo_'}`,
+        `${this.t('fb_filter_channel_label', ctx)} ${f.channelId ? `<#${f.channelId}>` : this.t('fb_filter_any_channel', ctx)}`,
+        `${this.t('fb_filter_role_label', ctx)} ${f.roleId    ? `<@&${f.roleId}>`   : this.t('fb_filter_any_role', ctx)}`,
+        `${this.t('fb_filter_humans_only_label', ctx)} ${f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx) : this.t('fb_filter_no_check', ctx)}`,
+        `${this.t('fb_filter_prefix_label', ctx)} ${f.prefix ? `\`${f.prefix}\`` : this.t('fb_filter_no_prefix', ctx)}`,
       ].join('\n');
 
       const chSel = this.client.interactions.createChannelSelect({
-        user, data: { placeholder: '📌 Limitar a um canal (opcional)', channel_types: [0, 5] },
+        user, data: { placeholder: this.t('fb_filter_channel_placeholder', ctx), channel_types: [0, 5] },
         funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); }
       });
       const roleSel = this.client.interactions.createRoleSelect({
-        user, data: { placeholder: '🏷️ Limitar a membros com cargo (opcional)' },
+        user, data: { placeholder: this.t('fb_filter_role_placeholder', ctx) },
         funcao: async (si) => { await this.ui.deferUpdate(si); f.roleId = si.data.values[0]; return renderPanel(si, f); }
       });
       const botsSel = this.client.interactions.createSelect({
-        user, data: { placeholder: `👤 Ignorar bots? Atual: ${f.ignoreBots === 'true' ? 'Sim' : 'Não'}`, options: [
-          { label: 'Sim — só humanos', value: 'true', emoji: { name: '✅' } },
-          { label: 'Não — incluir bots', value: 'false', emoji: { name: '❌' } },
+        user, data: { placeholder: this.t('fb_filter_ignore_bots_placeholder', { ...ctx, status: f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx).replace(' ✅','') : this.t('fb_filter_no_check', ctx).replace(' ❌','') }), options: [
+          { label: this.t('fb_filter_yes_humans_option', ctx), value: 'true', emoji: { name: '✅' } },
+          { label: this.t('fb_filter_no_bots_option', ctx), value: 'false', emoji: { name: '❌' } },
         ]},
         funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); }
       });
       const btnPrefix = this.client.interactions.createButton({
-        user, data: { label: f.prefix ? `🔍 Prefixo: ${f.prefix}` : '🔍 Definir prefixo (opcional)', style: 2 },
+        user, data: { label: this.t('fb_filter_set_prefix_button', { ...ctx, prefix: f.prefix }), style: 2 },
         funcao: async (bi) => {
+          const biCtx = this._tctx(bi);
           const modal = this.client.interactions.createModal({
-            user, title: 'Prefixo da Mensagem',
-            components: [{ type: 1, components: [{ type: 4, custom_id: 'prefix', label: 'Disparar só se a mensagem começar com', style: 1, required: false, max_length: 10, placeholder: 'Ex: ! ou / ou $', value: f.prefix || '' }]}],
+            user, title: this.t('fb_filter_prefix_modal_title', biCtx),
+            components: [{ type: 1, components: [{ type: 4, custom_id: 'prefix', label: this.t('fb_filter_prefix_field_label', biCtx), style: 1, required: false, max_length: 10, placeholder: this.t('fb_filter_prefix_placeholder', biCtx), value: f.prefix || '' }]}],
             funcao: async (mi, _, fields) => {
               f.prefix = fields.prefix?.trim() || undefined;
               await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } });
@@ -486,11 +536,11 @@ class FlowBuilder {
           return this.client.interactions.showModal(bi, modal);
         }
       });
-      const btnClear = this.client.interactions.createButton({ user, data: { label: '🗑️ Limpar', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
-      const btnSave  = this.client.interactions.createButton({ user, data: { label: '✅ Salvar', style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
 
       return this.ui.editOriginal(i, {
-        embeds: [{ title: `🔧 Filtros — Mensagem ${this._e('pensando')}`, description: `Configure quando o trigger deve disparar:\n\n${lines}\n\n${this._e('emduvida')} Filtros vazios = dispara em qualquer mensagem!`, color: COLOR.main }],
+        embeds: [{ title: this.t('fb_filter_header_message', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_message', ctx)}`, color: COLOR.main }],
         components: [this.ui.row(chSel), this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnPrefix, btnClear, btnSave)]
       });
     };
@@ -500,18 +550,20 @@ class FlowBuilder {
   // ── Filtros: Reação ───────────────────────────────────────────────────────
   async _filterPanelReaction(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
+      const ctx = this._tctx(i);
       const lines = [
-        `> 📌 **Canal:** ${f.channelId ? `<#${f.channelId}>` : '_qualquer canal_'}`,
-        `> 😀 **Emoji:** ${f.emoji || '_qualquer emoji_'}`,
+        `${this.t('fb_filter_channel_label', ctx)} ${f.channelId ? `<#${f.channelId}>` : this.t('fb_filter_any_channel', ctx)}`,
+        `${this.t('fb_filter_emoji_label', ctx)} ${f.emoji || this.t('fb_filter_any_emoji', ctx)}`,
       ].join('\n');
-      const chSel = this.client.interactions.createChannelSelect({ user, data: { placeholder: '📌 Limitar a um canal (opcional)', channel_types: [0, 5] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); } });
-      const btnEmoji = this.client.interactions.createButton({ user, data: { label: f.emoji ? `😀 Emoji: ${f.emoji}` : '😀 Filtrar por emoji (opcional)', style: 2 }, funcao: async (bi) => {
-        const modal = this.client.interactions.createModal({ user, title: 'Filtro de Emoji', components: [{ type: 1, components: [{ type: 4, custom_id: 'emoji', label: 'Só disparar para esse emoji', style: 1, required: false, max_length: 50, placeholder: 'Ex: ⭐ ou 🔥', value: f.emoji || '' }]}], funcao: async (mi, _, fields) => { f.emoji = fields.emoji?.trim() || undefined; await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } }); return renderPanel(mi, f); } });
+      const chSel = this.client.interactions.createChannelSelect({ user, data: { placeholder: this.t('fb_filter_channel_placeholder', ctx), channel_types: [0, 5] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); } });
+      const btnEmoji = this.client.interactions.createButton({ user, data: { label: this.t('fb_filter_set_emoji_button', { ...ctx, emoji: f.emoji }), style: 2 }, funcao: async (bi) => {
+        const biCtx = this._tctx(bi);
+        const modal = this.client.interactions.createModal({ user, title: this.t('fb_filter_emoji_modal_title', biCtx), components: [{ type: 1, components: [{ type: 4, custom_id: 'emoji', label: this.t('fb_filter_emoji_field_label', biCtx), style: 1, required: false, max_length: 50, placeholder: this.t('fb_filter_emoji_placeholder', biCtx), value: f.emoji || '' }]}], funcao: async (mi, _, fields) => { f.emoji = fields.emoji?.trim() || undefined; await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } }); return renderPanel(mi, f); } });
         return this.client.interactions.showModal(bi, modal);
       }});
-      const btnClear = this.client.interactions.createButton({ user, data: { label: '🗑️ Limpar', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
-      const btnSave  = this.client.interactions.createButton({ user, data: { label: '✅ Salvar', style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: `🔧 Filtros — Reação ${this._e('pensando')}`, description: `Configure quando o trigger deve disparar:\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(btnEmoji, btnClear, btnSave)] });
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_reaction', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(btnEmoji, btnClear, btnSave)] });
     };
     return renderPanel(interaction, filters);
   }
@@ -519,15 +571,16 @@ class FlowBuilder {
   // ── Filtros: Membro ───────────────────────────────────────────────────────
   async _filterPanelMember(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
+      const ctx = this._tctx(i);
       const lines = [
-        `> 🏷️ **Cargo:** ${f.roleId ? `<@&${f.roleId}>` : '_qualquer membro_'}`,
-        `> 👤 **Só humanos:** ${f.ignoreBots === 'true' ? 'Sim ✅' : 'Não ❌'}`,
+        `${this.t('fb_filter_role_label', ctx)} ${f.roleId ? `<@&${f.roleId}>` : this.t('fb_filter_any_role', ctx)}`,
+        `${this.t('fb_filter_humans_only_label', ctx)} ${f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx) : this.t('fb_filter_no_check', ctx)}`,
       ].join('\n');
-      const roleSel = this.client.interactions.createRoleSelect({ user, data: { placeholder: '🏷️ Limitar a membros com esse cargo (opcional)' }, funcao: async (si) => { await this.ui.deferUpdate(si); f.roleId = si.data.values[0]; return renderPanel(si, f); } });
-      const botsSel = this.client.interactions.createSelect({ user, data: { placeholder: `👤 Ignorar bots? Atual: ${f.ignoreBots === 'true' ? 'Sim' : 'Não'}`, options: [{ label: 'Sim — só pessoas reais', value: 'true', emoji: { name: '✅' } }, { label: 'Não — incluir bots', value: 'false', emoji: { name: '❌' } }]}, funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); } });
-      const btnClear = this.client.interactions.createButton({ user, data: { label: '🗑️ Limpar', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
-      const btnSave  = this.client.interactions.createButton({ user, data: { label: '✅ Salvar', style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: `🔧 Filtros — Membro ${this._e('pensando')}`, description: `Configure quando o trigger deve disparar:\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)] });
+      const roleSel = this.client.interactions.createRoleSelect({ user, data: { placeholder: this.t('fb_filter_member_role_placeholder', ctx) }, funcao: async (si) => { await this.ui.deferUpdate(si); f.roleId = si.data.values[0]; return renderPanel(si, f); } });
+      const botsSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_filter_ignore_bots_placeholder', { ...ctx, status: f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx).replace(' ✅','') : this.t('fb_filter_no_check', ctx).replace(' ❌','') }), options: [{ label: this.t('fb_filter_yes_real_people_option', ctx), value: 'true', emoji: { name: '✅' } }, { label: this.t('fb_filter_no_bots_option', ctx), value: 'false', emoji: { name: '❌' } }]}, funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); } });
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_member', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)] });
     };
     return renderPanel(interaction, filters);
   }
@@ -535,12 +588,13 @@ class FlowBuilder {
   // ── Filtros: Voz ──────────────────────────────────────────────────────────
   async _filterPanelVoice(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
-      const lines = [`> 🔊 **Canal de voz:** ${f.channelId ? `<#${f.channelId}>` : '_qualquer canal de voz_'}`, `> 👤 **Só humanos:** ${f.ignoreBots === 'true' ? 'Sim ✅' : 'Não ❌'}`].join('\n');
-      const chSel   = this.client.interactions.createChannelSelect({ user, data: { placeholder: '🔊 Limitar a um canal de voz (opcional)', channel_types: [2] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); } });
-      const botsSel = this.client.interactions.createSelect({ user, data: { placeholder: `👤 Ignorar bots? Atual: ${f.ignoreBots === 'true' ? 'Sim' : 'Não'}`, options: [{ label: 'Sim — só pessoas reais', value: 'true', emoji: { name: '✅' } }, { label: 'Não — incluir bots', value: 'false', emoji: { name: '❌' } }]}, funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); } });
-      const btnClear = this.client.interactions.createButton({ user, data: { label: '🗑️ Limpar', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
-      const btnSave  = this.client.interactions.createButton({ user, data: { label: '✅ Salvar', style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: `🔧 Filtros — Voz ${this._e('pensando')}`, description: `Configure quando o trigger deve disparar:\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)] });
+      const ctx = this._tctx(i);
+      const lines = [`${this.t('fb_filter_voice_channel_label', ctx)} ${f.channelId ? `<#${f.channelId}>` : this.t('fb_filter_any_voice_channel', ctx)}`, `${this.t('fb_filter_humans_only_label', ctx)} ${f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx) : this.t('fb_filter_no_check', ctx)}`].join('\n');
+      const chSel   = this.client.interactions.createChannelSelect({ user, data: { placeholder: this.t('fb_filter_voice_channel_placeholder', ctx), channel_types: [2] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); } });
+      const botsSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_filter_ignore_bots_placeholder', { ...ctx, status: f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx).replace(' ✅','') : this.t('fb_filter_no_check', ctx).replace(' ❌','') }), options: [{ label: this.t('fb_filter_yes_real_people_option', ctx), value: 'true', emoji: { name: '✅' } }, { label: this.t('fb_filter_no_bots_option', ctx), value: 'false', emoji: { name: '❌' } }]}, funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); } });
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_voice', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)] });
     };
     return renderPanel(interaction, filters);
   }
@@ -548,16 +602,18 @@ class FlowBuilder {
   // ── Filtros: Componente ───────────────────────────────────────────────────
   async _filterPanelComponent(interaction, user, flowId, type, filters, saveFilters) {
     const renderPanel = async (i, f) => {
-      const typeLabel = type === 'button_clicked' ? 'Botão' : type === 'select_used' ? 'Select Menu' : 'Modal';
-      const lines = [`> 🆔 **ID do ${typeLabel}:** ${f.customId ? `\`${f.customId}\`` : '_qualquer_'}`, `> 📌 **Canal:** ${f.channelId ? `<#${f.channelId}>` : '_qualquer canal_'}`].join('\n');
-      const chSel = this.client.interactions.createChannelSelect({ user, data: { placeholder: '📌 Limitar a um canal (opcional)', channel_types: [0, 5] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); } });
-      const btnId = this.client.interactions.createButton({ user, data: { label: f.customId ? `🆔 ID: "${f.customId.slice(0, 20)}"` : `🆔 Definir Custom ID (opcional)`, style: 1 }, funcao: async (bi) => {
-        const modal = this.client.interactions.createModal({ user, title: `Custom ID — ${typeLabel}`, components: [{ type: 1, components: [{ type: 4, custom_id: 'customId', label: `ID único do ${typeLabel} (vazio = qualquer)`, style: 1, required: false, max_length: 100, placeholder: 'Ex: btn_aceitar, modal_form', value: f.customId || '' }]}], funcao: async (mi, _, fields) => { f.customId = fields.customId?.trim() || undefined; await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } }); return renderPanel(mi, f); } });
+      const ctx = this._tctx(i);
+      const typeLabel = type === 'button_clicked' ? this.t('fb_component_type_button', ctx) : type === 'select_used' ? this.t('fb_component_type_select', ctx) : this.t('fb_component_type_modal', ctx);
+      const lines = [`${this.t('fb_filter_component_id_label', { ...ctx, typeLabel })} ${f.customId ? `\`${f.customId}\`` : this.t('fb_filter_any_id', ctx)}`, `${this.t('fb_filter_channel_label', ctx)} ${f.channelId ? `<#${f.channelId}>` : this.t('fb_filter_any_channel', ctx)}`].join('\n');
+      const chSel = this.client.interactions.createChannelSelect({ user, data: { placeholder: this.t('fb_filter_channel_placeholder', ctx), channel_types: [0, 5] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.channelId = si.data.values[0]; return renderPanel(si, f); } });
+      const btnId = this.client.interactions.createButton({ user, data: { label: this.t('fb_filter_component_id_button', { ...ctx, customId: f.customId?.slice(0, 20) }), style: 1 }, funcao: async (bi) => {
+        const biCtx = this._tctx(bi);
+        const modal = this.client.interactions.createModal({ user, title: this.t('fb_filter_component_id_modal_title', { ...biCtx, typeLabel }), components: [{ type: 1, components: [{ type: 4, custom_id: 'customId', label: this.t('fb_filter_component_id_field_label', { ...biCtx, typeLabel }), style: 1, required: false, max_length: 100, placeholder: this.t('fb_filter_component_id_placeholder', biCtx), value: f.customId || '' }]}], funcao: async (mi, _, fields) => { f.customId = fields.customId?.trim() || undefined; await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } }); return renderPanel(mi, f); } });
         return this.client.interactions.showModal(bi, modal);
       }});
-      const btnClear = this.client.interactions.createButton({ user, data: { label: '🗑️ Limpar', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
-      const btnSave  = this.client.interactions.createButton({ user, data: { label: '✅ Salvar', style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: `🔧 Filtros — ${typeLabel} ${this._e('pensando')}`, description: `O **Custom ID** é o identificador que você deu ao ${typeLabel}.\nDeixe vazio para disparar em qualquer ${typeLabel}.\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(btnId, btnClear, btnSave)] });
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_component', { ...ctx, typeLabel }), description: this.t('fb_filter_component_desc', { ...ctx, typeLabel, lines }), color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(btnId, btnClear, btnSave)] });
     };
     return renderPanel(interaction, filters);
   }
@@ -565,25 +621,27 @@ class FlowBuilder {
   // ── Filtros: Horário ──────────────────────────────────────────────────────
   async _filterPanelTime(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
-      const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const ctx = this._tctx(i);
+      const dayNames = [this.t('fb_day_sun',ctx), this.t('fb_day_mon',ctx), this.t('fb_day_tue',ctx), this.t('fb_day_wed',ctx), this.t('fb_day_thu',ctx), this.t('fb_day_fri',ctx), this.t('fb_day_sat',ctx)];
       const lines = [
-        `> 🕐 **Hora:** ${f.hour !== undefined ? `${String(f.hour).padStart(2, '0')}h` : '_não definida (obrigatório!)_'}`,
-        `> ⏱️ **Minuto:** :${String(f.minute ?? 0).padStart(2, '0')}`,
-        `> 📅 **Dias:** ${f.weekdays?.length ? f.weekdays.map(d => dayNames[d]).join(', ') : '_todos os dias_'}`,
+        `${this.t('fb_time_hour_label', ctx)} ${f.hour !== undefined ? `${String(f.hour).padStart(2, '0')}h` : this.t('fb_time_hour_not_set', ctx)}`,
+        `${this.t('fb_time_minute_label', ctx)} :${String(f.minute ?? 0).padStart(2, '0')}`,
+        `${this.t('fb_time_days_label', ctx)} ${f.weekdays?.length ? f.weekdays.map(d => dayNames[d]).join(', ') : this.t('fb_time_all_days', ctx)}`,
       ].join('\n');
-      const hourOpts1 = Array.from({ length: 12 }, (_, h) => ({ label: `${String(h).padStart(2, '0')}:00`, value: String(h), description: h < 6 ? 'Madrugada' : 'Manhã' }));
-      const hourOpts2 = Array.from({ length: 12 }, (_, h) => ({ label: `${String(h + 12).padStart(2, '0')}:00`, value: String(h + 12), description: h + 12 < 18 ? 'Tarde' : 'Noite' }));
-      const hourSel1  = this.client.interactions.createSelect({ user, data: { placeholder: `🌅 Hora 00h–11h — Atual: ${f.hour !== undefined && f.hour < 12 ? f.hour + 'h' : 'não selecionada'}`, options: hourOpts1 }, funcao: async (si) => { await this.ui.deferUpdate(si); f.hour = Number(si.data.values[0]); return renderPanel(si, f); } });
-      const hourSel2  = this.client.interactions.createSelect({ user, data: { placeholder: `🌆 Hora 12h–23h — Atual: ${f.hour !== undefined && f.hour >= 12 ? f.hour + 'h' : 'não selecionada'}`, options: hourOpts2 }, funcao: async (si) => { await this.ui.deferUpdate(si); f.hour = Number(si.data.values[0]); return renderPanel(si, f); } });
-      const minuteSel = this.client.interactions.createSelect({ user, data: { placeholder: `⏱️ Minuto — Atual: :${String(f.minute ?? 0).padStart(2, '0')}`, options: [0,5,10,15,20,25,30,35,40,45,50,55].map(m => ({ label: `:${String(m).padStart(2, '0')}`, value: String(m) })) }, funcao: async (si) => { await this.ui.deferUpdate(si); f.minute = Number(si.data.values[0]); return renderPanel(si, f); } });
-      const daysSel   = this.client.interactions.createSelect({ user, data: { placeholder: '📅 Dias da semana (padrão = todos)', min_values: 0, max_values: 7, options: [{ label: 'Domingo', value: '0', emoji: { name: '🌞' } }, { label: 'Segunda', value: '1', emoji: { name: '💼' } }, { label: 'Terça', value: '2', emoji: { name: '💼' } }, { label: 'Quarta', value: '3', emoji: { name: '💼' } }, { label: 'Quinta', value: '4', emoji: { name: '💼' } }, { label: 'Sexta', value: '5', emoji: { name: '🎉' } }, { label: 'Sábado', value: '6', emoji: { name: '🌟' } }] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.weekdays = si.data.values.length ? si.data.values.map(Number) : undefined; return renderPanel(si, f); } });
-      const btnClear = this.client.interactions.createButton({ user, data: { label: '🗑️ Limpar', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
-      const btnSave  = this.client.interactions.createButton({ user, data: { label: '✅ Salvar', style: 3 }, funcao: async (bi) => {
+      const hourOpts1 = Array.from({ length: 12 }, (_, h) => ({ label: `${String(h).padStart(2, '0')}:00`, value: String(h), description: h < 6 ? this.t('fb_time_dawn', ctx) : this.t('fb_time_morning', ctx) }));
+      const hourOpts2 = Array.from({ length: 12 }, (_, h) => ({ label: `${String(h + 12).padStart(2, '0')}:00`, value: String(h + 12), description: h + 12 < 18 ? this.t('fb_time_afternoon', ctx) : this.t('fb_time_night', ctx) }));
+      const hourSel1  = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_time_hour1_placeholder', { ...ctx, current: f.hour !== undefined && f.hour < 12 ? f.hour + 'h' : this.t('fb_time_not_selected', ctx) }), options: hourOpts1 }, funcao: async (si) => { await this.ui.deferUpdate(si); f.hour = Number(si.data.values[0]); return renderPanel(si, f); } });
+      const hourSel2  = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_time_hour2_placeholder', { ...ctx, current: f.hour !== undefined && f.hour >= 12 ? f.hour + 'h' : this.t('fb_time_not_selected', ctx) }), options: hourOpts2 }, funcao: async (si) => { await this.ui.deferUpdate(si); f.hour = Number(si.data.values[0]); return renderPanel(si, f); } });
+      const minuteSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_time_minute_placeholder', { ...ctx, minute: String(f.minute ?? 0).padStart(2, '0') }), options: [0,5,10,15,20,25,30,35,40,45,50,55].map(m => ({ label: `:${String(m).padStart(2, '0')}`, value: String(m) })) }, funcao: async (si) => { await this.ui.deferUpdate(si); f.minute = Number(si.data.values[0]); return renderPanel(si, f); } });
+      const daysSel   = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_time_weekdays_placeholder', ctx), min_values: 0, max_values: 7, options: [{ label: this.t('fb_day_sunday',ctx), value: '0', emoji: { name: '🌞' } }, { label: this.t('fb_day_monday',ctx), value: '1', emoji: { name: '💼' } }, { label: this.t('fb_day_tuesday',ctx), value: '2', emoji: { name: '💼' } }, { label: this.t('fb_day_wednesday',ctx), value: '3', emoji: { name: '💼' } }, { label: this.t('fb_day_thursday',ctx), value: '4', emoji: { name: '💼' } }, { label: this.t('fb_day_friday',ctx), value: '5', emoji: { name: '🎉' } }, { label: this.t('fb_day_saturday',ctx), value: '6', emoji: { name: '🌟' } }] }, funcao: async (si) => { await this.ui.deferUpdate(si); f.weekdays = si.data.values.length ? si.data.values.map(Number) : undefined; return renderPanel(si, f); } });
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => {
         await this.ui.deferUpdate(bi);
-        if (f.hour === undefined) return this.ui.editOriginal(bi, { embeds: [{ title: '❌ Hora obrigatória', description: `${this._e('brava')} Selecione a hora antes de salvar!`, color: COLOR.danger }], components: [] });
+        const biCtx = this._tctx(bi);
+        if (f.hour === undefined) return this.ui.editOriginal(bi, { embeds: [{ title: this.t('fb_time_hour_required_title', biCtx), description: this.t('fb_time_hour_required_desc', biCtx), color: COLOR.danger }], components: [] });
         return saveFilters(bi, f);
       }});
-      return this.ui.editOriginal(i, { embeds: [{ title: `🔧 Filtros — Horário Agendado ${this._e('pensando')}`, description: `Configure em que hora e dias o trigger vai disparar:\n\n${lines}\n\n${this._e('emduvida')} A hora é obrigatória. Fuso horário: UTC.`, color: COLOR.main }], components: [this.ui.row(hourSel1), this.ui.row(hourSel2), this.ui.row(minuteSel), this.ui.row(daysSel), this.ui.row(btnClear, btnSave)] });
+      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_time', ctx), description: this.t('fb_filter_time_desc', { ...ctx, lines }), color: COLOR.main }], components: [this.ui.row(hourSel1), this.ui.row(hourSel2), this.ui.row(minuteSel), this.ui.row(daysSel), this.ui.row(btnClear, btnSave)] });
     };
     return renderPanel(interaction, filters);
   }
@@ -597,25 +655,29 @@ class FlowBuilder {
     const flow  = await this._getFlow(interaction.guild_id, flowId);
     if (!flow) return;
     const conds = flow.conditions || [];
+    const ctx   = this._tctx(interaction);
 
     const lines = conds.length
       ? conds.map((c, i) => {
           const meta    = CONDITION_CATALOG.find(x => x.category === c.category && x.type === c.type);
           const opLabel = i === 0 ? '' : ` **(${c.operator})**`;
-          const neg     = c.negate ? ' ~~negado~~' : '';
-          return `\`${i + 1}.\`${opLabel} ${meta?.label || c.type}${neg}`;
+          const neg     = c.negate ? this.t('fb_cnd_negated_tag', ctx) : '';
+          return `\`${i + 1}.\`${opLabel} ${meta ? this._cndLabel(meta, ctx) : c.type}${neg}`;
         }).join('\n')
-      : `_Nenhuma condição — fluxo sempre executa ${this._e('feliz')}_`;
+      : this.t('fb_no_conditions', ctx);
 
     /* ── Passo 1: escolher categoria da NOVA condição ── */
     const categorySel = this.ui.select(
       user,
-      [...CONDITION_GROUPS.keys()].map(cat => ({
-        label:       CONDITION_CATEGORY_META[cat]?.label?.slice(0, 100) || cat,
-        value:       cat,
-        description: CONDITION_CATEGORY_META[cat]?.description?.slice(0, 100),
-      })),
-      '➕ 1️⃣ Categoria da nova condição',
+      [...CONDITION_GROUPS.keys()].map(cat => {
+        const meta = this._cndCatMeta(cat, ctx);
+        return {
+          label:       meta.label?.slice(0, 100) || cat,
+          value:       cat,
+          description: meta.description?.slice(0, 100),
+        };
+      }),
+      this.t('fb_cnd_choose_category', ctx),
       async (si) => {
         await this.ui.deferUpdate(si);
         return this._conditionCategoryMenu(si, user, flowId, si.data.values[0]);
@@ -628,9 +690,9 @@ class FlowBuilder {
         user,
         conds.map((c, i) => {
           const meta = CONDITION_CATALOG.find(x => x.category === c.category && x.type === c.type);
-          return { label: `${i + 1}. ${meta?.label || c.type}`.slice(0, 100), value: c.id };
+          return { label: `${i + 1}. ${meta ? this._cndLabel(meta, ctx) : c.type}`.slice(0, 100), value: c.id };
         }),
-        '✏️ Editar uma condição já adicionada',
+        this.t('fb_cnd_edit_existing', ctx),
         async (si) => {
           return this._editConditionSelect(si, user, flowId, si.data.values[0]);
         }
@@ -638,37 +700,32 @@ class FlowBuilder {
       editComponents.push(this.ui.row(editSel));
     }
 
-    const btnRemove = this.ui.btn(user, '🗑️ Remover última', 4, async (i) => {
+    const btnRemove = this.ui.btn(user, this.t('fb_btn_remove_last', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       if (!conds.length) return;
       await this.client.logicEngine.updateFlow(flowId, i.guild_id, { conditions: conds.slice(0, -1) });
       return this.conditionsMenu(i, user, flowId);
     });
-    const btnClear = this.ui.btn(user, '🧹 Limpar tudo', 4, async (i) => {
+    const btnClear = this.ui.btn(user, this.t('fb_btn_clear_all', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       await this.client.logicEngine.updateFlow(flowId, i.guild_id, { conditions: [] });
       return this.conditionsMenu(i, user, flowId);
     });
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.flowMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 🔍 Condições (${conds.length}) ${this._e('emduvida')}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `**O que são condições?** São verificações que devem ser verdadeiras para o fluxo rodar!\n` +
-        `Ex: "Só executa se o usuário tiver o cargo Membro" ou "Só se a mensagem contiver um link".`
-      ),
+      this.ui.cv2Text(this.t('fb_conditions_header', { ...ctx, count: conds.length, successMsg })),
       this.ui.cv2Divider(),
-      this.ui.cv2Text(`**📋 Condições configuradas:**\n${lines}`),
+      this.ui.cv2Text(this.t('fb_conditions_configured_label', { ...ctx, lines })),
       ...editComponents,
       this.ui.cv2Divider(),
-      this.ui.cv2Text(`**Adicionar nova condição** — escolha a categoria:`),
+      this.ui.cv2Text(this.t('fb_conditions_add_hint', ctx)),
       this.ui.row(categorySel),
       this.ui.cv2Divider(),
-      this.ui.row(btnRemove, btnClear, btnBack, this._guideButton()),
+      this.ui.row(btnRemove, btnClear, btnBack, this._guideButton(ctx)),
     ];
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
@@ -677,25 +734,26 @@ class FlowBuilder {
   /** Passo 2: dentro da categoria escolhida, lista só as condições daquele grupo. */
   async _conditionCategoryMenu(interaction, user, flowId, category) {
     const items = CONDITION_GROUPS.get(category) || [];
-    const meta  = CONDITION_CATEGORY_META[category];
+    const ctx   = this._tctx(interaction);
+    const meta  = this._cndCatMeta(category, ctx);
 
     const itemSel = this.ui.select(
       user,
-      items.map(a => ({ label: a.label.slice(0, 100), value: `${a.category}:${a.type}` })),
-      `➕ 2️⃣ Condição — ${meta?.label || category}`,
+      items.map(a => ({ label: this._cndLabel(a, ctx).slice(0, 100), value: `${a.category}:${a.type}` })),
+      this.t('fb_cnd_choose_specific', { ...ctx, category: meta?.label || category }),
       async (si) => {
         const [cat, typ] = si.data.values[0].split(':');
         return this._addCondition(si, user, flowId, cat, typ);
       }
     );
 
-    const btnBack = this.ui.btn(user, '⬅️ Outra categoria', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('fb_btn_other_category', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.conditionsMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(`# ${meta?.label || category} ${this._e('pensando')}\n${meta?.description || ''}\n\nEscolha a condição específica:`),
+      this.ui.cv2Text(this.t('fb_trigger_category_header', { ...ctx, category: meta?.label || category, description: meta?.description || '' })),
       this.ui.cv2Divider(),
       this.ui.row(itemSel),
       this.ui.cv2Divider(),
@@ -706,14 +764,16 @@ class FlowBuilder {
   }
 
   async _addCondition(interaction, user, flowId, category, type) {
+    const ctx  = this._tctx(interaction);
     const meta = CONDITION_CATALOG.find(c => c.category === category && c.type === type);
+    const metaLabel = meta ? this._cndLabel(meta, ctx) : type;
     if (!meta?.params?.length) {
       await this.ui.deferUpdate(interaction);
       const flow  = await this._getFlow(interaction.guild_id, flowId);
       const conds = flow.conditions || [];
       conds.push({ id: this._uid(), category, type, params: {}, operator: 'AND', negate: false });
       await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { conditions: conds });
-      return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Condição **${meta?.label}** adicionada!` });
+      return this.conditionsMenu(interaction, user, flowId, { successMsg: this.t('fb_condition_added', { ...ctx, label: metaLabel }) });
     }
 
     const modalParams = meta.params.filter(p => !SKIP_IN_MODAL.includes(p));
@@ -730,6 +790,8 @@ class FlowBuilder {
   async _openConditionModal(interaction, user, flowId, meta, existingCond, modalParams, needsSelect) {
     const isEdit     = !!existingCond;
     const components = [];
+    const ctx = this._tctx(interaction);
+    const metaLabel = this._cndLabel(meta, ctx);
 
     for (const p of modalParams.slice(0, 4)) {
       components.push({
@@ -737,31 +799,31 @@ class FlowBuilder {
         components: [{
           type:        4,
           custom_id:   p,
-          label:       this._paramLabel(p).slice(0, 45),
+          label:       this._paramLabel(p, ctx).slice(0, 45),
           style:       1,
           required:    !['errorMsg'].includes(p),
           max_length:  200,
-          placeholder: this._paramPlaceholder(p),
+          placeholder: this._paramPlaceholder(p, ctx),
           value:       isEdit ? String(existingCond.params?.[p] ?? '') : undefined
         }]
       });
     }
 
     components.push(
-      this.ui.modalSelect('_operator', 'Operador (AND = todas, OR = alguma)', [
-        { label: '🔗 AND — todas as condições devem ser verdadeiras', value: 'AND', default: !isEdit || existingCond.operator !== 'OR' },
-        { label: '🔀 OR — basta uma ser verdadeira',                   value: 'OR',  default: isEdit && existingCond.operator === 'OR' },
-      ], { placeholder: 'AND ou OR?' }),
-      this.ui.modalYesNo('_negate', 'Negar (inverter) esta condição?', {
-        yesLabel:     '🔁 Sim — o resultado é invertido',
-        noLabel:      '➡️ Não — mantém o resultado normal',
+      this.ui.modalSelect('_operator', this.t('fb_operator_field_label', ctx), [
+        { label: this.t('fb_operator_and_option', ctx), value: 'AND', default: !isEdit || existingCond.operator !== 'OR' },
+        { label: this.t('fb_operator_or_option', ctx),  value: 'OR',  default: isEdit && existingCond.operator === 'OR' },
+      ], { placeholder: this.t('fb_operator_placeholder', ctx) }),
+      this.ui.modalYesNo('_negate', this.t('fb_negate_field_label', ctx), {
+        yesLabel:     this.t('fb_negate_yes_option', ctx),
+        noLabel:      this.t('fb_negate_no_option', ctx),
         defaultValue: isEdit && existingCond.negate ? 'true' : 'false'
       })
     );
 
     const modal = this.client.interactions.createModal({
       user,
-      title: `${isEdit ? '✏️ Editar' : '➕'} Condição: ${meta.label.slice(0, 35)}`,
+      title: this.t('fb_condition_modal_title', { ...ctx, isEdit, label: metaLabel.slice(0, 35) }),
       components,
       funcao: async (mi, _, fields) => {
         const params   = isEdit ? { ...existingCond.params } : {};
@@ -801,8 +863,9 @@ class FlowBuilder {
     conds.push({ id: this._uid(), category, type, params: clean, operator, negate });
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { conditions: conds });
 
+    const ctx  = this._tctx(interaction);
     const meta = CONDITION_CATALOG.find(c => c.category === category && c.type === type);
-    return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Condição **${meta?.label}** adicionada!` });
+    return this.conditionsMenu(interaction, user, flowId, { successMsg: this.t('fb_condition_added', { ...ctx, label: meta ? this._cndLabel(meta, ctx) : type }) });
   }
 
   async _editConditionSelect(interaction, user, flowId, condId) {
@@ -815,7 +878,7 @@ class FlowBuilder {
     const needsSelect = meta?.params?.some(p => SKIP_IN_MODAL.includes(p));
 
     if (!modalParams.length && !needsSelect) {
-      return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('emduvida')} Esta condição não tem parâmetros para editar!` });
+      return this.conditionsMenu(interaction, user, flowId, { successMsg: this.t('fb_no_params_to_edit', this._tctx(interaction)) });
     }
     if (!modalParams.length && needsSelect) {
       return this._resolveSelectParams(interaction, user, flowId, meta, { ...cond.params, _condId: cond.id }, 'condition_edit');
@@ -827,7 +890,7 @@ class FlowBuilder {
     const flow  = await this._getFlow(interaction.guild_id, flowId);
     const conds = (flow.conditions || []).map(c => c.id !== condId ? c : { ...c, params, operator, negate });
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { conditions: conds });
-    return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('feliz')} Condição atualizada!` });
+    return this.conditionsMenu(interaction, user, flowId, { successMsg: this.t('fb_condition_updated', this._tctx(interaction)) });
   }
 
 
@@ -838,26 +901,30 @@ class FlowBuilder {
   async actionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
     const actions = flow?.actions || [];
+    const ctx     = this._tctx(interaction);
 
     const lines = actions.length
       ? actions
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((a, i) => {
             const meta = ACTION_CATALOG.find(x => x.category === a.category && x.type === a.type);
-            return `\`${i + 1}.\` ${meta?.label || a.type}`;
+            return `\`${i + 1}.\` ${meta ? this._actLabel(meta, ctx) : a.type}`;
           })
           .join('\n')
-      : `_Nenhuma ação configurada ${this._e('emburrada')}_`;
+      : this.t('fb_no_actions', ctx);
 
     /* ── Passo 1: escolher categoria da NOVA ação ── */
     const categorySel = this.ui.select(
       user,
-      [...ACTION_GROUPS.keys()].map(cat => ({
-        label:       ACTION_CATEGORY_META[cat]?.label?.slice(0, 100) || cat,
-        value:       cat,
-        description: ACTION_CATEGORY_META[cat]?.description?.slice(0, 100),
-      })),
-      '➕ 1️⃣ Categoria da nova ação',
+      [...ACTION_GROUPS.keys()].map(cat => {
+        const meta = this._actCatMeta(cat, ctx);
+        return {
+          label:       meta.label?.slice(0, 100) || cat,
+          value:       cat,
+          description: meta.description?.slice(0, 100),
+        };
+      }),
+      this.t('fb_act_choose_category', ctx),
       async (si) => {
         await this.ui.deferUpdate(si);
         return this._actionCategoryMenu(si, user, flowId, si.data.values[0]);
@@ -871,9 +938,9 @@ class FlowBuilder {
         user,
         sorted.map((a, i) => {
           const meta = ACTION_CATALOG.find(x => x.category === a.category && x.type === a.type);
-          return { label: `${i + 1}. ${meta?.label || a.type}`.slice(0, 100), value: a.id };
+          return { label: `${i + 1}. ${meta ? this._actLabel(meta, ctx) : a.type}`.slice(0, 100), value: a.id };
         }),
-        '✏️ Editar uma ação já adicionada',
+        this.t('fb_act_edit_existing', ctx),
         async (si) => {
           return this._editActionSelect(si, user, flowId, si.data.values[0]);
         }
@@ -881,38 +948,33 @@ class FlowBuilder {
       editComponents.push(this.ui.row(editSel));
     }
 
-    const btnRemove = this.ui.btn(user, '🗑️ Remover última', 4, async (i) => {
+    const btnRemove = this.ui.btn(user, this.t('fb_btn_remove_last', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       if (!actions.length) return;
       const sorted  = [...actions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       await this.client.logicEngine.updateFlow(flowId, i.guild_id, { actions: sorted.slice(0, -1) });
       return this.actionsMenu(i, user, flowId);
     });
-    const btnClear = this.ui.btn(user, '🧹 Limpar tudo', 4, async (i) => {
+    const btnClear = this.ui.btn(user, this.t('fb_btn_clear_all', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       await this.client.logicEngine.updateFlow(flowId, i.guild_id, { actions: [] });
       return this.actionsMenu(i, user, flowId);
     });
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.flowMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# ⚡ Ações (${actions.length}) ${this._e('animada')}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `**O que são ações?** São as coisas que o fluxo vai fazer quando disparar!\n` +
-        `Ex: "Enviar uma mensagem de boas-vindas", "Dar o cargo Membro", etc.`
-      ),
+      this.ui.cv2Text(this.t('fb_actions_header', { ...ctx, count: actions.length, successMsg })),
       this.ui.cv2Divider(),
-      this.ui.cv2Text(`**📋 Ações configuradas (em ordem):**\n${lines}`),
+      this.ui.cv2Text(this.t('fb_actions_configured_label', { ...ctx, lines })),
       ...editComponents,
       this.ui.cv2Divider(),
-      this.ui.cv2Text(`**Adicionar nova ação** — escolha a categoria:`),
+      this.ui.cv2Text(this.t('fb_actions_add_hint', ctx)),
       this.ui.row(categorySel),
       this.ui.cv2Divider(),
-      this.ui.row(btnRemove, btnClear, btnBack, this._guideButton()),
+      this.ui.row(btnRemove, btnClear, btnBack, this._guideButton(ctx)),
     ];
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
@@ -921,25 +983,26 @@ class FlowBuilder {
   /** Passo 2: dentro da categoria escolhida, lista só as ações daquele grupo. */
   async _actionCategoryMenu(interaction, user, flowId, category) {
     const items = ACTION_GROUPS.get(category) || [];
-    const meta  = ACTION_CATEGORY_META[category];
+    const ctx   = this._tctx(interaction);
+    const meta  = this._actCatMeta(category, ctx);
 
     const itemSel = this.ui.select(
       user,
-      items.map(a => ({ label: a.label.slice(0, 100), value: `${a.category}:${a.type}` })),
-      `➕ 2️⃣ Ação — ${meta?.label || category}`,
+      items.map(a => ({ label: this._actLabel(a, ctx).slice(0, 100), value: `${a.category}:${a.type}` })),
+      this.t('fb_act_choose_specific', { ...ctx, category: meta?.label || category }),
       async (si) => {
         const [cat, typ] = si.data.values[0].split(':');
         return this._addAction(si, user, flowId, cat, typ);
       }
     );
 
-    const btnBack = this.ui.btn(user, '⬅️ Outra categoria', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('fb_btn_other_category', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.actionsMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(`# ${meta?.label || category} ${this._e('pensando')}\n${meta?.description || ''}\n\nEscolha a ação específica:`),
+      this.ui.cv2Text(this.t('fb_trigger_category_header', { ...ctx, category: meta?.label || category, description: meta?.description || '' })),
       this.ui.cv2Divider(),
       this.ui.row(itemSel),
       this.ui.cv2Divider(),
@@ -950,14 +1013,16 @@ class FlowBuilder {
   }
 
   async _addAction(interaction, user, flowId, category, type) {
+    const ctx  = this._tctx(interaction);
     const meta = ACTION_CATALOG.find(a => a.category === category && a.type === type);
+    const metaLabel = meta ? this._actLabel(meta, ctx) : type;
     if (!meta?.params?.length) {
       await this.ui.deferUpdate(interaction);
       const flow    = await this._getFlow(interaction.guild_id, flowId);
       const actions = flow.actions || [];
       actions.push({ id: this._uid(), category, type, params: {}, order: actions.length });
       await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { actions });
-      return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Ação **${meta?.label}** adicionada!` });
+      return this.actionsMenu(interaction, user, flowId, { successMsg: this.t('fb_action_added', { ...ctx, label: metaLabel }) });
     }
 
     const modalParams = meta.params.filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed' && p !== 'embedObj');
@@ -977,6 +1042,9 @@ class FlowBuilder {
   async _openActionModal(interaction, user, flowId, meta, existingAction, modalParams, _unused, needsSelect, hasEmbedObj = false) {
     const isEdit     = !!existingAction;
     const components = [];
+    const ctx = this._tctx(interaction);
+    const metaLabel = this._actLabel(meta, ctx);
+    const BOOLEAN_PARAMS = booleanParams(this.t.bind(this), ctx);
 
     for (const p of modalParams.slice(0, 4)) {
       if (BOOLEAN_PARAMS[p]) {
@@ -990,11 +1058,11 @@ class FlowBuilder {
         components: [{
           type:        4,
           custom_id:   p,
-          label:       p === 'content' && meta.type === 'edit_interaction_message' ? 'Novo conteúdo (vazio = mantém)' : this._paramLabel(p).slice(0, 45),
+          label:       p === 'content' && meta.type === 'edit_interaction_message' ? this.t('param_edit_interaction_content_label', ctx) : this._paramLabel(p, ctx).slice(0, 45),
           style:       p === 'content' || p === 'reason' ? 2 : 1,
           required:    !OPTIONAL_PARAMS.includes(p) && !(p === 'content' && meta.type === 'edit_interaction_message'),
           max_length:  p === 'content' ? 4000 : 200,
-          placeholder: this._paramPlaceholder(p),
+          placeholder: this._paramPlaceholder(p, ctx),
           value:       isEdit ? String(existingAction.params?.[p] ?? '') : undefined
         }]
       });
@@ -1002,7 +1070,7 @@ class FlowBuilder {
 
     const modal = this.client.interactions.createModal({
       user,
-      title: `${isEdit ? '✏️ Editar' : '➕'} Ação: ${meta.label.slice(0, 35)}`,
+      title: this.t('fb_action_modal_title', { ...ctx, isEdit, label: metaLabel.slice(0, 35) }),
       components,
       funcao: async (mi, _, fields) => {
         const params = isEdit ? { ...existingAction.params } : {};
@@ -1038,7 +1106,7 @@ class FlowBuilder {
     const needsSelect = meta?.params?.some(p => SKIP_IN_MODAL.includes(p));
 
     if (!modalParams.length && !hasEmbedObj && !needsSelect) {
-      return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('emduvida')} Esta ação não tem parâmetros para editar!` });
+      return this.actionsMenu(interaction, user, flowId, { successMsg: this.t('fb_no_params_to_edit_action', this._tctx(interaction)) });
     }
     if (!modalParams.length && !hasEmbedObj && needsSelect) {
       return this._resolveSelectParams(interaction, user, flowId, meta, { ...action.params, _actionId: action.id }, 'action_edit');
@@ -1050,15 +1118,17 @@ class FlowBuilder {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
     const actions = (flow?.actions || []).map(a => a.id !== actionId ? a : { ...a, params: JSON.parse(JSON.stringify(params)) });
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { actions });
-    return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('feliz')} Ação atualizada!` });
+    return this.actionsMenu(interaction, user, flowId, { successMsg: this.t('fb_action_updated', this._tctx(interaction)) });
   }
 
   async _saveAction(interaction, user, flowId, category, type, params) {
+    const ctx      = this._tctx(interaction);
     const meta     = ACTION_CATALOG.find(a => a.category === category && a.type === type);
+    const metaLabel = meta ? this._actLabel(meta, ctx) : type;
     const guildId  = interaction.guild_id;
     const warnings = [];
 
-    const idWarnings = await this._validateIds(guildId, params);
+    const idWarnings = await this._validateIds(guildId, params, ctx);
     warnings.push(...idWarnings);
 
     if (params.channelId && ['send_message', 'reply_message', 'edit_message'].includes(type)) {
@@ -1066,7 +1136,7 @@ class FlowBuilder {
       try {
         const perms = await getPerm({ channel: true, id: rawId, guildId, bot: true, client: this.client });
         if (!perms.includes('SEND_MESSAGES') || !perms.includes('VIEW_CHANNEL')) {
-          warnings.push(`⚠️ O bot não tem permissão para enviar mensagens no canal <#${rawId}>.`);
+          warnings.push(this.t('fb_warn_no_send_perm', { ...ctx, channelId: rawId }));
         }
       } catch {}
     }
@@ -1075,7 +1145,7 @@ class FlowBuilder {
       const rawId = params.roleId.replace(/[<@&>]/g, '').trim();
       try {
         const higher = await holeHighter({ guildId, roleId: rawId, bot: true });
-        if (!higher) warnings.push(`⚠️ O cargo do bot é igual ou menor que o cargo <@&${rawId}>. A ação pode falhar.`);
+        if (!higher) warnings.push(this.t('fb_warn_role_hierarchy', { ...ctx, roleId: rawId }));
       } catch {}
     }
 
@@ -1092,7 +1162,7 @@ class FlowBuilder {
     if (requiredPerm) {
       try {
         const perms = await getPerm({ guildId, bot: true, client: this.client });
-        if (!perms.includes(requiredPerm)) warnings.push(`⚠️ O bot não tem a permissão **${requiredPerm}** no servidor.`);
+        if (!perms.includes(requiredPerm)) warnings.push(this.t('fb_warn_missing_perm', { ...ctx, perm: requiredPerm }));
       } catch {}
     }
 
@@ -1102,8 +1172,8 @@ class FlowBuilder {
     await this.client.logicEngine.updateFlow(flowId, guildId, { actions });
 
     const msg = warnings.length
-      ? `${this._e('emduvida')} Ação **${meta?.label}** adicionada, mas com avisos:\n\n${warnings.join('\n')}`
-      : `${this._e('curtida')} Ação **${meta?.label}** adicionada!`;
+      ? this.t('fb_action_added_with_warnings', { ...ctx, label: metaLabel, warnings: warnings.join('\n') })
+      : this.t('fb_action_added', { ...ctx, label: metaLabel });
 
     return this.actionsMenu(interaction, user, flowId, { successMsg: msg });
   }
@@ -1132,10 +1202,11 @@ class FlowBuilder {
   async _askEmbedOrSave(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existingEmbed = params.embedObj ?? existingAction?.params?.embedObj ?? null;
     const hasEmbed      = !!existingEmbed;
+    const ctx = this._tctx(interaction);
 
     const btnSim = this.client.interactions.createButton({
       user,
-      data: { label: hasEmbed ? '✏️ Editar embed' : '✨ Criar embed', style: 1 },
+      data: { label: hasEmbed ? this.t('fb_embed_btn_edit', ctx) : this.t('fb_embed_btn_create', ctx), style: 1 },
       funcao: async (i) => {
         // NÃO faz deferUpdate aqui — precisamos de `i` intacto (com
         // channel_id e message) para capturar a msg raiz antes de
@@ -1146,7 +1217,7 @@ class FlowBuilder {
 
     const btnNao = this.client.interactions.createButton({
       user,
-      data: { label: hasEmbed ? '🗑️ Remover embed' : '⏭️ Sem embed', style: hasEmbed ? 4 : 2 },
+      data: { label: hasEmbed ? this.t('fb_embed_btn_remove', ctx) : this.t('fb_embed_btn_skip', ctx), style: hasEmbed ? 4 : 2 },
       funcao: async (i) => {
         await this.ui.deferUpdate(i);
         delete params.embedObj;
@@ -1156,7 +1227,7 @@ class FlowBuilder {
 
     const rows = hasEmbed && isEdit
       ? [this.ui.row(btnSim, btnNao, this.client.interactions.createButton({
-          user, data: { label: '✅ Manter embed atual', style: 3 },
+          user, data: { label: this.t('fb_embed_btn_keep', ctx), style: 3 },
           funcao: async (i) => {
             await this.ui.deferUpdate(i);
             params.embedObj = existingEmbed;
@@ -1168,9 +1239,8 @@ class FlowBuilder {
     const blocks = [
       this.ui.cv2Text(
         hasEmbed
-          ? `# ${this._e('animada')} Embed configurada!\n> Você quer **editar**, **remover** ou **manter** a embed atual?`
-          : `# ${this._e('emduvida')} Adicionar embed à mensagem?\n` +
-            `${this._e('pensando')} Embeds deixam a mensagem bem mais bonita — título, descrição, cor, imagem, fields e muito mais! ${this._e('feliz')}`
+          ? this.t('fb_embed_configured_header', ctx)
+          : this.t('fb_embed_add_header', ctx)
       ),
       this.ui.cv2Divider(),
       ...rows,
@@ -1192,6 +1262,8 @@ class FlowBuilder {
     // ── Captura definitiva da msg raiz (canal + id) ──
     const rootChannelId = interaction.channel_id || interaction.channel?.id;
     const rootMessageId = interaction.message?.id;
+    const ctx = this._tctx(interaction);
+    const t = (key, extra = {}) => this.client.t(`ticket.${key}`, { ...ctx, ...extra });
 
     // defer agora que já lemos o necessário de `interaction`
     await this.ui.deferUpdate(interaction);
@@ -1201,18 +1273,18 @@ class FlowBuilder {
       : { title: '', description: '', color: COLOR.main, url: '', author: { name: '', icon_url: '', url: '' }, footer: { text: '', icon_url: '' }, thumbnail: { url: '' }, image: { url: '' }, fields: [] };
 
     const PRESET_COLORS = [
-      { label: '🔵 Azul Ayami',    value: '7C8FFF' },
-      { label: '💙 Azul Cabelo',   value: 'A9D6FF' },
-      { label: '🌙 Azul Escuro',   value: '243B7A' },
-      { label: '⭐ Dourado',       value: 'FFD966' },
-      { label: '🌸 Rosa',          value: 'FFB6C8' },
-      { label: '🟢 Verde',         value: '57F287' },
-      { label: '🔴 Vermelho',      value: 'ED4245' },
-      { label: '🟡 Amarelo',       value: 'FEE75C' },
-      { label: '🟠 Laranja',       value: 'E67E22' },
-      { label: '🟣 Roxo',          value: '9B59B6' },
-      { label: '⚫ Preto',         value: '000000' },
-      { label: '🎨 HEX Personalizado', value: 'custom' },
+      { label: t('eb_color_blue_ayami'), value: '7C8FFF' },
+      { label: t('eb_color_blue_hair'),  value: 'A9D6FF' },
+      { label: t('eb_color_dark_blue'),  value: '243B7A' },
+      { label: t('eb_color_gold'),       value: 'FFD966' },
+      { label: t('eb_color_pink'),       value: 'FFB6C8' },
+      { label: t('eb_color_green'),      value: '57F287' },
+      { label: t('eb_color_red'),        value: 'ED4245' },
+      { label: t('eb_color_yellow'),     value: 'FEE75C' },
+      { label: t('eb_color_orange'),     value: 'E67E22' },
+      { label: t('eb_color_purple'),     value: '9B59B6' },
+      { label: t('eb_color_black'),      value: '000000' },
+      { label: t('eb_color_custom'),     value: 'custom' },
     ];
 
     function cleanEmbed(e) {
@@ -1234,7 +1306,7 @@ class FlowBuilder {
     function buildLiveEmbed() {
       const e = cleanEmbed(embed);
       if (!e.title && !e.description && !e.fields?.length && !e.image && !e.thumbnail && !e.author) {
-        e.description = '*Embed em branco — comece escolhendo um campo para editar abaixo* 👇';
+        e.description = t('eb_blank_placeholder');
       }
       e.color = embed.color ?? COLOR.gold;
       return e;
@@ -1246,32 +1318,33 @@ class FlowBuilder {
       const editSel = this.client.interactions.createSelect({
         user,
         data: {
-          placeholder: '✏️ Editar campo da embed…',
+          placeholder: t('eb_field_select_placeholder'),
           options: [
-            { label: 'Título',           value: 'title'        },
-            { label: 'Descrição',        value: 'description'  },
-            { label: 'URL do Título',    value: 'url'          },
-            { label: 'Author Nome',      value: 'author_name'  },
-            { label: 'Author Icon URL',  value: 'author_icon'  },
-            { label: 'Author URL',       value: 'author_url'   },
-            { label: 'Footer Texto',     value: 'footer_text'  },
-            { label: 'Footer Icon URL',  value: 'footer_icon'  },
-            { label: 'Thumbnail URL',    value: 'thumbnail'    },
-            { label: 'Image URL',        value: 'image'        },
+            { label: t('eb_field_title'),        value: 'title'        },
+            { label: t('eb_field_description'),  value: 'description'  },
+            { label: t('eb_field_url'),          value: 'url'          },
+            { label: t('eb_field_author_name'),  value: 'author_name'  },
+            { label: t('eb_field_author_icon'),  value: 'author_icon'  },
+            { label: t('eb_field_author_url'),   value: 'author_url'   },
+            { label: t('eb_field_footer_text'),  value: 'footer_text'  },
+            { label: t('eb_field_footer_icon'),  value: 'footer_icon'  },
+            { label: t('eb_field_thumbnail'),    value: 'thumbnail'    },
+            { label: t('eb_field_image'),        value: 'image'        },
           ]
         },
         funcao: async (si) => {
+          const editPrefix = t('eb_edit_prefix');
           const MAP = {
-            title:       ['Editar Título',          () => embed.title,           v => { embed.title           = v; }, false],
-            description: ['Editar Descrição',       () => embed.description,     v => { embed.description     = v; }, true ],
-            url:         ['Editar URL do Título',    () => embed.url,             v => { embed.url             = v; }, false],
-            author_name: ['Editar Author Nome',      () => embed.author.name,     v => { embed.author.name     = v; }, false],
-            author_icon: ['Editar Author Icon URL',  () => embed.author.icon_url, v => { embed.author.icon_url = v; }, false],
-            author_url:  ['Editar Author URL',       () => embed.author.url,      v => { embed.author.url      = v; }, false],
-            footer_text: ['Editar Footer Texto',     () => embed.footer.text,     v => { embed.footer.text     = v; }, false],
-            footer_icon: ['Editar Footer Icon URL',  () => embed.footer.icon_url, v => { embed.footer.icon_url = v; }, false],
-            thumbnail:   ['Editar Thumbnail URL',    () => embed.thumbnail.url,   v => { embed.thumbnail.url   = v; }, false],
-            image:       ['Editar Image URL',        () => embed.image.url,       v => { embed.image.url       = v; }, false],
+            title:       [`${editPrefix} ${t('eb_field_title')}`,         () => embed.title,           v => { embed.title           = v; }, false],
+            description: [`${editPrefix} ${t('eb_field_description')}`,   () => embed.description,     v => { embed.description     = v; }, true ],
+            url:         [`${editPrefix} ${t('eb_field_url')}`,           () => embed.url,             v => { embed.url             = v; }, false],
+            author_name: [`${editPrefix} ${t('eb_field_author_name')}`,   () => embed.author.name,     v => { embed.author.name     = v; }, false],
+            author_icon: [`${editPrefix} ${t('eb_field_author_icon')}`,   () => embed.author.icon_url, v => { embed.author.icon_url = v; }, false],
+            author_url:  [`${editPrefix} ${t('eb_field_author_url')}`,    () => embed.author.url,      v => { embed.author.url      = v; }, false],
+            footer_text: [`${editPrefix} ${t('eb_field_footer_text')}`,   () => embed.footer.text,     v => { embed.footer.text     = v; }, false],
+            footer_icon: [`${editPrefix} ${t('eb_field_footer_icon')}`,   () => embed.footer.icon_url, v => { embed.footer.icon_url = v; }, false],
+            thumbnail:   [`${editPrefix} ${t('eb_field_thumbnail')}`,     () => embed.thumbnail.url,   v => { embed.thumbnail.url   = v; }, false],
+            image:       [`${editPrefix} ${t('eb_field_image')}`,        () => embed.image.url,       v => { embed.image.url       = v; }, false],
           };
           const [title, getter, setter, multi] = MAP[si.data.values[0]] || [];
           if (!title) return;
@@ -1290,9 +1363,9 @@ class FlowBuilder {
 
       const fieldSel = this.client.interactions.createSelect({
         user,
-        data: { placeholder: '📊 Gerenciar Fields…', options: [
-          { label: '➕ Adicionar Field', value: 'add',   description: `Atual: ${embed.fields.length}/25` },
-          { label: '🗑️ Remover Última',  value: 'remove' },
+        data: { placeholder: t('eb_fields_manage_placeholder'), options: [
+          { label: t('eb_add_field_label'), value: 'add',   description: t('eb_add_field_desc', { count: embed.fields.length }) },
+          { label: t('eb_remove_field_label'),  value: 'remove' },
         ]},
         funcao: async (si) => {
           if (si.data.values[0] === 'remove') {
@@ -1303,11 +1376,11 @@ class FlowBuilder {
           }
           if (embed.fields.length >= 25) return;
           const modal = this.client.interactions.createModal({
-            user, title: 'Adicionar Field',
+            user, title: t('eb_add_field_modal_title'),
             components: [
-              this.ui.modalText('name',  'Nome do field',  { required: true, maxLength: 256 }),
-              this.ui.modalText('value', 'Valor do field', { required: true, maxLength: 1024, style: 2 }),
-              this.ui.modalYesNo('inline', 'Exibir em linha (inline)?', { yesLabel: '↔️ Sim — lado a lado', noLabel: '⬇️ Não — linha inteira', defaultValue: 'false' }),
+              this.ui.modalText('name',  t('eb_field_name_label'),  { required: true, maxLength: 256 }),
+              this.ui.modalText('value', t('eb_field_value_label'), { required: true, maxLength: 1024, style: 2 }),
+              this.ui.modalYesNo('inline', this.t('fb_embed_field_inline_label', ctx), { yesLabel: this.t('fb_embed_field_inline_yes', ctx), noLabel: this.t('fb_embed_field_inline_no', ctx), defaultValue: 'false' }),
             ],
             funcao: async (mi, _, fields) => {
               embed.fields.push({ name: fields.name, value: fields.value, inline: fields.inline === 'true' });
@@ -1321,13 +1394,13 @@ class FlowBuilder {
 
       const colorSel = this.client.interactions.createSelect({
         user,
-        data: { placeholder: '🎨 Escolher cor…', options: PRESET_COLORS.map(c => ({ label: c.label, value: c.value })) },
+        data: { placeholder: t('eb_color_select_placeholder'), options: PRESET_COLORS.map(c => ({ label: c.label, value: c.value })) },
         funcao: async (si) => {
           const val = si.data.values[0];
           if (val === 'custom') {
             const modal = this.client.interactions.createModal({
-              user, title: 'Cor HEX Personalizada',
-              components: [{ type: 1, components: [{ type: 4, custom_id: 'hex', label: 'HEX (ex: FF5733)', style: 1, required: true, max_length: 7, placeholder: 'FF5733' }] }],
+              user, title: t('eb_custom_hex_modal_title'),
+              components: [{ type: 1, components: [{ type: 4, custom_id: 'hex', label: t('eb_hex_label'), style: 1, required: true, max_length: 7, placeholder: t('eb_hex_placeholder') }] }],
               funcao: async (mi, _, fields) => {
                 const hex = (fields.hex || '').replace('#', '').trim();
                 if (!/^[0-9A-Fa-f]{6}$/.test(hex)) return;
@@ -1346,7 +1419,7 @@ class FlowBuilder {
 
       /* ── Confirmar: salva embed, apaga followUp, edita a MSG RAIZ de verdade ── */
       const btnConfirm = this.client.interactions.createButton({
-        user, data: { label: '✅ Confirmar embed', style: 3 },
+        user, data: { label: t('eb_confirm_label'), style: 3 },
         funcao: async (i2) => {
           await this.ui.deferUpdate(i2);
           params.embedObj = cleanEmbed(embed);
@@ -1363,7 +1436,7 @@ class FlowBuilder {
 
       /* ── Remover embed: mesma lógica, sem salvar embedObj ── */
       const btnRemove = this.client.interactions.createButton({
-        user, data: { label: '🗑️ Remover embed', style: 4 },
+        user, data: { label: t('eb_remove_label'), style: 4 },
         funcao: async (i2) => {
           await this.ui.deferUpdate(i2);
           delete params.embedObj;
@@ -1373,7 +1446,7 @@ class FlowBuilder {
       });
 
       const btnCancel = this.client.interactions.createButton({
-        user, data: { label: '✖️ Cancelar', style: 2 },
+        user, data: { label: t('eb_cancel_label'), style: 2 },
         funcao: async (i2) => {
           await this.ui.deferUpdate(i2);
           await this.ui.deleteFollowUp(i2, followUpMsgId).catch(() => {});
@@ -1383,7 +1456,7 @@ class FlowBuilder {
 
       /* ── Painel: embed REAL (preview ao vivo) + controles em ActionRows ── */
       const builderPayload = {
-        content:    `🎨 **Editor de Embed** ${this._e('animada')} — o preview abaixo é exatamente como a embed vai ficar!`,
+        content:    t('eb_builder_content', { title: t('eb_default_title') }),
         embeds:     [buildLiveEmbed()],
         components: [
           this.ui.row(editSel),
@@ -1405,7 +1478,7 @@ class FlowBuilder {
 
     /* ── Envia o followUp pela primeira vez (já com preview real) e captura o messageId ── */
     const initialPayload = {
-      content:    `🎨 **Editor de Embed** ${this._e('animada')} — o preview abaixo é exatamente como a embed vai ficar!`,
+      content:    t('eb_builder_content', { title: t('eb_default_title') }),
       embeds:     [buildLiveEmbed()],
       components: [],
       flags: 64,
@@ -1456,20 +1529,21 @@ class FlowBuilder {
   async _askInteractionOrFinish(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existing    = params.interactionObj ?? existingAction?.params?.interactionObj ?? null;
     const hasExisting = !!existing;
+    const ctx = this._tctx(interaction);
 
-    const btnSim = this.client.interactions.createButton({ user, data: { label: hasExisting ? '✏️ Editar interação' : '⚡ Adicionar interação', style: 1 }, funcao: async (i) => { await this.ui.deferUpdate(i); return this._showInteractionTypeSelect(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); } });
-    const btnNao = this.client.interactions.createButton({ user, data: { label: hasExisting ? '🗑️ Remover interação' : '⏭️ Sem interação', style: hasExisting ? 4 : 2 }, funcao: async (i) => { await this.ui.deferUpdate(i); delete params.interactionObj; return this._continueAfterMessageExtras(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); } });
+    const btnSim = this.client.interactions.createButton({ user, data: { label: hasExisting ? this.t('fb_int_btn_edit', ctx) : this.t('fb_int_btn_add', ctx), style: 1 }, funcao: async (i) => { await this.ui.deferUpdate(i); return this._showInteractionTypeSelect(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); } });
+    const btnNao = this.client.interactions.createButton({ user, data: { label: hasExisting ? this.t('fb_int_btn_remove', ctx) : this.t('fb_int_btn_skip', ctx), style: hasExisting ? 4 : 2 }, funcao: async (i) => { await this.ui.deferUpdate(i); delete params.interactionObj; return this._continueAfterMessageExtras(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); } });
 
     const rows = hasExisting
-      ? [this.ui.row(btnSim, btnNao, this.client.interactions.createButton({ user, data: { label: '✅ Manter atual', style: 3 }, funcao: async (i) => { await this.ui.deferUpdate(i); params.interactionObj = existing; return this._continueAfterMessageExtras(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); }}))]
+      ? [this.ui.row(btnSim, btnNao, this.client.interactions.createButton({ user, data: { label: this.t('fb_int_btn_keep', ctx), style: 3 }, funcao: async (i) => { await this.ui.deferUpdate(i); params.interactionObj = existing; return this._continueAfterMessageExtras(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); }}))]
       : [this.ui.row(btnSim, btnNao)];
 
     const previewLine = hasExisting
-      ? (existing.kind === 'button' ? `🔘 Botão **"${existing.label}"** → dispara um fluxo` : `📋 Select com **${existing.options?.length || 0}** opção(ões) → cada uma dispara um fluxo`)
-      : '_nenhuma interação configurada_';
+      ? (existing.kind === 'button' ? this.t('fb_int_preview_button', { ...ctx, label: existing.label }) : this.t('fb_int_preview_select', { ...ctx, count: existing.options?.length || 0 }))
+      : this.t('fb_int_none_configured', ctx);
 
     const blocks = [
-      this.ui.cv2Text(`# ⚡ Adicionar Interação? ${this._e('emduvida')}\n${this._e('pensando')} Você quer que a mensagem tenha um **botão** ou **select menu** que dispare outro fluxo?\n\n**Atual:** ${previewLine}\n\n*Útil para criar menus, painéis de ticket, confirmar ações e mais!*`),
+      this.ui.cv2Text(this.t('fb_int_ask_header', { ...ctx, preview: previewLine })),
       this.ui.cv2Divider(),
       ...rows,
     ];
@@ -1478,27 +1552,30 @@ class FlowBuilder {
   }
 
   async _showInteractionTypeSelect(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
-    const typeSel = this.client.interactions.createSelect({ user, data: { placeholder: '⚡ Tipo de interação', options: [{ label: '🔘 Botão', value: 'button', description: 'Um único botão que dispara um fluxo' }, { label: '📋 Select Menu', value: 'select', description: 'Várias opções, cada uma dispara um fluxo diferente' }] }, funcao: async (i) => { await this.ui.deferUpdate(i); if (i.data.values[0] === 'button') return this._buildInteractionButton(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); return this._buildInteractionSelect(i, user, flowId, meta, params, isEdit, existingAction, needsSelect, []); } });
-    const blocks = [this.ui.cv2Text(`# ⚡ Tipo de Interação ${this._e('emduvida')}\n${this._e('pensando')} A mensagem deve ter um botão ou um select menu?`), this.ui.cv2Divider(), this.ui.row(typeSel)];
+    const ctx = this._tctx(interaction);
+    const typeSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_int_type_placeholder', ctx), options: [{ label: this.t('fb_int_type_button_label', ctx), value: 'button', description: this.t('fb_int_type_button_desc', ctx) }, { label: this.t('fb_int_type_select_label', ctx), value: 'select', description: this.t('fb_int_type_select_desc', ctx) }] }, funcao: async (i) => { await this.ui.deferUpdate(i); if (i.data.values[0] === 'button') return this._buildInteractionButton(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); return this._buildInteractionSelect(i, user, flowId, meta, params, isEdit, existingAction, needsSelect, []); } });
+    const blocks = [this.ui.cv2Text(this.t('fb_int_type_header', ctx)), this.ui.cv2Divider(), this.ui.row(typeSel)];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _buildInteractionButton(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const flows = await FlowModel.find({ guildId: interaction.guild_id, enabled: true, 'trigger.type': 'button_clicked' }).lean();
+    const ctx = this._tctx(interaction);
     if (!flows.length) {
-      const blocks = [this.ui.cv2Text(`# ❌ Nenhum fluxo disponível\n${this._e('emduvida')} Não encontrei nenhum fluxo ativo com trigger **🖱️ Botão clicado**.\nCrie um fluxo com esse trigger primeiro!`), this.ui.cv2Divider(), this.ui.row(this.ui.btn(user, '◀ Voltar', 2, async (i) => { await this.ui.deferUpdate(i); return this._askInteractionOrFinish(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); }))];
+      const blocks = [this.ui.cv2Text(this.t('fb_int_no_flows_button_title', ctx)), this.ui.cv2Divider(), this.ui.row(this.ui.btn(user, this.t('fb_btn_go_back', ctx), 2, async (i) => { await this.ui.deferUpdate(i); return this._askInteractionOrFinish(i, user, flowId, meta, params, isEdit, existingAction, needsSelect); }))];
       return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.danger }));
     }
     return this._showFlowPicker(interaction, user, flows, 0, async (si, pickedFlowId) => {
       const cur = params.interactionObj || {};
-      const modal = this.client.interactions.createModal({ user, title: 'Configurar Botão', components: [
-        this.ui.modalText('label', 'Texto do botão', { required: true, maxLength: 80, value: cur.label || '' }),
-        this.ui.modalSelect('style', 'Cor do botão', [{ label: '🔵 Azul', value: '1', default: !cur.style || cur.style === 1 }, { label: '⚪ Cinza', value: '2', default: cur.style === 2 }, { label: '🟢 Verde', value: '3', default: cur.style === 3 }, { label: '🔴 Vermelho', value: '4', default: cur.style === 4 }], { placeholder: 'Escolha a cor' }),
-        this.ui.modalText('emoji', 'Emoji (opcional)', { required: false, maxLength: 50, value: cur.emoji || '' }),
-        this.ui.modalYesNo('permanent', 'Botão permanente?', { yesLabel: '♾️ Sim — nunca expira', noLabel: '⏳ Não — temporário', defaultValue: cur.permanent === false ? 'false' : 'true', placeholder: 'Permanente ou temporário?' }),
+      const siCtx = this._tctx(si);
+      const modal = this.client.interactions.createModal({ user, title: this.t('fb_int_configure_button_modal_title', siCtx), components: [
+        this.ui.modalText('label', this.t('fb_int_button_text_label', siCtx), { required: true, maxLength: 80, value: cur.label || '' }),
+        this.ui.modalSelect('style', this.t('fb_int_button_color_label', siCtx), [{ label: this.t('fb_int_color_blue', siCtx), value: '1', default: !cur.style || cur.style === 1 }, { label: this.t('fb_int_color_gray', siCtx), value: '2', default: cur.style === 2 }, { label: this.t('fb_int_color_green', siCtx), value: '3', default: cur.style === 3 }, { label: this.t('fb_int_color_red', siCtx), value: '4', default: cur.style === 4 }], { placeholder: this.t('fb_int_color_placeholder', siCtx) }),
+        this.ui.modalText('emoji', this.t('fb_int_button_emoji_label', siCtx), { required: false, maxLength: 50, value: cur.emoji || '' }),
+        this.ui.modalYesNo('permanent', this.t('fb_int_permanent_label', siCtx), { yesLabel: this.t('fb_int_permanent_yes', siCtx), noLabel: this.t('fb_int_permanent_no', siCtx), defaultValue: cur.permanent === false ? 'false' : 'true', placeholder: this.t('fb_int_permanent_placeholder', siCtx) }),
       ], funcao: async (mi, _, fields) => {
         const style = [1,2,3,4].includes(Number(fields.style)) ? Number(fields.style) : 1;
-        params.interactionObj = { kind: 'button', label: fields.label?.trim() || 'Clique aqui', style, emoji: fields.emoji?.trim() || '', permanent: fields.permanent !== 'false', flowId: pickedFlowId };
+        params.interactionObj = { kind: 'button', label: fields.label?.trim() || this.t('ar_click_here', this._tctx(mi)), style, emoji: fields.emoji?.trim() || '', permanent: fields.permanent !== 'false', flowId: pickedFlowId };
         await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } });
         return this._continueAfterMessageExtras(mi, user, flowId, meta, params, isEdit, existingAction, needsSelect);
       }});
@@ -1509,25 +1586,27 @@ class FlowBuilder {
   async _buildInteractionSelect(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect, options) {
     const flows = await FlowModel.find({ guildId: interaction.guild_id, enabled: true, 'trigger.type': 'select_used' }).lean();
     const renderPanel = async (i, opts) => {
+      const ctx = this._tctx(i);
       if (!flows.length && !opts.length) {
-        const blocks = [this.ui.cv2Text(`# ❌ Nenhum fluxo disponível\n${this._e('emduvida')} Não encontrei nenhum fluxo ativo com trigger **📋 Select usado**.\nCrie um fluxo com esse trigger primeiro!`), this.ui.cv2Divider(), this.ui.row(this.ui.btn(user, '◀ Voltar', 2, async (bi) => { await this.ui.deferUpdate(bi); return this._askInteractionOrFinish(bi, user, flowId, meta, params, isEdit, existingAction, needsSelect); }))];
+        const blocks = [this.ui.cv2Text(this.t('fb_int_no_flows_select_title', ctx)), this.ui.cv2Divider(), this.ui.row(this.ui.btn(user, this.t('fb_btn_go_back', ctx), 2, async (bi) => { await this.ui.deferUpdate(bi); return this._askInteractionOrFinish(bi, user, flowId, meta, params, isEdit, existingAction, needsSelect); }))];
         return this.ui.editOriginal(i, this._cv2(blocks, { accentColor: COLOR.danger }));
       }
-      const lines = opts.length ? opts.map((o, idx) => `**${idx + 1}.** ${o.emoji || '▪️'} ${o.label}`).join('\n') : '_nenhuma opção adicionada ainda_';
-      const btnAdd = this.client.interactions.createButton({ user, data: { label: '➕ Adicionar opção', style: 1 }, funcao: async (bi) => {
+      const lines = opts.length ? opts.map((o, idx) => `**${idx + 1}.** ${o.emoji || '▪️'} ${o.label}`).join('\n') : this.t('fb_int_no_options_yet', ctx);
+      const btnAdd = this.client.interactions.createButton({ user, data: { label: this.t('fb_int_btn_add_option', ctx), style: 1 }, funcao: async (bi) => {
         if (!flows.length) return;
         return this._showFlowPicker(bi, user, flows, 0, async (si, pickedFlowId) => {
-          const modal = this.client.interactions.createModal({ user, title: 'Nova Opção do Select', components: [this.ui.modalText('label', 'Texto da opção', { required: true, maxLength: 100 }), this.ui.modalText('description', 'Descrição (opcional)', { required: false, maxLength: 100 }), this.ui.modalText('emoji', 'Emoji (opcional)', { required: false, maxLength: 50 })], funcao: async (mi, _, fields) => {
-            opts.push({ label: fields.label?.trim() || 'Opção', description: fields.description?.trim() || '', emoji: fields.emoji?.trim() || '', flowId: pickedFlowId });
+          const siCtx = this._tctx(si);
+          const modal = this.client.interactions.createModal({ user, title: this.t('fb_int_new_option_modal_title', siCtx), components: [this.ui.modalText('label', this.t('fb_int_option_text_label', siCtx), { required: true, maxLength: 100 }), this.ui.modalText('description', this.t('fb_int_option_desc_label', siCtx), { required: false, maxLength: 100 }), this.ui.modalText('emoji', this.t('fb_int_option_emoji_label', siCtx), { required: false, maxLength: 50 })], funcao: async (mi, _, fields) => {
+            opts.push({ label: fields.label?.trim() || this.t('ar_option_default_label', this._tctx(mi)), description: fields.description?.trim() || '', emoji: fields.emoji?.trim() || '', flowId: pickedFlowId });
             await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } });
             return renderPanel(mi, opts);
           }});
           return this.client.interactions.showModal(si, modal);
         });
       }});
-      const btnRemove = this.client.interactions.createButton({ user, data: { label: '🗑️ Remover última', style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); opts.pop(); return renderPanel(bi, opts); }});
-      const btnSave   = this.client.interactions.createButton({ user, data: { label: '✅ Salvar Select', style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); params.interactionObj = { kind: 'select', options: opts }; return this._continueAfterMessageExtras(bi, user, flowId, meta, params, isEdit, existingAction, needsSelect); }});
-      const blocks = [this.ui.cv2Text(`# 📋 Configurar Select Menu ${this._e('pensando')}\nAdicione as opções que o usuário vai ver. Cada opção dispara um fluxo diferente!\n\n**Opções adicionadas (${opts.length}/25):**\n${lines}`), this.ui.cv2Divider(), this.ui.row(btnAdd, btnRemove, btnSave)];
+      const btnRemove = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_remove_last', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); opts.pop(); return renderPanel(bi, opts); }});
+      const btnSave   = this.client.interactions.createButton({ user, data: { label: this.t('fb_int_btn_save_select', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); params.interactionObj = { kind: 'select', options: opts }; return this._continueAfterMessageExtras(bi, user, flowId, meta, params, isEdit, existingAction, needsSelect); }});
+      const blocks = [this.ui.cv2Text(this.t('fb_int_select_config_header', { ...ctx, count: opts.length, lines })), this.ui.cv2Divider(), this.ui.row(btnAdd, btnRemove, btnSave)];
       return this.ui.editOriginal(i, this._cv2(blocks, { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, options);
@@ -1543,13 +1622,14 @@ class FlowBuilder {
   async _showFlowPicker(interaction, user, flows, page, onPick) {
     const { page: safePage, maxPage } = this.ui._clampPage(page, flows.length);
     const pageItems = this.ui._pageSlice(flows, safePage);
-    const options   = pageItems.map(f => ({ label: f.name.slice(0, 100), value: f.flowId, description: `ID: ${f.flowId}` }));
-    const sel = this.ui.select(user, options, '⚡ Selecionar fluxo…', async (i) => {
+    const ctx = this._tctx(interaction);
+    const options   = pageItems.map(f => ({ label: f.name.slice(0, 100), value: f.flowId, description: this.t('fb_flow_picker_id_desc', { ...ctx, id: f.flowId }) }));
+    const sel = this.ui.select(user, options, this.t('fb_flow_picker_placeholder', ctx), async (i) => {
       return onPick(i, i.data.values[0]);
     });
     const components = [this.ui.row(sel)];
-    if (maxPage > 0) components.push(this.ui._paginationRow(user, safePage, maxPage, (i, p) => this._showFlowPicker(i, user, flows, p, onPick), (i, p) => this._showFlowPicker(i, user, flows, p, onPick)));
-    const blocks = [this.ui.cv2Text(`# ⚡ Selecionar Fluxo ${this._e('pensando')}\nQual fluxo será disparado? *(Página ${safePage + 1}/${maxPage + 1})*`), this.ui.cv2Divider(), ...components];
+    if (maxPage > 0) components.push(this.ui._paginationRow(user, safePage, maxPage, (i, p) => this._showFlowPicker(i, user, flows, p, onPick), (i, p) => this._showFlowPicker(i, user, flows, p, onPick), ctx));
+    const blocks = [this.ui.cv2Text(this.t('fb_flow_picker_header', { ...ctx, page: safePage + 1, maxPage: maxPage + 1 })), this.ui.cv2Divider(), ...components];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
@@ -1573,58 +1653,77 @@ class FlowBuilder {
   }
 
   async _showChannelSelect(interaction, user, flowId, meta, params, mode) {
-    const channelSel = this.client.interactions.createChannelSelect({ user, data: { placeholder: `📌 Canal para: ${meta.label.slice(0, 68)}`, channel_types: [0, 5] }, funcao: async (i) => { await this.ui.deferUpdate(i); params.channelId = i.data.values[0]; return this._resolveSelectParams(i, user, flowId, meta, params, mode); } });
-    const blocks = [this.ui.cv2Text(`# 📌 Selecionar Canal ${this._e('emduvida')}\n${this._e('pensando')} Para a ação **${meta.label}**, selecione o canal onde ela vai acontecer!`), this.ui.cv2Divider(), this.ui.row(channelSel)];
+    const ctx = this._tctx(interaction);
+    const label = this._metaLabelForMode(meta, ctx);
+    const channelSel = this.client.interactions.createChannelSelect({ user, data: { placeholder: this.t('fb_select_channel_placeholder', { ...ctx, label: label.slice(0, 68) }), channel_types: [0, 5] }, funcao: async (i) => { await this.ui.deferUpdate(i); params.channelId = i.data.values[0]; return this._resolveSelectParams(i, user, flowId, meta, params, mode); } });
+    const blocks = [this.ui.cv2Text(this.t('fb_select_channel_header', { ...ctx, label })), this.ui.cv2Divider(), this.ui.row(channelSel)];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _showRoleSelect(interaction, user, flowId, meta, params, mode) {
-    const roleSel = this.client.interactions.createRoleSelect({ user, data: { placeholder: `🏷️ Cargo para: ${meta.label.slice(0, 70)}` }, funcao: async (i) => { await this.ui.deferUpdate(i); params.roleId = i.data.values[0]; return this._resolveSelectParams(i, user, flowId, meta, params, mode); } });
-    const blocks = [this.ui.cv2Text(`# 🏷️ Selecionar Cargo ${this._e('emduvida')}\n${this._e('pensando')} Para a ação **${meta.label}**, selecione o cargo que será usado!`), this.ui.cv2Divider(), this.ui.row(roleSel)];
+    const ctx = this._tctx(interaction);
+    const label = this._metaLabelForMode(meta, ctx);
+    const roleSel = this.client.interactions.createRoleSelect({ user, data: { placeholder: this.t('fb_select_role_placeholder', { ...ctx, label: label.slice(0, 70) }) }, funcao: async (i) => { await this.ui.deferUpdate(i); params.roleId = i.data.values[0]; return this._resolveSelectParams(i, user, flowId, meta, params, mode); } });
+    const blocks = [this.ui.cv2Text(this.t('fb_select_role_header', { ...ctx, label })), this.ui.cv2Divider(), this.ui.row(roleSel)];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
+  /** Label traduzido de uma condição OU ação (usado nos seletores compartilhados). */
+  _metaLabelForMode(meta, ctx) {
+    return CONDITION_CATALOG.includes(meta) || CONDITION_CATALOG.some(c => c === meta)
+      ? this._cndLabel(meta, ctx)
+      : this._actLabel(meta, ctx);
+  }
+
   async _showPermSelect(interaction, user, flowId, meta, params, mode) {
+    const ctx = this._tctx(interaction);
+    const p = (key) => this.t(`permname_${key}`, ctx);
     const PERM_PAGES = [
-      [{ label: 'Ver Canais', value: 'VIEW_CHANNEL' }, { label: 'Enviar Mensagens', value: 'SEND_MESSAGES' }, { label: 'Enviar em Threads', value: 'SEND_MESSAGES_IN_THREADS' }, { label: 'Criar Threads Públicas', value: 'CREATE_PUBLIC_THREADS' }, { label: 'Criar Threads Privadas', value: 'CREATE_PRIVATE_THREADS' }, { label: 'Incorporar Links', value: 'EMBED_LINKS' }, { label: 'Anexar Arquivos', value: 'ATTACH_FILES' }, { label: 'Ver Histórico', value: 'READ_MESSAGE_HISTORY' }, { label: 'Mencionar @everyone', value: 'MENTION_EVERYONE' }, { label: 'Usar Emojis Externos', value: 'USE_EXTERNAL_EMOJIS' }, { label: 'Usar Stickers Externos', value: 'USE_EXTERNAL_STICKERS' }, { label: 'Adicionar Reações', value: 'ADD_REACTIONS' }, { label: 'Usar Comandos de App', value: 'USE_APPLICATION_COMMANDS' }, { label: 'Gerenciar Mensagens', value: 'MANAGE_MESSAGES' }, { label: 'Gerenciar Threads', value: 'MANAGE_THREADS' }, { label: 'Text-to-Speech', value: 'SEND_TTS_MESSAGES' }],
-      [{ label: 'Conectar em Voz', value: 'CONNECT' }, { label: 'Falar em Voz', value: 'SPEAK' }, { label: 'Vídeo/Tela em Voz', value: 'STREAM' }, { label: 'Usar Voz com Atividade', value: 'USE_VAD' }, { label: 'Mutar Membros', value: 'MUTE_MEMBERS' }, { label: 'Ensurdecer Membros', value: 'DEAFEN_MEMBERS' }, { label: 'Mover Membros', value: 'MOVE_MEMBERS' }, { label: 'Prioridade de Palestra', value: 'PRIORITY_SPEAKER' }, { label: 'Expulsar Membros', value: 'KICK_MEMBERS' }, { label: 'Banir Membros', value: 'BAN_MEMBERS' }, { label: 'Dar Timeout', value: 'MODERATE_MEMBERS' }, { label: 'Gerenciar Apelidos', value: 'MANAGE_NICKNAMES' }, { label: 'Gerenciar Cargos', value: 'MANAGE_ROLES' }, { label: 'Gerenciar Canais', value: 'MANAGE_CHANNELS' }, { label: 'Gerenciar Emojis', value: 'MANAGE_EMOJIS_AND_STICKERS' }, { label: 'Gerenciar Webhooks', value: 'MANAGE_WEBHOOKS' }],
-      [{ label: 'Gerenciar Servidor', value: 'MANAGE_GUILD' }, { label: 'Gerenciar Eventos', value: 'MANAGE_EVENTS' }, { label: 'Ver Audit Log', value: 'VIEW_AUDIT_LOG' }, { label: 'Ver Insights do Servidor', value: 'VIEW_GUILD_INSIGHTS' }, { label: 'Mudar Apelido Próprio', value: 'CHANGE_NICKNAME' }, { label: 'Criar Convite', value: 'CREATE_INSTANT_INVITE' }, { label: 'Administrador', value: 'ADMINISTRATOR' }],
+      [{ label: p('view_channel'), value: 'VIEW_CHANNEL' }, { label: p('send_messages'), value: 'SEND_MESSAGES' }, { label: p('send_messages_in_threads'), value: 'SEND_MESSAGES_IN_THREADS' }, { label: p('create_public_threads'), value: 'CREATE_PUBLIC_THREADS' }, { label: p('create_private_threads'), value: 'CREATE_PRIVATE_THREADS' }, { label: p('embed_links'), value: 'EMBED_LINKS' }, { label: p('attach_files'), value: 'ATTACH_FILES' }, { label: p('read_message_history'), value: 'READ_MESSAGE_HISTORY' }, { label: p('mention_everyone'), value: 'MENTION_EVERYONE' }, { label: p('use_external_emojis'), value: 'USE_EXTERNAL_EMOJIS' }, { label: p('use_external_stickers'), value: 'USE_EXTERNAL_STICKERS' }, { label: p('add_reactions'), value: 'ADD_REACTIONS' }, { label: p('use_application_commands'), value: 'USE_APPLICATION_COMMANDS' }, { label: p('manage_messages'), value: 'MANAGE_MESSAGES' }, { label: p('manage_threads'), value: 'MANAGE_THREADS' }, { label: p('send_tts_messages'), value: 'SEND_TTS_MESSAGES' }],
+      [{ label: p('connect'), value: 'CONNECT' }, { label: p('speak'), value: 'SPEAK' }, { label: p('stream'), value: 'STREAM' }, { label: p('use_vad'), value: 'USE_VAD' }, { label: p('mute_members'), value: 'MUTE_MEMBERS' }, { label: p('deafen_members'), value: 'DEAFEN_MEMBERS' }, { label: p('move_members'), value: 'MOVE_MEMBERS' }, { label: p('priority_speaker'), value: 'PRIORITY_SPEAKER' }, { label: p('kick_members'), value: 'KICK_MEMBERS' }, { label: p('ban_members'), value: 'BAN_MEMBERS' }, { label: p('moderate_members'), value: 'MODERATE_MEMBERS' }, { label: p('manage_nicknames'), value: 'MANAGE_NICKNAMES' }, { label: p('manage_roles'), value: 'MANAGE_ROLES' }, { label: p('manage_channels'), value: 'MANAGE_CHANNELS' }, { label: p('manage_emojis_and_stickers'), value: 'MANAGE_EMOJIS_AND_STICKERS' }, { label: p('manage_webhooks'), value: 'MANAGE_WEBHOOKS' }],
+      [{ label: p('manage_guild'), value: 'MANAGE_GUILD' }, { label: p('manage_events'), value: 'MANAGE_EVENTS' }, { label: p('view_audit_log'), value: 'VIEW_AUDIT_LOG' }, { label: p('view_guild_insights'), value: 'VIEW_GUILD_INSIGHTS' }, { label: p('change_nickname'), value: 'CHANGE_NICKNAME' }, { label: p('create_instant_invite'), value: 'CREATE_INSTANT_INVITE' }, { label: p('administrator'), value: 'ADMINISTRATOR' }],
     ];
-    const PAGE_LABELS = ['💬 Mensagens e Canais', '🔊 Voz e Moderação', '⚙️ Servidor e Especiais'];
+    const PAGE_LABELS = [this.t('fb_perm_page1_label', ctx), this.t('fb_perm_page2_label', ctx), this.t('fb_perm_page3_label', ctx)];
     const renderPage = async (i, page) => {
-      const pageSel = this.client.interactions.createSelect({ user, data: { placeholder: `${PAGE_LABELS[page]} — escolha a permissão`, options: PERM_PAGES[page] }, funcao: async (si) => { await this.ui.deferUpdate(si); params.permission = si.data.values[0]; return this._finalizeSave(si, user, flowId, meta, params, mode); } });
+      const iCtx = this._tctx(i);
+      const pageSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_perm_select_placeholder', { ...iCtx, pageLabel: PAGE_LABELS[page] }), options: PERM_PAGES[page] }, funcao: async (si) => { await this.ui.deferUpdate(si); params.permission = si.data.values[0]; return this._finalizeSave(si, user, flowId, meta, params, mode); } });
       const navBtns = [];
-      if (page > 0) navBtns.push(this.client.interactions.createButton({ user, data: { label: '◀ Anterior', style: 2 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPage(bi, page - 1); } }));
-      if (page < PERM_PAGES.length - 1) navBtns.push(this.client.interactions.createButton({ user, data: { label: 'Próxima ▶', style: 2 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPage(bi, page + 1); } }));
+      if (page > 0) navBtns.push(this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_prev_small', iCtx), style: 2 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPage(bi, page - 1); } }));
+      if (page < PERM_PAGES.length - 1) navBtns.push(this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_next_small', iCtx), style: 2 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPage(bi, page + 1); } }));
       const rows = [this.ui.row(pageSel)];
       if (navBtns.length) rows.push(this.ui.row(...navBtns));
-      const blocks = [this.ui.cv2Text(`# 🛡️ Selecionar Permissão ${this._e('emduvida')}\n${this._e('pensando')} Escolha a permissão que o usuário precisa ter!\nPágina **${page + 1}/${PERM_PAGES.length}** — ${PAGE_LABELS[page]}`), this.ui.cv2Divider(), ...rows];
+      const blocks = [this.ui.cv2Text(this.t('fb_perm_header', { ...iCtx, page: page + 1, total: PERM_PAGES.length, pageLabel: PAGE_LABELS[page] })), this.ui.cv2Divider(), ...rows];
       return this.ui.editOriginal(i, this._cv2(blocks, { accentColor: COLOR.main }));
     };
     return renderPage(interaction, 0);
   }
 
   async _showThreadTargetSelect(interaction, user, flowId, meta, params, mode) {
-    const typeSel = this.client.interactions.createSelect({ user, data: { placeholder: '➕ Adicionar ao tópico: usuário ou cargo?', options: [{ label: '👤 Um usuário específico', value: 'user' }, { label: '🏷️ Todos com um cargo', value: 'role' }] }, funcao: async (i) => {
+    const ctx = this._tctx(interaction);
+    const typeSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_thread_target_placeholder', ctx), options: [{ label: this.t('fb_thread_target_user_option', ctx), value: 'user' }, { label: this.t('fb_thread_target_role_option', ctx), value: 'role' }] }, funcao: async (i) => {
       params.threadTargetType = i.data.values[0];
       if (params.threadTargetType === 'role') { await this.ui.deferUpdate(i); return this._showRoleSelect(i, user, flowId, meta, params, mode); }
-      const modal = this.client.interactions.createModal({ user, title: 'Usuário a adicionar', components: [{ type: 1, components: [{ type: 4, custom_id: 'targetUserId', label: 'ID, @menção ou {arg0} do usuário', style: 1, required: true, max_length: 100, placeholder: 'Ex: {arg0} ou 123456789012345678' }] }], funcao: async (mi, _, fields) => { params.targetUserId = fields.targetUserId?.trim(); await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } }); return this._resolveSelectParams(mi, user, flowId, meta, params, mode); } });
+      const iCtx = this._tctx(i);
+      const modal = this.client.interactions.createModal({ user, title: this.t('fb_thread_user_modal_title', iCtx), components: [{ type: 1, components: [{ type: 4, custom_id: 'targetUserId', label: this.t('fb_thread_user_field_label', iCtx), style: 1, required: true, max_length: 100, placeholder: this.t('fb_thread_user_placeholder', iCtx) }] }], funcao: async (mi, _, fields) => { params.targetUserId = fields.targetUserId?.trim(); await DiscordRequest(`/interactions/${mi.id}/${mi.token}/callback`, { method: 'POST', body: { type: 6 } }); return this._resolveSelectParams(mi, user, flowId, meta, params, mode); } });
       return this.client.interactions.showModal(i, modal);
     }});
-    const blocks = [this.ui.cv2Text(`# ➕ Adicionar ao Tópico ${this._e('emduvida')}\n${this._e('pensando')} Quem você quer adicionar ao tópico (thread)?`), this.ui.cv2Divider(), this.ui.row(typeSel)];
+    const blocks = [this.ui.cv2Text(this.t('fb_thread_target_header', ctx)), this.ui.cv2Divider(), this.ui.row(typeSel)];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _showArgSelect(interaction, user, flowId, meta, params, mode) {
-    const argIndexSel = this.client.interactions.createSelect({ user, data: { placeholder: '🔢 Qual argumento? (1 = primeiro)', options: [0,1,2,3,4].map(n => ({ label: `Argumento ${n + 1}`, value: String(n), description: `{arg${n}}` })) }, funcao: async (i) => { await this.ui.deferUpdate(i); params.argIndex = Number(i.data.values[0]); return this._showArgTypeSel(i, user, flowId, meta, params, mode); } });
-    const blocks = [this.ui.cv2Text(`# 🔍 Condição: ${meta.label} ${this._e('emduvida')}\n${this._e('pensando')} **Qual argumento você quer verificar?**\n\nOs argumentos são as palavras que o usuário digita após o comando.\nEx: \`!ban @Usuario motivo\` → arg1 = \`@Usuario\`, arg2 = \`motivo\``), this.ui.cv2Divider(), this.ui.row(argIndexSel)];
+    const ctx = this._tctx(interaction);
+    const label = this._cndLabel(meta, ctx);
+    const argIndexSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_arg_select_placeholder', ctx), options: [0,1,2,3,4].map(n => ({ label: this.t('fb_arg_option_label', { ...ctx, n: n + 1 }), value: String(n), description: `{arg${n}}` })) }, funcao: async (i) => { await this.ui.deferUpdate(i); params.argIndex = Number(i.data.values[0]); return this._showArgTypeSel(i, user, flowId, meta, params, mode); } });
+    const blocks = [this.ui.cv2Text(this.t('fb_arg_select_header', { ...ctx, label })), this.ui.cv2Divider(), this.ui.row(argIndexSel)];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _showArgTypeSel(interaction, user, flowId, meta, params, mode) {
+    const ctx = this._tctx(interaction);
     const argNum = (params.argIndex ?? 0) + 1;
-    const argTypeSel = this.client.interactions.createSelect({ user, data: { placeholder: `🔍 O Argumento ${argNum} é…`, options: [{ label: '👤 Menção de usuário', value: 'user_mention' }, { label: '📌 Menção de canal', value: 'channel_mention' }, { label: '🔢 Número', value: 'number' }, { label: '✏️ Texto não-vazio', value: 'text' }] }, funcao: async (i) => { await this.ui.deferUpdate(i); params.argType = i.data.values[0]; return this._finalizeSave(i, user, flowId, meta, params, mode); } });
-    const blocks = [this.ui.cv2Text(`# 🔍 Tipo do Argumento ${argNum} ${this._e('emduvida')}\n${this._e('pensando')} **O Argumento ${argNum} deve ser do tipo:**`), this.ui.cv2Divider(), this.ui.row(argTypeSel)];
+    const argTypeSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_arg_type_placeholder', { ...ctx, n: argNum }), options: [{ label: this.t('fb_arg_type_user_mention', ctx), value: 'user_mention' }, { label: this.t('fb_arg_type_channel_mention', ctx), value: 'channel_mention' }, { label: this.t('fb_arg_type_number', ctx), value: 'number' }, { label: this.t('fb_arg_type_text', ctx), value: 'text' }] }, funcao: async (i) => { await this.ui.deferUpdate(i); params.argType = i.data.values[0]; return this._finalizeSave(i, user, flowId, meta, params, mode); } });
+    const blocks = [this.ui.cv2Text(this.t('fb_arg_type_header', { ...ctx, n: argNum })), this.ui.cv2Divider(), this.ui.row(argTypeSel)];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
@@ -1651,15 +1750,15 @@ class FlowBuilder {
 
   /* ─── validação de IDs ─── */
 
-  async _validateIds(guildId, params) {
+  async _validateIds(guildId, params, ctx = {}) {
     const warnings = [];
 
     if (params.channelId) {
       const rawId = params.channelId.replace(/[<#>]/g, '').trim();
       try {
         const ch = await DiscordRequest(`/channels/${rawId}`);
-        if (!ch || ch.guild_id !== guildId) warnings.push(`⚠️ Canal \`${rawId}\` não pertence a este servidor.`);
-      } catch { warnings.push(`⚠️ Canal \`${rawId}\` não encontrado.`); }
+        if (!ch || ch.guild_id !== guildId) warnings.push(this.t('fb_warn_channel_wrong_guild', { ...ctx, id: rawId }));
+      } catch { warnings.push(this.t('fb_warn_channel_not_found', { ...ctx, id: rawId })); }
     }
 
     if (params.roleId) {
@@ -1667,15 +1766,15 @@ class FlowBuilder {
       try {
         const roles  = await DiscordRequest(`/guilds/${guildId}/roles`);
         const exists = roles?.some(r => r.id === rawId);
-        if (!exists) warnings.push(`⚠️ Cargo \`${rawId}\` não encontrado neste servidor.`);
-      } catch { warnings.push(`⚠️ Não foi possível verificar o cargo \`${rawId}\`.`); }
+        if (!exists) warnings.push(this.t('fb_warn_role_not_found', { ...ctx, id: rawId }));
+      } catch { warnings.push(this.t('fb_warn_role_check_failed', { ...ctx, id: rawId })); }
     }
 
     if (params.flowId) {
       try {
         const f = await this._getFlow(guildId, params.flowId);
-        if (!f) warnings.push(`⚠️ Fluxo \`${params.flowId}\` não encontrado.`);
-      } catch { warnings.push(`⚠️ Não foi possível verificar o fluxo \`${params.flowId}\`.`); }
+        if (!f) warnings.push(this.t('fb_warn_flow_not_found', { ...ctx, id: params.flowId }));
+      } catch { warnings.push(this.t('fb_warn_flow_check_failed', { ...ctx, id: params.flowId })); }
     }
 
     return warnings;
@@ -1688,21 +1787,22 @@ class FlowBuilder {
   async variablesMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
     const vars = flow?.variables || [];
+    const ctx  = this._tctx(interaction);
 
     const lines = vars.length
       ? vars.map(v =>
           `• **${v.name}** (\`${v.type}\`) = \`${v.defaultValue ?? 'null'}\`` +
           `${v.persistent ? ' 💾' : ''}` +
-          ` — ${v.scope === 'user' ? '👤 por usuário' : '🌐 do fluxo'}`
+          ` — ${v.scope === 'user' ? `👤 ${this.t('fb_var_scope_user_line', ctx)}` : `🌐 ${this.t('fb_var_scope_flow_line', ctx)}`}`
         ).join('\n')
-      : `_Nenhuma variável criada ${this._e('sonolenta')}_`;
+      : this.t('fb_var_no_vars', ctx);
 
-    const btnAdd = this.ui.btn(user, '➕ Criar Variável', 1, async (i) => {
+    const btnAdd = this.ui.btn(user, this.t('fb_var_btn_create', ctx), 1, async (i) => {
       await this.ui.deferUpdate(i);
       return this._varStep1_Scope(i, user, flowId);
     });
 
-    const btnRemove = this.ui.btn(user, '🗑️ Remover última', 4, async (i) => {
+    const btnRemove = this.ui.btn(user, this.t('fb_btn_remove_last', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       if (!vars.length) return;
       const updated = vars.slice(0, -1);
@@ -1710,36 +1810,29 @@ class FlowBuilder {
       return this.variablesMenu(i, user, flowId);
     });
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.flowMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 📦 Variáveis (${vars.length}) ${this._e('pensando')}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `**O que são variáveis?** São "caixinhas" que guardam informações durante o fluxo!\n` +
-        `Por exemplo: pontos, contador de mensagens, status de um usuário...\n` +
-        `Você as usa nas ações com \`{var:nome}\`.\n` +
-        `Variáveis 💾 são salvas mesmo depois do fluxo terminar!\n\n` +
-        `**Variáveis configuradas:**\n${lines}`
-      ),
+      this.ui.cv2Text(this.t('fb_var_header', { ...ctx, count: vars.length, successMsg, lines })),
       this.ui.cv2Divider(),
-      this.ui.row(btnAdd, btnRemove, btnBack, this._guideButton()),
+      this.ui.row(btnAdd, btnRemove, btnBack, this._guideButton(ctx)),
     ];
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
   async _varStep1_Scope(interaction, user, flowId) {
+    const ctx = this._tctx(interaction);
     const sel = this.ui.select(
       user,
       [
-        { label: '🌐 Variável do Fluxo (Flow)', value: 'flow', description: 'Funciona para TODOS os usuários ao mesmo tempo.' },
-        { label: '👤 Variável de Usuário (User)', value: 'user', description: 'Cada usuário tem o SEU valor.' }
+        { label: this.t('fb_var_scope_flow_option', ctx), value: 'flow', description: this.t('fb_var_scope_flow_desc', ctx) },
+        { label: this.t('fb_var_scope_user_option', ctx), value: 'user', description: this.t('fb_var_scope_user_desc', ctx) }
       ],
-      '🔍 Qual o escopo da variável?',
+      this.t('fb_var_scope_placeholder', ctx),
       async (i) => {
         await this.ui.deferUpdate(i);
         return this._varStep2_Type(i, user, flowId, i.data.values[0]);
@@ -1747,16 +1840,7 @@ class FlowBuilder {
     );
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 📦 Criar Variável — Passo 1 de 4 ${this._e('animada')}\n` +
-        `**Qual é o tipo de variável que você quer criar?**\n\n` +
-        `**🌐 Variável do Fluxo (Flow)**\n` +
-        `> Compartilhada entre todos os usuários. Use para coisas do servidor inteiro.\n` +
-        `> *Exemplo: "quantidade de entradas hoje", "status da live"*\n\n` +
-        `**👤 Variável de Usuário (User)**\n` +
-        `> Cada usuário tem o seu próprio valor separado.\n` +
-        `> *Exemplo: "pontos do usuário", "número de mensagens enviadas"*`
-      ),
+      this.ui.cv2Text(this.t('fb_var_step1_header', ctx)),
       this.ui.cv2Divider(),
       this.ui.row(sel),
     ];
@@ -1765,15 +1849,16 @@ class FlowBuilder {
   }
 
   async _varStep2_Type(interaction, user, flowId, scope) {
+    const ctx = this._tctx(interaction);
     const sel = this.ui.select(
       user,
       [
-        { label: '🔤 Texto (String)',  value: 'string',  description: 'Guarda palavras e frases. Ex: "ativo", "Olá Mundo"' },
-        { label: '🔢 Número (Number)', value: 'number',  description: 'Guarda números inteiros ou decimais. Ex: 0, 100, 3.14' },
-        { label: '✅ Verdadeiro/Falso (Boolean)', value: 'boolean', description: 'Guarda apenas "true" ou "false"' },
-        { label: '📋 Lista (List)',    value: 'list',    description: 'Guarda vários itens. Ex: ["Item1", "Item2"]' }
+        { label: this.t('fb_var_type_string', ctx),  value: 'string',  description: this.t('fb_var_type_string_desc', ctx) },
+        { label: this.t('fb_var_type_number', ctx), value: 'number',  description: this.t('fb_var_type_number_desc', ctx) },
+        { label: this.t('fb_var_type_boolean', ctx), value: 'boolean', description: this.t('fb_var_type_boolean_desc', ctx) },
+        { label: this.t('fb_var_type_list', ctx),    value: 'list',    description: this.t('fb_var_type_list_desc', ctx) }
       ],
-      '📦 Qual o tipo de valor?',
+      this.t('fb_var_type_placeholder', ctx),
       async (i) => {
         // NÃO dar deferUpdate — _varStep3_Name abre modal
         return this._varStep3_Name(i, user, flowId, scope, i.data.values[0]);
@@ -1781,14 +1866,7 @@ class FlowBuilder {
     );
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 📦 Criar Variável — Passo 2 de 4 ${this._e('emduvida')}\n` +
-        `**Qual o tipo de valor que sua variável vai guardar?**\n\n` +
-        `**🔤 Texto (String)**\n> Guarda qualquer texto. Valor padrão: \`""\` (vazio)\n\n` +
-        `**🔢 Número (Number)**\n> Guarda números. Valor padrão: \`0\`\n\n` +
-        `**✅ Verdadeiro/Falso (Boolean)**\n> Só pode ser \`true\` ou \`false\`. Valor padrão: \`false\`\n\n` +
-        `**📋 Lista (List)**\n> Guarda vários itens de uma vez. Valor padrão: \`[]\` (lista vazia)`
-      ),
+      this.ui.cv2Text(this.t('fb_var_step2_header', ctx)),
       this.ui.cv2Divider(),
       this.ui.row(sel),
     ];
@@ -1797,29 +1875,31 @@ class FlowBuilder {
   }
 
   async _varStep3_Name(interaction, user, flowId, scope, type) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: '📦 Criar Variável — Passo 3',
+      title: this.t('fb_var_step3_modal_title', ctx),
       components: [
-        this.ui.modalText('name', 'Nome da variável (sem espaços)', { required: true, maxLength: 50, placeholder: 'contador, pontos, status, xp_usuario...' }),
-        this.ui.modalYesNo('persistent', 'Salvar valor após o fluxo terminar?', {
-          yesLabel: '💾 Sim — mantém o valor entre execuções',
-          noLabel:  '🔄 Não — reseta a cada execução do fluxo',
+        this.ui.modalText('name', this.t('fb_var_name_label', ctx), { required: true, maxLength: 50, placeholder: this.t('fb_var_name_placeholder', ctx) }),
+        this.ui.modalYesNo('persistent', this.t('fb_var_persistent_label', ctx), {
+          yesLabel: this.t('fb_var_persistent_yes', ctx),
+          noLabel:  this.t('fb_var_persistent_no', ctx),
           defaultValue: 'false'
         }),
       ],
       funcao: async (modalInteraction, client, fields) => {
+        const miCtx = this._tctx(modalInteraction);
         const name = fields.name?.trim().replace(/\s+/g, '_');
         if (!name) {
           return DiscordRequest(`/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`, {
-            method: 'POST', body: { type: 4, data: { content: `❌ Nome inválido! ${this._e('brava')}`, flags: 64 } }
+            method: 'POST', body: { type: 4, data: { content: this.t('fb_var_invalid_name', miCtx), flags: 64 } }
           });
         }
 
         const flow = await this._getFlow(modalInteraction.guild_id, flowId);
         if ((flow.variables || []).find(v => v.name === name)) {
           return DiscordRequest(`/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`, {
-            method: 'POST', body: { type: 4, data: { content: `${this._e('emburrada')} Já existe uma variável chamada **${name}**!`, flags: 64 } }
+            method: 'POST', body: { type: 4, data: { content: this.t('fb_var_already_exists', { ...miCtx, name }), flags: 64 } }
           });
         }
 
@@ -1833,18 +1913,20 @@ class FlowBuilder {
   }
 
   async _varStep4_Default(interaction, user, flowId, varData) {
-    const defaultsByType = { string: '`""` (vazio)', number: '`0`', boolean: '`false`', list: '`[]` (vazia)' };
+    const ctx = this._tctx(interaction);
+    const defaultsByType = { string: this.t('fb_var_default_string_desc', ctx), number: this.t('fb_var_default_number_desc', ctx), boolean: this.t('fb_var_default_boolean_desc', ctx), list: this.t('fb_var_default_list_desc', ctx) };
+    const scopeLabel = varData.scope === 'user' ? `👤 ${this.t('fb_var_scope_user_line', ctx)}` : `🌐 ${this.t('fb_var_scope_flow_line', ctx)}`;
 
     if (varData.type === 'boolean') {
       const sel = this.ui.select(user, [
-        { label: '✅ true (verdadeiro)', value: 'true' },
-        { label: '❌ false (falso)',     value: 'false' },
-      ], '✅ Valor inicial', async (i) => {
+        { label: this.t('fb_var_bool_true', ctx), value: 'true' },
+        { label: this.t('fb_var_bool_false', ctx), value: 'false' },
+      ], this.t('fb_var_initial_value_placeholder', ctx), async (i) => {
         await this.ui.deferUpdate(i);
         return this._saveVariable(i, user, flowId, { ...varData, defaultValue: i.data.values[0] === 'true' });
       });
       const blocks = [
-        this.ui.cv2Text(`# 📦 Criar Variável — Passo 4 de 4 ${this._e('festa')}\n**Variável:** \`${varData.name}\` (${varData.scope === 'user' ? '👤 usuário' : '🌐 fluxo'})\n**Tipo:** ✅ Boolean\n\nQual o valor inicial?`),
+        this.ui.cv2Text(this.t('fb_var_step4_bool_header', { ...ctx, name: varData.name, scope: scopeLabel })),
         this.ui.cv2Divider(),
         this.ui.row(sel),
       ];
@@ -1853,9 +1935,9 @@ class FlowBuilder {
 
     if (varData.type === 'list') {
       const sel = this.ui.select(user, [
-        { label: '📋 Lista vazia', value: 'empty', description: 'Começa sem nenhum item' },
-        { label: '✏️ Definir itens iniciais', value: 'custom', description: 'Adicionar alguns itens já de início' },
-      ], '📦 Como a lista começa?', async (i) => {
+        { label: this.t('fb_var_list_empty_option', ctx), value: 'empty', description: this.t('fb_var_list_empty_desc', ctx) },
+        { label: this.t('fb_var_list_custom_option', ctx), value: 'custom', description: this.t('fb_var_list_custom_desc', ctx) },
+      ], this.t('fb_var_list_start_placeholder', ctx), async (i) => {
         const choice = i.data.values[0];
         if (choice === 'empty') {
           await this.ui.deferUpdate(i);
@@ -1864,12 +1946,7 @@ class FlowBuilder {
         return this._varListDefaultModal(i, user, flowId, varData);
       });
       const blocks = [
-        this.ui.cv2Text(
-          `# 📦 Criar Variável — Passo 4 de 4 ${this._e('festa')}\n` +
-          `**Quase lá! Variável:** \`${varData.name}\` (${varData.scope === 'user' ? '👤 usuário' : '🌐 fluxo'})\n` +
-          `**Tipo:** 📋 Lista\n\n**Como você quer que a lista comece?**\n\n` +
-          `*Lista vazia é a escolha mais comum — você adiciona itens depois com a ação "Adicionar à lista".*`
-        ),
+        this.ui.cv2Text(this.t('fb_var_step4_list_header', { ...ctx, name: varData.name, scope: scopeLabel })),
         this.ui.cv2Divider(),
         this.ui.row(sel),
       ];
@@ -1879,11 +1956,11 @@ class FlowBuilder {
     // string / number — usa modal
     const modal = this.client.interactions.createModal({
       user,
-      title: `📦 Valor Padrão — ${varData.name}`,
+      title: this.t('fb_var_default_value_modal_title', { ...ctx, name: varData.name }),
       components: [{ type: 1, components: [{
-        type: 4, custom_id: 'defaultValue', label: 'Valor padrão (deixe vazio = padrão do tipo)',
+        type: 4, custom_id: 'defaultValue', label: this.t('fb_var_default_value_label', ctx),
         style: 1, required: false, max_length: 200,
-        placeholder: varData.type === 'number' ? '0' : 'Meu texto padrão'
+        placeholder: varData.type === 'number' ? this.t('fb_var_default_number_placeholder', ctx) : this.t('fb_var_default_text_placeholder', ctx)
       }]}],
       funcao: async (modalInteraction, client, fields) => {
         let defaultValue = fields.defaultValue?.trim() || null;
@@ -1895,23 +1972,21 @@ class FlowBuilder {
       }
     });
 
-    const defaultLabel = varData.type === 'number' ? '0' : 'vazio';
+    const defaultLabel = varData.type === 'number' ? '0' : this.t('fb_var_default_empty_label', ctx);
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 📦 Criar Variável — Passo 4 de 4 ${this._e('festa')}\n` +
-        `**Quase lá! Resumo da variável:**\n` +
-        `> 📛 **Nome:** \`${varData.name}\`\n` +
-        `> 🏷️ **Escopo:** ${varData.scope === 'user' ? '👤 por usuário' : '🌐 do fluxo'}\n` +
-        `> 📦 **Tipo:** ${varData.type}\n` +
-        `> 💾 **Persistente:** ${varData.persistent ? 'Sim' : 'Não'}\n\n` +
-        `**Valor padrão automático:** ${defaultsByType[varData.type]}\n` +
-        `*Clique para personalizar o valor inicial ou use o padrão!*`
-      ),
+      this.ui.cv2Text(this.t('fb_var_step4_summary_header', {
+        ...ctx,
+        name: varData.name,
+        scope: scopeLabel,
+        type: varData.type,
+        persistent: varData.persistent ? this.t('fb_var_yes', ctx) : this.t('fb_var_no', ctx),
+        defaultDesc: defaultsByType[varData.type],
+      })),
       this.ui.cv2Divider(),
       this.ui.row(
-        this.ui.btn(user, '✏️ Definir valor personalizado', 1, async (i) => this.client.interactions.showModal(i, modal)),
-        this.ui.btn(user, `✅ Usar padrão (${defaultLabel})`, 2, async (i) => {
+        this.ui.btn(user, this.t('fb_var_btn_custom_value', ctx), 1, async (i) => this.client.interactions.showModal(i, modal)),
+        this.ui.btn(user, this.t('fb_var_btn_use_default', { ...ctx, defaultLabel }), 2, async (i) => {
           await this.ui.deferUpdate(i);
           const defaultValue = varData.type === 'number' ? 0 : '';
           return this._saveVariable(i, user, flowId, { ...varData, defaultValue });
@@ -1923,13 +1998,14 @@ class FlowBuilder {
   }
 
   async _varListDefaultModal(interaction, user, flowId, varData) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: `📋 Itens Iniciais — ${varData.name}`,
+      title: this.t('fb_var_list_items_modal_title', { ...ctx, name: varData.name }),
       components: [{ type: 1, components: [{
-        type: 4, custom_id: 'items', label: 'Itens separados por vírgula',
+        type: 4, custom_id: 'items', label: this.t('fb_var_list_items_label', ctx),
         style: 2, required: true, max_length: 1000,
-        placeholder: 'Item 1, Item 2, Item 3\n\nCada item separado por vírgula!'
+        placeholder: this.t('fb_var_list_items_placeholder', ctx)
       }]}],
       funcao: async (modalInteraction, client, fields) => {
         const raw  = fields.items || '';
@@ -1944,10 +2020,11 @@ class FlowBuilder {
   async _saveVariable(interaction, user, flowId, varData) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
     const vars = flow.variables || [];
+    const ctx  = this._tctx(interaction);
 
     if (vars.find(v => v.name === varData.name)) {
       return this.variablesMenu(interaction, user, flowId, {
-        successMsg: `${this._e('emburrada')} Já existe uma variável chamada **${varData.name}**!`
+        successMsg: this.t('fb_var_already_exists', { ...ctx, name: varData.name })
       });
     }
 
@@ -1955,12 +2032,11 @@ class FlowBuilder {
     vars.push({ name, type, defaultValue, persistent, scope });
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { variables: vars });
 
-    const defLabel = Array.isArray(defaultValue) ? `[${defaultValue.join(', ') || 'vazio'}]` : String(defaultValue ?? 'null');
+    const defLabel = Array.isArray(defaultValue) ? `[${defaultValue.join(', ') || this.t('fb_var_default_empty_paren', ctx)}]` : String(defaultValue ?? 'null');
+    const scopeLabel = scope === 'user' ? `👤 ${this.t('fb_var_scope_user_line', ctx)}` : `🌐 ${this.t('fb_var_scope_flow_line', ctx)}`;
 
     return this.variablesMenu(interaction, user, flowId, {
-      successMsg:
-        `${this._e('festa')} **Variável \`${name}\` criada!** Use com \`{var:${name}}\` nas ações.\n` +
-        `Escopo: ${scope === 'user' ? '👤 por usuário' : '🌐 do fluxo'} • Tipo: ${type} • Valor inicial: \`${defLabel}\``
+      successMsg: this.t('fb_var_created_success', { ...ctx, name, scope: scopeLabel, type, defLabel })
     });
   }
 
@@ -1971,11 +2047,12 @@ class FlowBuilder {
 
   async settingsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
+    const ctx  = this._tctx(interaction);
 
-    const btnCooldown = this.ui.btn(user, '⏱️ Cooldown', 2, i => this._setCooldown(i, user, flowId));
+    const btnCooldown = this.ui.btn(user, this.t('fb_settings_btn_cooldown', ctx), 2, i => this._setCooldown(i, user, flowId));
     const btnMode = this.ui.btn(
       user,
-      flow.executionMode === 'parallel' ? '🔀 Modo: Paralelo' : '➡️ Modo: Sequencial',
+      flow.executionMode === 'parallel' ? this.t('fb_settings_mode_parallel', ctx) : this.t('fb_settings_mode_sequential', ctx),
       2,
       async (i) => {
         await this.ui.deferUpdate(i);
@@ -1984,29 +2061,33 @@ class FlowBuilder {
         return this.settingsMenu(i, user, flowId);
       }
     );
-    const btnRename = this.ui.btn(user, '✏️ Renomear', 2, i => this._rename(i, user, flowId));
-    const btnLogs = this.ui.btn(user, '📊 Ver logs', 2, async (i) => {
+    const btnRename = this.ui.btn(user, this.t('fb_settings_btn_rename', ctx), 2, i => this._rename(i, user, flowId));
+    const btnLogs = this.ui.btn(user, this.t('fb_settings_btn_logs', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this._showLogs(i, user, flowId);
     });
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.flowMenu(i, user, flowId);
     });
 
+    const executionModeLabel = flow.executionMode === 'parallel' ? this.t('fb_settings_mode_parallel_desc', ctx) : this.t('fb_settings_mode_sequential_desc', ctx);
+    const cooldownLabel = flow.cooldown > 0 ? this.t('fb_settings_cooldown_per_user', { ...ctx, duration: formatDuration(flow.cooldown, ctx.system?.locale) }) : this.t('fb_settings_no_cooldown', ctx);
+
     const blocks = [
-      this.ui.cv2Text(
-        `# ⚙️ Configurações do Fluxo ${this._e('sria')}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `**Nome:** ${flow.name}\n` +
-        `**Descrição:** ${flow.description || '_Sem descrição_'}\n` +
-        `**Modo de execução:** ${flow.executionMode === 'parallel' ? '🔀 Paralelo (ações ao mesmo tempo)' : '➡️ Sequencial (ações em ordem)'}\n` +
-        `**Cooldown:** ${flow.cooldown > 0 ? `${formatDuration(flow.cooldown)} por usuário` : 'Nenhum'}\n` +
-        `**Criado por:** ${flow.createdBy ? `<@${flow.createdBy}>` : 'N/A'}`
-      ),
+      this.ui.cv2Text(this.t('fb_settings_header', {
+        ...ctx,
+        sria: this._e('sria'),
+        successMsg,
+        name: flow.name,
+        description: flow.description || this.t('no_description_italic', ctx),
+        executionModeLabel,
+        cooldown: cooldownLabel,
+        createdBy: flow.createdBy ? `<@${flow.createdBy}>` : this.t('fb_settings_na', ctx),
+      })),
       this.ui.cv2Divider(),
       this.ui.row(btnCooldown, btnMode, btnRename),
-      this.ui.row(btnLogs, btnBack, this._guideButton()),
+      this.ui.row(btnLogs, btnBack, this._guideButton(ctx)),
     ];
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.dark }));
@@ -2014,26 +2095,28 @@ class FlowBuilder {
 
   async _setCooldown(interaction, user, flowId) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
-    const current = flow?.cooldown > 0 ? formatDuration(flow.cooldown) : '';
+    const ctx  = this._tctx(interaction);
+    const current = flow?.cooldown > 0 ? formatDuration(flow.cooldown, ctx.system?.locale) : '';
 
     const modal = this.client.interactions.createModal({
       user,
-      title: '⏱️ Definir Cooldown',
+      title: this.t('fb_cooldown_modal_title', ctx),
       components: [
-        this.ui.modalText('duration', 'Cooldown (ex: 24h, 22h 10m, 1d 5h, 0)', {
+        this.ui.modalText('duration', this.t('fb_cooldown_field_label', ctx), {
           required: true, maxLength: 30,
-          placeholder: 'Ex: 24h • 22h 10m • 1d 5h 30m • 90m • 0 (sem cooldown)',
+          placeholder: this.t('fb_cooldown_placeholder', ctx),
           value: current
         })
       ],
       funcao: async (modalInteraction, client, fields) => {
+        const miCtx = this._tctx(modalInteraction);
         const raw = fields.duration?.trim() || '0';
         const ms  = raw === '0' ? 0 : parseDuration(raw);
 
         if (raw !== '0' && ms === 0) {
           return DiscordRequest(`/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`, {
             method: 'POST', body: { type: 4, data: {
-              content: `❌ Não entendi essa duração! ${this._e('emduvida')}\nUse algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\` para remover o cooldown.`,
+              content: this.t('fb_cooldown_invalid', miCtx),
               flags: 64
             }}
           });
@@ -2044,8 +2127,8 @@ class FlowBuilder {
 
         return this.settingsMenu(modalInteraction, user, flowId, {
           successMsg: ms > 0
-            ? `${this._e('feliz')} Cooldown definido: **${formatDuration(ms)}** por usuário.`
-            : `${this._e('feliz')} Cooldown removido.`
+            ? this.t('fb_cooldown_set_success', { ...miCtx, duration: formatDuration(ms, miCtx.system?.locale) })
+            : this.t('fb_cooldown_removed_success', miCtx)
         });
       }
     });
@@ -2054,12 +2137,13 @@ class FlowBuilder {
   }
 
   async _rename(interaction, user, flowId) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: '✏️ Renomear Fluxo',
+      title: this.t('fb_rename_modal_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'name',        label: 'Novo nome',      style: 1, required: true,  max_length: 100 }] },
-        { type: 1, components: [{ type: 4, custom_id: 'description', label: 'Nova descrição', style: 2, required: false, max_length: 300 }] }
+        { type: 1, components: [{ type: 4, custom_id: 'name',        label: this.t('fb_rename_name_label', ctx),      style: 1, required: true,  max_length: 100 }] },
+        { type: 1, components: [{ type: 4, custom_id: 'description', label: this.t('fb_rename_desc_label', ctx), style: 2, required: false, max_length: 300 }] }
       ],
       funcao: async (modalInteraction, client, fields) => {
         const updates = {};
@@ -2079,22 +2163,23 @@ class FlowBuilder {
   async _showLogs(interaction, user, flowId) {
     const { FlowRunLogModel } = require('../../logic-builder/schema/flow.schema.js');
     const logs = await FlowRunLogModel.find({ flowId }).sort({ runAt: -1 }).limit(10).lean();
+    const ctx  = this._tctx(interaction);
 
     const lines = logs.length
       ? logs.map(l => {
           const icon = l.result === 'success' ? '✅' : l.result === 'failed' ? '❌' : '⚠️';
-          const ts   = new Date(l.runAt).toLocaleString('pt-BR');
+          const ts   = new Date(l.runAt).toLocaleString(ctx.system?.locale || 'pt-BR');
           return `${icon} \`${ts}\` — ${l.duration}ms${l.error ? `\n  > ${l.error.slice(0, 80)}` : ''}`;
         }).join('\n')
-      : `_Nenhuma execução registrada ainda ${this._e('sonolenta')}_`;
+      : this.t('fb_logs_no_runs', ctx);
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.settingsMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.ui.cv2Text(`# 📊 Últimas Execuções ${this._e('emduvida')}\n${lines}\n\n*Logs são mantidos por 7 dias*`),
+      this.ui.cv2Text(this.t('fb_logs_header', { ...ctx, lines })),
       this.ui.cv2Divider(),
       this.ui.row(btnBack),
     ];
@@ -2114,40 +2199,12 @@ class FlowBuilder {
     return randomUUID().replace(/-/g, '').slice(0, 24);
   }
 
-  _paramLabel(p) {
-    const labels = {
-      content: 'Conteúdo da mensagem', channelId: 'ID do canal', roleId: 'ID do cargo',
-      reason: 'Motivo', duration: 'Duração (ex: 1h, 30m, 1d)', name: 'Nome', value: 'Valor',
-      min: 'Valor mínimo', max: 'Valor máximo', saveAs: 'Salvar resultado em (variável)',
-      seconds: 'Segundos', minutes: 'Minutos', emoji: 'Emoji', url: 'URL', method: 'Método HTTP',
-      flowId: 'ID do fluxo', eventType: 'Tipo do evento', nickname: 'Novo nickname',
-      ephemeral: 'Visível só para o usuário?', messageId: 'ID da mensagem',
-      targetUserId: 'ID/menção do usuário alvo', timeout: 'Tempo limite (segundos)',
-      cancelMessage: 'Mensagem se cancelar/expirar', baseValue: 'Valor base',
-      progressionBase: 'Base de progressão', currentValue: 'Variável de progresso atual',
-      removeComponents: 'Remover componentes?', varName: 'Nome da variável de ranking',
-      title: 'Título do ranking', errorMsg: 'Mensagem de erro (opcional)',
-      hour: 'Hora (0-23)', minute: 'Minuto (0-59)', percent: 'Chance (0-100)',
-      length: 'Tamanho (número de caracteres)', pattern: 'Padrão regex', text: 'Texto',
-      date: 'Data (AAAA-MM-DD)', from: 'De', to: 'Até', time: 'Horário (HH:MM)', days: 'Dias',
-    };
-    return labels[p] || p;
+  _paramLabel(p, ctx = {}) {
+    return this.t(`param_${p}_label`, ctx) || p;
   }
 
-  _paramPlaceholder(p) {
-    const placeholders = {
-      content: 'Olá {user}, bem-vindo(a)!', channelId: '123456789012345678 ou #canal',
-      roleId: '123456789012345678 ou @cargo', reason: 'Motivo da ação...', duration: 'Ex: 1h, 30m, 1d',
-      name: 'nome_da_variavel', value: '1 ou {arg0}', min: '0', max: '100',
-      saveAs: 'resultado', seconds: '5', minutes: '5', emoji: '⭐ ou nome:id',
-      url: 'https://...', method: 'GET, POST, PUT...', flowId: 'ID do fluxo a executar',
-      eventType: 'nome_do_evento', nickname: 'Novo Nick', messageId: 'ID da mensagem',
-      timeout: '60', baseValue: '10', progressionBase: '1.5', currentValue: 'nivel_atual',
-      varName: 'pontos', title: '🏆 Ranking de Pontos', errorMsg: 'Uso incorreto! Use: !comando <arg>',
-      hour: '14', minute: '30', percent: '50', length: '100', pattern: '^[a-z]+$',
-      text: 'palavra-chave', date: '2026-12-31', time: '14:30',
-    };
-    return placeholders[p] || '';
+  _paramPlaceholder(p, ctx = {}) {
+    return this.t(`param_${p}_placeholder`, ctx) || '';
   }
 }
 

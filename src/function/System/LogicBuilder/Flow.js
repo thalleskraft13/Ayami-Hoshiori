@@ -2,6 +2,7 @@
 
 const { randomUUID } = require('crypto');
 const DiscordRequest  = require('../../DiscordRequest.js');
+const { localeCtx }   = require('../../Utils/ctxLocale.js');
 const FlowBuilder     = require('./FlowBuilder.js');
 const CommandBuilder  = require('./CommandBuilder.js');
 
@@ -40,9 +41,31 @@ class FlowUI {
     return this.client?.emoji?.[name] ?? '';
   }
 
+  /** Atalho pra tradução de uma chave do sistema "logicbuilder". */
+  t(key, ctx, extra = {}) {
+    return this.client.t(`logicbuilder.${key}`, { ...ctx, ...extra });
+  }
+
+  /** Contexto de locale + atalhos de emoji, a partir da interação. */
+  _tctx(interaction, extra = {}) {
+    return localeCtx(interaction, {
+      ayami:     this._e('ayami'),
+      corao:     this._e('corao'),
+      feliz:     this._e('feliz'),
+      emburrada: this._e('emburrada'),
+      pensando:  this._e('pensando'),
+      assustada: this._e('assustada'),
+      brava:     this._e('brava'),
+      chorando:  this._e('chorando'),
+      curtida:   this._e('curtida'),
+      festa:     this._e('festa'),
+      ...extra,
+    });
+  }
+
   /* ── botão de link para o guia (estilo 5 = link) ── */
-  _guideButton() {
-    return { type: 2, style: 5, label: '📖 Guia', url: GUIDE_URL };
+  _guideButton(ctx = {}) {
+    return { type: 2, style: 5, label: this.t('guide_button', ctx), url: GUIDE_URL };
   }
 
   /* ═══════════════════════════════════════════
@@ -202,7 +225,10 @@ async editMessageById(channelId, messageId, data) {
     };
   }
 
-  /* ── Modal helpers (type 18) ── */
+  /* ── Modal helpers (type 18) ──
+     Sem acesso à interação aqui (usados por FlowBuilder/CommandBuilder
+     em dezenas de call sites); os defaults abaixo usam o idioma padrão
+     do sistema quando o chamador não define um label customizado. */
 
   modalSelect(customId, label, options, opts = {}) {
     return {
@@ -212,7 +238,7 @@ async editMessageById(channelId, messageId, data) {
       component: {
         type:        3,
         custom_id:   customId,
-        placeholder: opts.placeholder || 'Escolha uma opção…',
+        placeholder: opts.placeholder || this.t('modal_choose_option', {}),
         min_values:  opts.required === false ? 0 : 1,
         max_values:  1,
         options
@@ -222,9 +248,9 @@ async editMessageById(channelId, messageId, data) {
 
   modalYesNo(customId, label, opts = {}) {
     return this.modalSelect(customId, label, [
-      { label: opts.yesLabel || '✅ Sim', value: 'true',  default: opts.defaultValue === 'true' },
-      { label: opts.noLabel  || '❌ Não', value: 'false', default: opts.defaultValue === 'false' },
-    ], { placeholder: opts.placeholder || 'Sim ou não?' });
+      { label: opts.yesLabel || this.t('modal_yes', {}), value: 'true',  default: opts.defaultValue === 'true' },
+      { label: opts.noLabel  || this.t('modal_no', {}), value: 'false', default: opts.defaultValue === 'false' },
+    ], { placeholder: opts.placeholder || this.t('modal_yesno_placeholder', {}) });
   }
 
   modalText(customId, label, opts = {}) {
@@ -263,12 +289,12 @@ async editMessageById(channelId, messageId, data) {
     return list.slice(page * 25, page * 25 + 25);
   }
 
-  _paginationRow(user, page, maxPage, onPrev, onNext) {
-    const btnPrev = this.btn(user, '⬅️ Anterior', page === 0 ? 2 : 1, async (i) => {
+  _paginationRow(user, page, maxPage, onPrev, onNext, ctx = {}) {
+    const btnPrev = this.btn(user, this.t('btn_prev', ctx), page === 0 ? 2 : 1, async (i) => {
       await this.deferUpdate(i);
       return onPrev(i, page - 1);
     });
-    const btnNext = this.btn(user, '➡️ Próximo', page >= maxPage ? 2 : 1, async (i) => {
+    const btnNext = this.btn(user, this.t('btn_next', ctx), page >= maxPage ? 2 : 1, async (i) => {
       await this.deferUpdate(i);
       return onNext(i, page + 1);
     });
@@ -316,54 +342,43 @@ async editMessageById(channelId, messageId, data) {
     const { CustomCommandModel } = require('../../../Mongodb/flow.js');
     const cmdCount = await CustomCommandModel.countDocuments({ guildId });
 
-    return this.editOriginal(interaction, this._homePayload(user, flows, cmdCount));
+    return this.editOriginal(interaction, this._homePayload(interaction, user, flows, cmdCount));
   }
 
-  _homePayload(user, flows, cmdCount) {
+  _homePayload(interaction, user, flows, cmdCount) {
     const enabled  = flows.filter(f => f.enabled).length;
     const disabled = flows.length - enabled;
-    const ayami    = this._e('animada');
+    const ctx      = this._tctx(interaction);
 
-    const btnFlows = this.btn(user, `📋 Fluxos (${flows.length})`, 1, async (i) => {
+    const btnFlows = this.btn(user, this.t('btn_flows', { ...ctx, count: flows.length }), 1, async (i) => {
       await this.deferUpdate(i);
       return this.flowList(i, user, 0);
     });
 
-    const btnCmds = this.btn(user, `🔧 Comandos (${cmdCount})`, 2, async (i) => {
+    const btnCmds = this.btn(user, this.t('btn_commands', { ...ctx, count: cmdCount }), 2, async (i) => {
       await this.deferUpdate(i);
       return this.commandList(i, user, 0);
     });
 
-    const btnNew = this.btn(user, '✨ Novo Fluxo', 3, async (i) => {
+    const btnNew = this.btn(user, this.t('btn_new_flow', ctx), 3, async (i) => {
       return this.flowBuilder.startCreate(i, user);
     });
 
     /* ── Blocos Components V2 ── */
     const blocks = [
-      this.cv2Text(
-        `# ⚡ Logic Builder ${ayami}\n` +
-        `Oii! Eu sou a **Ayami** ${this._e('corao')} e vou te ajudar a criar automações incríveis!\n\n` +
-        `Com o **Logic Builder** você cria regras automáticas pro seu servidor — sem precisar saber programar!\n\n` +
-        `> 🎯 **Trigger** → o que começa tudo *(ex: alguém entra no servidor)*\n` +
-        `> 🔍 **Condições** → verificações opcionais *(ex: só se tiver o cargo X)*\n` +
-        `> ⚡ **Ações** → o que acontece *(ex: enviar mensagem, dar cargo)*`
-      ),
+      this.cv2Text(this.t('home_title', ctx)),
       this.cv2Divider(),
       this.cv2Section(
-        `## 📊 | Seus Fluxos
-        
-        Total: **${flows.length}** • ✅ Ativos: **${enabled}** • ⏸️ Pausados: **${disabled}**`,
+        this.t('flows_section', { ...ctx, total: flows.length, enabled, disabled }),
         btnFlows
       ),
       this.cv2Divider(),
       this.cv2Section(
-        `## 🔧 Comandos Personalizados
-        
-        Total: **${cmdCount}** comando${cmdCount !== 1 ? 's' : ''} personalizado${cmdCount !== 1 ? 's' : ''}`,
+        this.t('commands_section', { ...ctx, count: cmdCount }),
         btnCmds
       ),
       this.cv2Divider(),
-      this.row(btnNew, this._guideButton()),
+      this.row(btnNew, this._guideButton(ctx)),
       this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
 
     ];
@@ -386,24 +401,22 @@ async editMessageById(channelId, messageId, data) {
       this._setCache(guildId, 'flows', flows);
     }
 
-    const btnCreate = this.btn(user, '✨ Novo Fluxo', 3, async (i) => {
+    const ctx = this._tctx(interaction);
+
+    const btnCreate = this.btn(user, this.t('btn_new_flow', ctx), 3, async (i) => {
       return this.flowBuilder.startCreate(i, user);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.open(i);
     });
 
     if (!flows.length) {
       const blocks = [
-        this.cv2Text(
-          `# 📋 Fluxos ${this._e('emburrada')}\n` +
-          `Ainda não tem nenhum fluxo criado...\n\n` +
-          `${this._e('feliz')} Clica em **✨ Novo Fluxo** para criar o primeiro! É fácil, eu prometo!`
-        ),
+        this.cv2Text(this.t('no_flows_title', ctx)),
         this.cv2Divider(),
-        this.row(btnCreate, btnBack, this._guideButton()),
+        this.row(btnCreate, btnBack, this._guideButton(ctx)),
         this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
       ];
       return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
@@ -412,28 +425,26 @@ async editMessageById(channelId, messageId, data) {
     const { page: safePage, maxPage } = this._clampPage(page, flows.length);
     const pageItems = this._pageSlice(flows, safePage);
 
+    const statusLabel = (enabled) => enabled ? this.t('flow_status_active', ctx) : this.t('flow_status_disabled', ctx);
+
     const options = pageItems.map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
-      description: `${this._triggerLabel(f.trigger)} • ${f.enabled ? '🟢 Ativo' : '🔴 Desativado'}`,
+      description: `${this._triggerLabel(f.trigger, ctx)} • ${statusLabel(f.enabled)}`,
       emoji:       { name: f.enabled ? '🟢' : '🔴' }
     }));
 
-    const sel = this.select(user, options, '🔍 Selecionar fluxo...', async (i) => {
+    const sel = this.select(user, options, this.t('select_flow_placeholder', ctx), async (i) => {
       await this.deferUpdate(i);
       return this.flowMenu(i, user, i.data.values[0]);
     });
 
     const listText = pageItems
-      .map(f => `${f.enabled ? '🟢' : '🔴'} **${f.name}** \`(${this._triggerLabel(f.trigger)})\``)
+      .map(f => `${f.enabled ? '🟢' : '🔴'} **${f.name}** \`(${this._triggerLabel(f.trigger, ctx)})\``)
       .join('\n');
 
     const blocks = [
-      this.cv2Text(
-        `# 📋 Seus Fluxos (${flows.length}) ${this._e('pensando')}\n` +
-        `Selecione um fluxo abaixo para configurar ou gerenciar!\n` +
-        `*(Página ${safePage + 1}/${maxPage + 1})*\n\n${listText}`
-      ),
+      this.cv2Text(this.t('flows_list_title', { ...ctx, count: flows.length, page: safePage + 1, maxPage: maxPage + 1, list: listText })),
       this.cv2Divider(),
       this.row(sel),
       this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
@@ -444,13 +455,14 @@ async editMessageById(channelId, messageId, data) {
         this._paginationRow(
           user, safePage, maxPage,
           (i, p) => this.flowList(i, user, p),
-          (i, p) => this.flowList(i, user, p)
+          (i, p) => this.flowList(i, user, p),
+          ctx
         )
       );
     }
 
     blocks.push(this.cv2Divider());
-    blocks.push(this.row(btnCreate, btnBack, this._guideButton()));
+    blocks.push(this.row(btnCreate, btnBack, this._guideButton(ctx)));
 
     return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
@@ -463,6 +475,7 @@ async editMessageById(channelId, messageId, data) {
     const guildId = interaction.guild_id;
     const { FlowModel } = require('../../../Mongodb/flow.js');
     const flow = await FlowModel.findOne({ flowId, guildId }).lean();
+    const ctx  = this._tctx(interaction);
 
     if (!flow) {
       return this.followUpEphemeral(interaction, this.cv2Payload([
@@ -470,41 +483,41 @@ async editMessageById(channelId, messageId, data) {
       ]));
     }
 
-    const status       = flow.enabled ? '🟢 Ativo' : '🔴 Pausado';
-    const triggerLabel = this._triggerLabel(flow.trigger);
+    const status       = flow.enabled ? this.t('flow_status_active', ctx) : this.t('flow_status_paused', ctx);
+    const triggerLabel = this._triggerLabel(flow.trigger, ctx);
     const runs         = flow.stats?.totalRuns   || 0;
     const ok           = flow.stats?.successRuns || 0;
     const fail         = flow.stats?.failedRuns  || 0;
     const ayami        = this._e(flow.enabled ? 'feliz' : 'sonolenta');
 
-    const btnTrigger = this.btn(user, '🎯 Trigger', 1, async (i) => {
+    const btnTrigger = this.btn(user, this.t('btn_trigger', ctx), 1, async (i) => {
       await this.deferUpdate(i);
       return this.flowBuilder.triggerMenu(i, user, flowId);
     });
 
-    const btnConditions = this.btn(user, `🔍 Condições (${flow.conditions?.length || 0})`, 2, async (i) => {
+    const btnConditions = this.btn(user, this.t('btn_conditions', { ...ctx, count: flow.conditions?.length || 0 }), 2, async (i) => {
       await this.deferUpdate(i);
       return this.flowBuilder.conditionsMenu(i, user, flowId);
     });
 
-    const btnActions = this.btn(user, `⚡ Ações (${flow.actions?.length || 0})`, 2, async (i) => {
+    const btnActions = this.btn(user, this.t('btn_actions', { ...ctx, count: flow.actions?.length || 0 }), 2, async (i) => {
       await this.deferUpdate(i);
       return this.flowBuilder.actionsMenu(i, user, flowId);
     });
 
-    const btnVars = this.btn(user, `📦 Variáveis (${flow.variables?.length || 0})`, 2, async (i) => {
+    const btnVars = this.btn(user, this.t('btn_vars', { ...ctx, count: flow.variables?.length || 0 }), 2, async (i) => {
       await this.deferUpdate(i);
       return this.flowBuilder.variablesMenu(i, user, flowId);
     });
 
-    const btnSettings = this.btn(user, '⚙️ Configurações', 2, async (i) => {
+    const btnSettings = this.btn(user, this.t('btn_settings', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.flowBuilder.settingsMenu(i, user, flowId);
     });
 
     const btnToggle = this.btn(
       user,
-      flow.enabled ? '⏸️ Pausar' : '▶️ Ativar',
+      flow.enabled ? this.t('btn_toggle_pause', ctx) : this.t('btn_toggle_activate', ctx),
       flow.enabled ? 4 : 3,
       async (i) => {
         await this.deferUpdate(i);
@@ -514,42 +527,38 @@ async editMessageById(channelId, messageId, data) {
       }
     );
 
-    const btnDelete = this.btn(user, '🗑️ Excluir', 4, async (i) => {
+    const btnDelete = this.btn(user, this.t('btn_delete_flow', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       return this._confirmDelete(i, user, flowId, flow.name);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.flowList(i, user, 0);
     });
 
-    const cooldownText = flow.cooldown > 0 ? `${flow.cooldown / 1000}s` : 'Sem cooldown';
+    const cooldownText = flow.cooldown > 0 ? `${flow.cooldown / 1000}s` : this.t('no_cooldown', ctx);
 
     const blocks = [
-      this.cv2Text(
-        `# ⚡ ${flow.name} ${ayami}\n` +
-        `${flow.description || '_Sem descrição_'}`
-      ),
+      this.cv2Text(this.t('flow_menu_header', { ...ctx, ayami, name: flow.name, description: flow.description || this.t('no_description_italic', ctx) })),
       this.cv2Divider(),
       this.cv2Section(
-        `**📌 Status:** ${status}  •  **🎯 Trigger:** ${triggerLabel}\n` +
-        `**⏱️ Cooldown:** ${cooldownText}`,
+        this.t('flow_status_line', { ...ctx, status, trigger: triggerLabel, cooldown: cooldownText }),
         btnTrigger
       ),
       this.cv2Divider(),
       this.cv2Section(
-        `**🔍 Condições:** ${flow.conditions?.length || 0}  •  **⚡ Ações:** ${flow.actions?.length || 0}`,
+        this.t('flow_conditions_actions_line', { ...ctx, conditions: flow.conditions?.length || 0, actions: flow.actions?.length || 0 }),
         btnConditions
       ),
       this.cv2Divider(),
       this.cv2Section(
-        `**📊 Execuções:** ✅ ${ok}  ❌ ${fail}  (Total: ${runs})`,
+        this.t('flow_executions_line', { ...ctx, ok, fail, total: runs }),
         btnActions
       ),
       this.cv2Divider(),
       this.row(btnVars, btnSettings),
-      this.row(btnToggle, btnDelete, btnBack, this._guideButton()),
+      this.row(btnToggle, btnDelete, btnBack, this._guideButton(ctx)),
     ];
 
     return this.editOriginal(interaction, this.cv2Payload(blocks, {
@@ -563,30 +572,25 @@ async editMessageById(channelId, messageId, data) {
      ═══════════════════════════════════════════ */
 
   async _confirmDelete(interaction, user, flowId, flowName) {
-    const ayami = this._e('assustada');
+    const ctx = this._tctx(interaction);
 
-    const btnConfirm = this.btn(user, '✅ Sim, excluir', 4, async (i) => {
+    const btnConfirm = this.btn(user, this.t('btn_confirm_delete', ctx), 4, async (i) => {
       await this.deferUpdate(i);
       await this.client.logicEngine.deleteFlow(flowId, i.guild_id);
       this.invalidateCache(i.guild_id);
       await this.followUpEphemeral(i, this.cv2Payload([
-        this.cv2Text(`${this._e('chorando')} Fluxo **${flowName}** excluído. Espero que não precise mais dele...`)
+        this.cv2Text(this.t('flow_deleted_success', { ...this._tctx(i), name: flowName }))
       ]));
       return this.flowList(i, user, 0);
     });
 
-    const btnCancel = this.btn(user, '❌ Cancelar', 2, async (i) => {
+    const btnCancel = this.btn(user, this.t('btn_cancel', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.flowMenu(i, user, flowId);
     });
 
     const blocks = [
-      this.cv2Text(
-        `# ⚠️ Excluir fluxo? ${ayami}\n` +
-        `Tem certeza que quer excluir o fluxo **${flowName}**?\n\n` +
-        `**Esta ação não pode ser desfeita!** ${this._e('brava')}\n` +
-        `Todas as configurações (trigger, condições, ações, variáveis) serão perdidas.`
-      ),
+      this.cv2Text(this.t('flow_delete_confirm_title', { ...ctx, name: flowName })),
       this.cv2Divider(),
       this.row(btnConfirm, btnCancel),
     ];
@@ -613,25 +617,23 @@ async editMessageById(channelId, messageId, data) {
       this._setCache(guildId, 'commands', commands);
     }
 
-    const btnCreate = this.btn(user, '✨ Novo Comando', 3, async (i) => {
+    const ctx = this._tctx(interaction);
+
+    const btnCreate = this.btn(user, this.t('btn_new_command', ctx), 3, async (i) => {
       await this.deferUpdate(i);
       return this.cmdBuilder.startCreate(i, user);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.deferUpdate(i);
       return this.open(i);
     });
 
     if (!commands.length) {
       const blocks = [
-        this.cv2Text(
-          `# 🔧 Comandos Personalizados ${this._e('emburrada')}\n` +
-          `Nenhum comando criado ainda!\n\n` +
-          `${this._e('feliz')} Clica em **✨ Novo Comando** para criar o primeiro!`
-        ),
+        this.cv2Text(this.t('no_commands_title', ctx)),
         this.cv2Divider(),
-        this.row(btnCreate, btnBack, this._guideButton()),
+        this.row(btnCreate, btnBack, this._guideButton(ctx)),
         this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
       ];
       return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
@@ -643,25 +645,21 @@ async editMessageById(channelId, messageId, data) {
     const options = pageItems.map(c => ({
       label:       `${c.prefix}${c.name}`.slice(0, 100),
       value:       c.commandId,
-      description: c.description?.slice(0, 100) || 'Sem descrição',
+      description: c.description?.slice(0, 100) || this.t('no_description', ctx),
       emoji:       { name: c.enabled ? '🟢' : '🔴' }
     }));
 
-    const sel = this.select(user, options, '🔍 Selecionar comando...', async (i) => {
+    const sel = this.select(user, options, this.t('select_command_placeholder', ctx), async (i) => {
       await this.deferUpdate(i);
       return this.cmdBuilder.commandMenu(i, user, i.data.values[0]);
     });
 
     const listText = pageItems
-      .map(c => `${c.enabled ? '🟢' : '🔴'} **${c.prefix}${c.name}** \`${c.description?.slice(0, 50) || '_sem descrição_'}\``)
+      .map(c => `${c.enabled ? '🟢' : '🔴'} **${c.prefix}${c.name}** \`${c.description?.slice(0, 50) || this.t('no_description_lower_italic', ctx)}\``)
       .join('\n');
 
     const blocks = [
-      this.cv2Text(
-        `# 🔧 Comandos (${commands.length}) ${this._e('pensando')}\n` +
-        `Selecione um comando abaixo para gerenciar!\n` +
-        `*(Página ${safePage + 1}/${maxPage + 1})*\n\n${listText}`
-      ),
+      this.cv2Text(this.t('commands_list_title', { ...ctx, count: commands.length, page: safePage + 1, maxPage: maxPage + 1, list: listText })),
       this.cv2Divider(),
       this.row(sel),
       this.cv2Gallery('https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281'),
@@ -672,13 +670,14 @@ async editMessageById(channelId, messageId, data) {
         this._paginationRow(
           user, safePage, maxPage,
           (i, p) => this.commandList(i, user, p),
-          (i, p) => this.commandList(i, user, p)
+          (i, p) => this.commandList(i, user, p),
+          ctx
         )
       );
     }
 
     blocks.push(this.cv2Divider());
-    blocks.push(this.row(btnCreate, btnBack, this._guideButton()));
+    blocks.push(this.row(btnCreate, btnBack, this._guideButton(ctx)));
 
     return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
@@ -687,42 +686,42 @@ async editMessageById(channelId, messageId, data) {
      HELPERS
      ═══════════════════════════════════════════ */
 
-  _triggerLabel(trigger) {
-    if (!trigger) return 'Não configurado';
+  _triggerLabel(trigger, ctx = {}) {
+    if (!trigger) return this.t('trigger_not_configured', ctx);
     const labels = {
-      'message:message_created':          '💬 Mensagem criada',
-      'message:message_edited':           '✏️ Mensagem editada',
-      'message:message_deleted':          '🗑️ Mensagem apagada',
-      'message:message_contains_text':    '🔍 Mensagem com texto',
-      'message:message_contains_link':    '🔗 Mensagem com link',
-      'message:message_contains_image':   '🖼️ Mensagem com imagem',
-      'message:message_contains_file':    '📎 Mensagem com arquivo',
-      'message:message_contains_mention': '📣 Mensagem com menção',
-      'message:message_contains_emoji':   '😀 Mensagem com emoji',
-      'message:message_contains_sticker': '🎭 Mensagem com sticker',
-      'member:member_joined':             '👋 Membro entrou',
-      'member:member_left':               '🚪 Membro saiu',
-      'member:member_banned':             '🔨 Membro banido',
-      'member:member_unbanned':           '✅ Membro desbanido',
-      'member:member_nick_changed':       '📝 Nick alterado',
-      'reaction:reaction_added':          '➕ Reação adicionada',
-      'reaction:reaction_removed':        '➖ Reação removida',
-      'voice:voice_joined':               '🔊 Entrou em call',
-      'voice:voice_left':                 '🔇 Saiu da call',
-      'voice:voice_moved':                '🔀 Mudou de call',
-      'voice:camera_on':                  '📷 Câmera ligada',
-      'voice:camera_off':                 '📷 Câmera desligada',
-      'voice:screen_share_start':         '🖥️ Compartilhando tela',
-      'voice:screen_share_stop':          '🖥️ Parou de compartilhar',
-      'component:button_clicked':         '🖱️ Botão clicado',
-      'component:select_used':            '📋 Select usado',
-      'component:modal_submitted':        '📝 Modal enviado',
-      'channel:channel_created':          '📁 Canal criado',
-      'channel:channel_deleted':          '❌ Canal apagado',
-      'channel:channel_updated':          '🔧 Canal atualizado',
-      'internal:custom_event':            '⚡ Evento customizado',
-      'time:scheduled_trigger':           '🕐 Horário agendado',
-      'command:command_executed':         '🔧 Comando executado'
+      'message:message_created':          this.t('trigger_message_created', ctx),
+      'message:message_edited':           this.t('trigger_message_edited', ctx),
+      'message:message_deleted':          this.t('trigger_message_deleted', ctx),
+      'message:message_contains_text':    this.t('trigger_message_contains_text', ctx),
+      'message:message_contains_link':    this.t('trigger_message_contains_link', ctx),
+      'message:message_contains_image':   this.t('trigger_message_contains_image', ctx),
+      'message:message_contains_file':    this.t('trigger_message_contains_file', ctx),
+      'message:message_contains_mention': this.t('trigger_message_contains_mention', ctx),
+      'message:message_contains_emoji':   this.t('trigger_message_contains_emoji', ctx),
+      'message:message_contains_sticker': this.t('trigger_message_contains_sticker', ctx),
+      'member:member_joined':             this.t('trigger_member_joined', ctx),
+      'member:member_left':               this.t('trigger_member_left', ctx),
+      'member:member_banned':             this.t('trigger_member_banned', ctx),
+      'member:member_unbanned':           this.t('trigger_member_unbanned', ctx),
+      'member:member_nick_changed':       this.t('trigger_member_nick_changed', ctx),
+      'reaction:reaction_added':          this.t('trigger_reaction_added', ctx),
+      'reaction:reaction_removed':        this.t('trigger_reaction_removed', ctx),
+      'voice:voice_joined':               this.t('trigger_voice_joined', ctx),
+      'voice:voice_left':                 this.t('trigger_voice_left', ctx),
+      'voice:voice_moved':                this.t('trigger_voice_moved', ctx),
+      'voice:camera_on':                  this.t('trigger_camera_on', ctx),
+      'voice:camera_off':                 this.t('trigger_camera_off', ctx),
+      'voice:screen_share_start':         this.t('trigger_screen_share_start', ctx),
+      'voice:screen_share_stop':          this.t('trigger_screen_share_stop', ctx),
+      'component:button_clicked':         this.t('trigger_button_clicked', ctx),
+      'component:select_used':            this.t('trigger_select_used', ctx),
+      'component:modal_submitted':        this.t('trigger_modal_submitted', ctx),
+      'channel:channel_created':          this.t('trigger_channel_created', ctx),
+      'channel:channel_deleted':          this.t('trigger_channel_deleted', ctx),
+      'channel:channel_updated':          this.t('trigger_channel_updated', ctx),
+      'internal:custom_event':            this.t('trigger_custom_event', ctx),
+      'time:scheduled_trigger':           this.t('trigger_scheduled_trigger', ctx),
+      'command:command_executed':         this.t('trigger_command_executed', ctx)
     };
     return labels[`${trigger.category}:${trigger.type}`] || `${trigger.category}/${trigger.type}`;
   }

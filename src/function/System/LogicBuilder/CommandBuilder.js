@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 const { CustomCommandModel, FlowModel } = require('../../../Mongodb/flow.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
@@ -31,6 +32,28 @@ class CommandBuilder {
     return this.client?.emoji?.[name] ?? '';
   }
 
+  /** Atalho pra tradução de uma chave do sistema "logicbuilder". */
+  t(key, ctx, extra = {}) {
+    return this.client.t(`logicbuilder.${key}`, { ...ctx, ...extra });
+  }
+
+  /** Contexto de locale + atalhos de emoji, a partir da interação. */
+  _tctx(interaction, extra = {}) {
+    return localeCtx(interaction, {
+      animada:   this._e('animada'),
+      pensando:  this._e('pensando'),
+      assustada: this._e('assustada'),
+      emburrada: this._e('emburrada'),
+      emduvida:  this._e('emduvida'),
+      festa:     this._e('festa'),
+      feliz:     this._e('feliz'),
+      curtida:   this._e('curtida'),
+      chorando:  this._e('chorando'),
+      brava:     this._e('brava'),
+      ...extra,
+    });
+  }
+
   /** Helper de payload CV2 não-ephemeral (mensagem original visível). */
   _cv2(blocks, opts = {}) {
     return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
@@ -41,6 +64,7 @@ class CommandBuilder {
      ═══════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
+    const ctx = this._tctx(interaction);
     // Primeiro precisa existir pelo menos um fluxo com trigger "Comando executado"
     const flows = await FlowModel.find({
       guildId:        interaction.guild_id,
@@ -50,7 +74,7 @@ class CommandBuilder {
 
     if (!flows.length) {
       return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
-        this.ui.cv2Text(`# ${this._e('emduvida')} Nenhum fluxo disponível\nCrie pelo menos um fluxo com trigger **🔧 Comando executado** antes de criar um comando personalizado.`)
+        this.ui.cv2Text(this.t('cb_no_flow_available_title', ctx))
       ]));
     }
 
@@ -58,27 +82,23 @@ class CommandBuilder {
     const options = flows.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
-      description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger)}`
+      description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger, ctx)}`
     }));
 
     // NÃO faz deferUpdate aqui — _createStep2 abre um modal em
     // seguida, e showModal precisa de uma interação ainda não
     // confirmada (deferUpdate antes causaria erro 40060).
-    const sel = this.ui.select(user, options, '🔗 Selecione o fluxo do comando', async (i) => {
+    const sel = this.ui.select(user, options, this.t('cb_flow_select_placeholder', ctx), async (i) => {
       return this._createStep2(i, user, i.data.values[0]);
     });
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.commandList(i, user);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 🔧 Novo Comando — Passo 1 de 2 ${this._e('animada')}\n` +
-        `${this._e('pensando')} Selecione o fluxo que será executado quando o comando for usado!\n\n` +
-        `*Só aparecem fluxos com trigger* **🔧 Comando executado**.`
-      ),
+      this.ui.cv2Text(this.t('cb_create_step1_title', ctx)),
       this.ui.cv2Divider(),
       this.ui.row(sel),
       this.ui.cv2Divider(),
@@ -89,20 +109,21 @@ class CommandBuilder {
   }
 
   async _createStep2(interaction, user, flowId) {
+    const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Novo Comando — Detalhes',
+      title: this.t('cb_modal_new_command_title', ctx),
       components: [
         {
           type: 1,
           components: [{
             type:        4,
             custom_id:   'name',
-            label:       'Nome do comando (sem prefixo)',
+            label:       this.t('cb_field_name_label', ctx),
             style:       1,
             required:    true,
             max_length:  30,
-            placeholder: 'daily, pescar, abrir, caçar...'
+            placeholder: this.t('cb_field_name_placeholder', ctx)
           }]
         },
         {
@@ -110,11 +131,11 @@ class CommandBuilder {
           components: [{
             type:        4,
             custom_id:   'aliases',
-            label:       'Aliases (separados por vírgula)',
+            label:       this.t('cb_field_aliases_label', ctx),
             style:       1,
             required:    false,
             max_length:  200,
-            placeholder: 'dy, dia, diario'
+            placeholder: this.t('cb_field_aliases_placeholder', ctx)
           }]
         },
         {
@@ -122,7 +143,7 @@ class CommandBuilder {
           components: [{
             type:        4,
             custom_id:   'prefix',
-            label:       'Prefixo (padrão: !)',
+            label:       this.t('cb_field_prefix_label', ctx),
             style:       1,
             required:    false,
             max_length:  5,
@@ -134,11 +155,11 @@ class CommandBuilder {
           components: [{
             type:        4,
             custom_id:   'cooldown',
-            label:       'Cooldown (ex: 24h, 22h 10m, 1d 5h, 0)',
+            label:       this.t('cb_field_cooldown_label', ctx),
             style:       1,
             required:    false,
             max_length:  30,
-            placeholder: 'Ex: 24h • 22h 10m • 90m • 0 (sem cooldown)'
+            placeholder: this.t('cb_field_cooldown_placeholder', ctx)
           }]
         },
         {
@@ -146,20 +167,21 @@ class CommandBuilder {
           components: [{
             type:        4,
             custom_id:   'description',
-            label:       'Descrição',
+            label:       this.t('cb_field_description_label', ctx),
             style:       2,
             required:    false,
             max_length:  200,
-            placeholder: 'Colete sua recompensa diária.'
+            placeholder: this.t('cb_field_description_placeholder', ctx)
           }]
         }
       ],
       funcao: async (modalInteraction, client, fields) => {
+        const miCtx = this._tctx(modalInteraction);
         const name = fields.name?.trim().toLowerCase().replace(/\s+/g, '_');
         if (!name) {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: `❌ Nome inválido! ${this._e('assustada')}`, flags: 64 } } }
+            { method: 'POST', body: { type: 4, data: { content: this.t('cb_invalid_name', miCtx), flags: 64 } } }
           );
         }
 
@@ -172,7 +194,7 @@ class CommandBuilder {
         if (existing) {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
-            { method: 'POST', body: { type: 4, data: { content: `${this._e('emburrada')} Comando **${name}** já existe.`, flags: 64 } } }
+            { method: 'POST', body: { type: 4, data: { content: this.t('cb_command_exists', { ...miCtx, name }), flags: 64 } } }
           );
         }
 
@@ -187,7 +209,7 @@ class CommandBuilder {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
             { method: 'POST', body: { type: 4, data: {
-              content: `${this._e('emduvida')} Não entendi essa duração de cooldown! Use algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\`.`,
+              content: this.t('cb_invalid_cooldown', miCtx),
               flags: 64
             } } }
           );
@@ -214,7 +236,7 @@ class CommandBuilder {
         );
 
         return this.commandMenu(modalInteraction, user, cmd.commandId, {
-          successMsg: `${this._e('festa')} Comando **${cmd.prefix}${name}** criado!`
+          successMsg: this.t('cb_command_created', { ...miCtx, prefix: cmd.prefix, name })
         });
       }
     });
@@ -229,19 +251,20 @@ class CommandBuilder {
   async commandMenu(interaction, user, commandId, { successMsg } = {}) {
     const guildId = interaction.guild_id;
     const cmd = await CustomCommandModel.findOne({ commandId, guildId }).lean();
+    const ctx = this._tctx(interaction);
 
     if (!cmd) {
       return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
-        this.ui.cv2Text(`❌ Comando não encontrado. ${this._e('assustada')}`)
+        this.ui.cv2Text(this.t('cb_not_found', ctx))
       ]));
     }
 
     const flow = await FlowModel.findOne({ flowId: cmd.flowId }).lean();
-    const flowLabel = flow ? flow.name : `⚠️ Fluxo não encontrado`;
+    const flowLabel = flow ? flow.name : this.t('cb_flow_not_found', ctx);
 
     const btnToggle = this.ui.btn(
       user,
-      cmd.enabled ? '⏸️ Desativar' : '▶️ Ativar',
+      cmd.enabled ? this.t('cb_btn_disable', ctx) : this.t('cb_btn_activate', ctx),
       cmd.enabled ? 4 : 3,
       async (i) => {
         await this.ui.deferUpdate(i);
@@ -252,56 +275,45 @@ class CommandBuilder {
       }
     );
 
-    const btnEdit = this.ui.btn(user, '✏️ Editar', 2, i => this._editCommand(i, user, commandId));
+    const btnEdit = this.ui.btn(user, this.t('cb_btn_edit', ctx), 2, i => this._editCommand(i, user, commandId));
 
-    const btnChangeFlow = this.ui.btn(user, '🔀 Trocar Fluxo', 2, async (i) => {
+    const btnChangeFlow = this.ui.btn(user, this.t('cb_btn_change_flow', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this._changeFlow(i, user, commandId);
     });
 
-    const btnRoles = this.ui.btn(user, '🛡️ Cargos Necessários', 2, async (i) => {
+    const btnRoles = this.ui.btn(user, this.t('cb_btn_required_roles', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this._manageRoles(i, user, commandId);
     });
 
-    const btnDelete = this.ui.btn(user, '🗑️ Excluir', 4, async (i) => {
+    const btnDelete = this.ui.btn(user, this.t('cb_btn_delete', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       return this._confirmDeleteCommand(i, user, commandId, cmd.name);
     });
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.ui.commandList(i, user);
     });
 
-    const aliasStr = cmd.aliases?.length ? cmd.aliases.join(', ') : '_Nenhum_';
-    const rolesStr = cmd.requiredRoles?.length ? cmd.requiredRoles.map(r => `<@&${r}>`).join(', ') : '_Qualquer um_';
-    const coolStr  = cmd.cooldown > 0 ? formatDuration(cmd.cooldown) : 'Nenhum';
+    const aliasStr = cmd.aliases?.length ? cmd.aliases.join(', ') : this.t('cb_none_aliases', ctx);
+    const rolesStr = cmd.requiredRoles?.length ? cmd.requiredRoles.map(r => `<@&${r}>`).join(', ') : this.t('cb_anyone', ctx);
+    const coolStr  = cmd.cooldown > 0 ? formatDuration(cmd.cooldown, ctx.system?.locale) : this.t('cb_no_cooldown2', ctx);
     const ayami    = this._e(cmd.enabled ? 'feliz' : 'sonolenta');
+    const status   = cmd.enabled ? this.t('cb_status_active', ctx) : this.t('cb_status_disabled', ctx);
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 🔧 ${cmd.prefix}${cmd.name} ${ayami}\n` +
-        (successMsg ? `${successMsg}\n\n` : '') +
-        `${cmd.description || '_Sem descrição_'}`
-      ),
+      this.ui.cv2Text(this.t('cb_menu_header', { ...ctx, ayami, prefix: cmd.prefix, name: cmd.name, successMsg, description: cmd.description || this.t('no_description_italic', ctx) })),
       this.ui.cv2Divider(),
-      this.ui.cv2Text(
-        `> 📌 **Status:** ${cmd.enabled ? '🟢 Ativo' : '🔴 Desativado'}\n` +
-        `> 🔣 **Prefixo:** \`${cmd.prefix}\`\n` +
-        `> ⏱️ **Cooldown:** ${coolStr}`
-      ),
+      this.ui.cv2Text(this.t('cb_status_line', { ...ctx, status, prefix: cmd.prefix, cooldown: coolStr })),
       this.ui.cv2Divider(),
-      this.ui.cv2Text(
-        `> 🏷️ **Aliases:** ${aliasStr}\n` +
-        `> ⚡ **Fluxo:** ${flowLabel}\n` +
-        `> 🛡️ **Cargos necessários:** ${rolesStr}`
-      ),
+      this.ui.cv2Text(this.t('cb_details_line', { ...ctx, aliases: aliasStr, flow: flowLabel, roles: rolesStr })),
       this.ui.cv2Divider(),
       this.ui.row(btnToggle, btnEdit, btnChangeFlow),
       this.ui.row(btnRoles, btnDelete, btnBack),
       this.ui.cv2Divider(),
-      this.ui.cv2Text(`-# ID: ${cmd.commandId}`),
+      this.ui.cv2Text(this.t('cb_id_footer', { ...ctx, id: cmd.commandId })),
     ];
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, {
@@ -311,18 +323,20 @@ class CommandBuilder {
 
   async _editCommand(interaction, user, commandId) {
     const cmd = await CustomCommandModel.findOne({ commandId }).lean();
+    const ctx = this._tctx(interaction);
 
     const modal = this.client.interactions.createModal({
       user,
-      title: 'Editar Comando',
+      title: this.t('cb_modal_edit_title', ctx),
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'name',        label: 'Nome',          style: 1, required: true,  max_length: 30,  value: cmd.name }] },
-        { type: 1, components: [{ type: 4, custom_id: 'aliases',     label: 'Aliases',       style: 1, required: false, max_length: 200, value: cmd.aliases?.join(', ') || '' }] },
-        { type: 1, components: [{ type: 4, custom_id: 'prefix',      label: 'Prefixo',       style: 1, required: false, max_length: 5,   value: cmd.prefix }] },
-        { type: 1, components: [{ type: 4, custom_id: 'cooldown',    label: 'Cooldown (ex: 24h, 22h 10m, 0)', style: 1, required: false, max_length: 30,  value: cmd.cooldown > 0 ? formatDuration(cmd.cooldown) : '0' }] },
-        { type: 1, components: [{ type: 4, custom_id: 'description', label: 'Descrição',     style: 2, required: false, max_length: 200, value: cmd.description || '' }] }
+        { type: 1, components: [{ type: 4, custom_id: 'name',        label: this.t('cb_field_name_label2', ctx),          style: 1, required: true,  max_length: 30,  value: cmd.name }] },
+        { type: 1, components: [{ type: 4, custom_id: 'aliases',     label: this.t('cb_field_aliases_label2', ctx),       style: 1, required: false, max_length: 200, value: cmd.aliases?.join(', ') || '' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'prefix',      label: this.t('cb_field_prefix_label2', ctx),       style: 1, required: false, max_length: 5,   value: cmd.prefix }] },
+        { type: 1, components: [{ type: 4, custom_id: 'cooldown',    label: this.t('cb_field_cooldown_label2', ctx), style: 1, required: false, max_length: 30,  value: cmd.cooldown > 0 ? formatDuration(cmd.cooldown, ctx.system?.locale) : '0' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'description', label: this.t('cb_field_description_label2', ctx),     style: 2, required: false, max_length: 200, value: cmd.description || '' }] }
       ],
       funcao: async (modalInteraction, client, fields) => {
+        const miCtx = this._tctx(modalInteraction);
         const rawCooldown = fields.cooldown?.trim() || '0';
         const cooldownMs  = rawCooldown === '0' ? 0 : parseDuration(rawCooldown);
 
@@ -330,7 +344,7 @@ class CommandBuilder {
           return DiscordRequest(
             `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
             { method: 'POST', body: { type: 4, data: {
-              content: `${this._e('emduvida')} Não entendi essa duração de cooldown! Use algo como \`24h\`, \`22h 10m\`, \`1d 5h\` ou \`0\`.`,
+              content: this.t('cb_invalid_cooldown', miCtx),
               flags: 64
             } } }
           );
@@ -354,7 +368,7 @@ class CommandBuilder {
         );
 
         return this.commandMenu(modalInteraction, user, commandId, {
-          successMsg: `${this._e('feliz')} Comando atualizado!`
+          successMsg: this.t('cb_command_updated', miCtx)
         });
       }
     });
@@ -368,39 +382,37 @@ class CommandBuilder {
       'trigger.category': 'command',
       'trigger.type':     'command_executed'
     }).lean();
+    const ctx = this._tctx(interaction);
 
     if (!flows.length) {
       return this.ui.followUpEphemeral(interaction, this.ui.cv2Payload([
-        this.ui.cv2Text(`${this._e('emduvida')} Nenhum fluxo com trigger **🔧 Comando executado** disponível.`)
+        this.ui.cv2Text(this.t('cb_no_flows_for_change', ctx))
       ]));
     }
 
     const options = flows.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
-      description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger)}`
+      description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger, ctx)}`
     }));
 
-    const sel = this.ui.select(user, options, '🔀 Selecione o novo fluxo', async (i) => {
+    const sel = this.ui.select(user, options, this.t('cb_change_flow_placeholder', ctx), async (i) => {
       await this.ui.deferUpdate(i);
       await CustomCommandModel.updateOne({ commandId }, { flowId: i.data.values[0] });
       this.client.logicEngine._flowCache?.delete(`cmd:${i.guild_id}`);
       this.ui.invalidateCache(i.guild_id);
       return this.commandMenu(i, user, commandId, {
-        successMsg: `${this._e('curtida')} Fluxo do comando atualizado!`
+        successMsg: this.t('cb_flow_updated', this._tctx(i))
       });
     });
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.commandMenu(i, user, commandId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 🔀 Trocar Fluxo do Comando ${this._e('pensando')}\n` +
-        `Selecione qual fluxo este comando vai executar agora:`
-      ),
+      this.ui.cv2Text(this.t('cb_change_flow_title', ctx)),
       this.ui.cv2Divider(),
       this.ui.row(sel),
       this.ui.cv2Divider(),
@@ -412,14 +424,15 @@ class CommandBuilder {
 
   async _manageRoles(interaction, user, commandId) {
     const cmd = await CustomCommandModel.findOne({ commandId }).lean();
+    const ctx = this._tctx(interaction);
     const rolesStr = cmd.requiredRoles?.length
       ? cmd.requiredRoles.map(r => `<@&${r}>`).join('\n')
-      : `_Nenhum — qualquer usuário pode usar ${this._e('feliz')}_`;
+      : this.t('cb_no_roles', ctx);
 
-    const btnAdd = this.ui.btn(user, '➕ Adicionar Cargo', 1, async (i) => {
+    const btnAdd = this.ui.btn(user, this.t('cb_btn_add_role', ctx), 1, async (i) => {
       await this.ui.deferUpdate(i);
       await this.ui.followUpEphemeral(i, this.ui.cv2Payload([
-        this.ui.cv2Text(`${this._e('pensando')} Envie o cargo (menção ou ID) no canal:`)
+        this.ui.cv2Text(this.t('cb_ask_role', this._tctx(i)))
       ]));
 
       let msg;
@@ -433,7 +446,7 @@ class CommandBuilder {
       const id = msg.content?.match(/\d{17,19}/)?.[0];
       if (!id) {
         return this.ui.followUpEphemeral(i, this.ui.cv2Payload([
-          this.ui.cv2Text(`${this._e('assustada')} Cargo inválido.`)
+          this.ui.cv2Text(this.t('cb_invalid_role', this._tctx(i)))
         ]));
       }
 
@@ -446,7 +459,7 @@ class CommandBuilder {
       return this._manageRoles(i, user, commandId);
     });
 
-    const btnClear = this.ui.btn(user, '🧹 Limpar', 4, async (i) => {
+    const btnClear = this.ui.btn(user, this.t('cb_btn_clear', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       await CustomCommandModel.updateOne({ commandId }, { requiredRoles: [] });
       this.client.logicEngine._flowCache?.delete(`cmd:${i.guild_id}`);
@@ -454,16 +467,13 @@ class CommandBuilder {
       return this._manageRoles(i, user, commandId);
     });
 
-    const btnBack = this.ui.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.ui.btn(user, this.t('btn_back', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.commandMenu(i, user, commandId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# 🛡️ Cargos Necessários ${this._e('emduvida')}\n` +
-        `Apenas usuários com estes cargos podem usar o comando:\n\n${rolesStr}`
-      ),
+      this.ui.cv2Text(this.t('cb_roles_title', { ...ctx, rolesList: rolesStr })),
       this.ui.cv2Divider(),
       this.ui.row(btnAdd, btnClear, btnBack),
     ];
@@ -472,26 +482,24 @@ class CommandBuilder {
   }
 
   async _confirmDeleteCommand(interaction, user, commandId, name) {
-    const btnConfirm = this.ui.btn(user, '✅ Confirmar', 4, async (i) => {
+    const ctx = this._tctx(interaction);
+
+    const btnConfirm = this.ui.btn(user, this.t('cb_btn_confirm', ctx), 4, async (i) => {
       await this.ui.deferUpdate(i);
       await this.client.logicEngine.deleteCommand(commandId, i.guild_id);
       await this.ui.followUpEphemeral(i, this.ui.cv2Payload([
-        this.ui.cv2Text(`${this._e('chorando')} Comando **${name}** excluído.`)
+        this.ui.cv2Text(this.t('cb_command_deleted', { ...this._tctx(i), name }))
       ]));
       return this.ui.commandList(i, user, 0);
     });
 
-    const btnCancel = this.ui.btn(user, '❌ Cancelar', 2, async (i) => {
+    const btnCancel = this.ui.btn(user, this.t('btn_cancel', ctx), 2, async (i) => {
       await this.ui.deferUpdate(i);
       return this.commandMenu(i, user, commandId);
     });
 
     const blocks = [
-      this.ui.cv2Text(
-        `# ⚠️ Excluir Comando ${this._e('assustada')}\n` +
-        `Tem certeza que quer excluir **${name}**?\n\n` +
-        `**Esta ação não pode ser desfeita!** ${this._e('brava')}`
-      ),
+      this.ui.cv2Text(this.t('cb_delete_title', { ...ctx, name })),
       this.ui.cv2Divider(),
       this.ui.row(btnConfirm, btnCancel),
     ];

@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 /**
  * ActionRunner
@@ -22,6 +23,16 @@ class ActionRunner {
 
   constructor(client) {
     this.client = client;
+  }
+
+  /** ctx de locale a partir do ExecutionContext do fluxo (usa a interação, se houver). */
+  _ctxFrom(execCtx) {
+    return localeCtx(execCtx?.discord?.interaction);
+  }
+
+  /** Atalho pra tradução de uma chave do sistema "logicbuilder". */
+  _t(key, execCtx, extra = {}) {
+    return this.client.t(`logicbuilder.${key}`, { ...this._ctxFrom(execCtx), ...extra });
   }
 
   /* ═══════════════════════════════════════════
@@ -297,7 +308,7 @@ class ActionRunner {
         return ctx.client.interactions.createButton({
           user: undefined, // qualquer pessoa pode clicar (não é dono-específico)
           data: {
-            label: io.label || 'Clique aqui',
+            label: io.label || this._t('ar_click_here', ctx),
             style: Number(io.style) || 1,
           },
           funcao: async (interaction) => {
@@ -317,7 +328,7 @@ class ActionRunner {
       return {
         type:      2,
         style:     Number(io.style) || 1,
-        label:     io.label || 'Clique aqui',
+        label:     io.label || this._t('ar_click_here', ctx),
         emoji:     io.emoji ? this._parseEmoji(io.emoji) : undefined,
         custom_id: JSON.stringify({ t: 'flow_trigger', f: io.flowId })
       };
@@ -327,9 +338,9 @@ class ActionRunner {
       return {
         type:        3,
         custom_id:   JSON.stringify({ t: 'cv2_select', id: io.id || 'fb_select' }),
-        placeholder: io.placeholder || 'Escolha uma opção',
+        placeholder: io.placeholder || this._t('ar_choose_option', ctx),
         options:     io.options.map(o => ({
-          label:       o.label || 'Opção',
+          label:       o.label || this._t('ar_option_default_label', ctx),
           description: o.description || undefined,
           emoji:       o.emoji ? this._parseEmoji(o.emoji) : undefined,
           value:       JSON.stringify({ t: 'flow_trigger', f: o.flowId })
@@ -467,7 +478,7 @@ class ActionRunner {
       case 'ban':
         await DiscordRequest(`/guilds/${guildId}/bans/${userId}`, {
           method: 'PUT',
-          body:   { reason: p.reason || 'Automação Logic Builder' }
+          body:   { reason: p.reason || this._t('ar_ban_reason_default', ctx) }
         });
         break;
 
@@ -726,7 +737,7 @@ class ActionRunner {
         const thread = await DiscordRequest(`/channels/${cid}/threads`, {
           method: 'POST',
           body: {
-            name: p.name || 'Novo Tópico',
+            name: p.name || this._t('ar_new_thread_default', ctx),
             type: 11, // PUBLIC_THREAD
             auto_archive_duration: 1440
           }
@@ -742,7 +753,7 @@ class ActionRunner {
         const thread = await DiscordRequest(`/channels/${cid}/threads`, {
           method: 'POST',
           body: {
-            name: p.name || 'Novo Tópico Privado',
+            name: p.name || this._t('ar_new_private_thread_default', ctx),
             type: 12, // PRIVATE_THREAD
             invitable: true,
             auto_archive_duration: 1440
@@ -964,7 +975,7 @@ class ActionRunner {
     const guildId   = ctx.discord.guildId;
     const channelId = ctx.discord.channelId;
     const varName   = p.varName  || 'money';
-    const title     = p.title    || '🏆 Ranking';
+    const title     = p.title    || this._t('ar_ranking_title_default', ctx);
     const ephemeral = p.ephemeral === 'true' || p.ephemeral === true;
     const flags     = ephemeral ? 64 : undefined;
 
@@ -974,7 +985,7 @@ class ActionRunner {
       .limit(100);
 
     if (!docs.length) {
-      const msg         = '❌ Nenhum dado encontrado para este ranking.';
+      const msg         = this._t('ar_ranking_no_data', ctx);
       const interaction = ctx.discord.interaction;
       if (interaction) {
         await DiscordRequest(`/webhooks/${this.client.clientId}/${interaction.token}`, {
@@ -991,6 +1002,7 @@ class ActionRunner {
     const PER_PAGE   = 10;
     const totalPages = Math.ceil(docs.length / PER_PAGE);
     const medals     = ['🥇', '🥈', '🥉'];
+    const t          = (key, extra) => this._t(key, ctx, extra);
 
     function buildEmbed(page) {
       const start   = page * PER_PAGE;
@@ -1004,16 +1016,16 @@ class ActionRunner {
         title,
         description: desc,
         color:  0x5865F2,
-        footer: { text: `Página ${page + 1} de ${totalPages} • ${docs.length} usuários` }
+        footer: { text: t('ar_ranking_page_footer', { page: page + 1, total: totalPages, count: docs.length }) }
       };
     }
 
     function buildComponents(page) {
       const buttons = [];
       if (page > 0)
-        buttons.push({ type: 2, style: 2, label: '◀ Anterior', custom_id: `rank_prev_${page}` });
+        buttons.push({ type: 2, style: 2, label: t('ar_prev_button'), custom_id: `rank_prev_${page}` });
       if (page < totalPages - 1)
-        buttons.push({ type: 2, style: 2, label: 'Próxima ▶',  custom_id: `rank_next_${page}` });
+        buttons.push({ type: 2, style: 2, label: t('ar_next_button'),  custom_id: `rank_next_${page}` });
       return buttons.length ? [{ type: 1, components: buttons }] : [];
     }
 
@@ -1077,8 +1089,8 @@ class ActionRunner {
   }
 
   const timeoutSec = Number(p.timeout) || 30;
-  const cancelMsg  = p.cancelMessage || '❌ Operação cancelada.';
-  const content    = p.content || '❓ Confirmar a operação?';
+  const cancelMsg  = p.cancelMessage || this._t('ar_confirm_cancelled_default', ctx);
+  const content    = p.content || this._t('ar_confirm_prompt_default', ctx);
 
   return new Promise(async (resolve) => {
     let resolved = false;
@@ -1086,7 +1098,7 @@ class ActionRunner {
     const btnConfirm = this.client.interactions.createButton({
       user: targetUserId,
       tempo: timeoutSec * 1000,
-      data:  { label: '✅ Confirmar', style: 3 },
+      data:  { label: this._t('ar_confirm_button', ctx), style: 3 },
       funcao: async (i) => {
         if (resolved) return;
         resolved = true;
@@ -1101,7 +1113,7 @@ class ActionRunner {
     const btnCancel = this.client.interactions.createButton({
       user: targetUserId,
       tempo: timeoutSec * 1000,
-      data:  { label: '❌ Cancelar', style: 4 },
+      data:  { label: this._t('ar_cancel_button', ctx), style: 4 },
       funcao: async (i) => {
         if (resolved) return;
         resolved = true;
@@ -1128,7 +1140,7 @@ class ActionRunner {
       resolved = true;
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: 'POST',
-        body:   { content: `⏱️ Tempo esgotado. ${cancelMsg}` }
+        body:   { content: this._t('ar_confirm_timeout', ctx, { cancelMsg }) }
       });
       resolve(false);
     }, timeoutSec * 1000);

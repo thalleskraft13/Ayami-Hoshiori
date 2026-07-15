@@ -8,6 +8,7 @@ const ConditionEvaluator = require('./ConditionEvaluator.js');
 const ActionRunner       = require('./ActionRunner.js');
 const ExecutionContext   = require('./ExecutionContext.js');
 const DiscordRequest = require("../../DiscordRequest.js")
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 
 const AUDIT_LOG_CHANNEL = '1511462019545563237';
@@ -49,8 +50,16 @@ function parseDuration(input) {
  * Ex: 86400000 → "24 horas" | 80400000 → "22 horas e 20 minutos"
  *     45000 → "45 segundos" | 0 → "agora"
  */
-function formatDuration(ms) {
-  if (ms <= 0) return 'agora';
+const DURATION_WORDS = {
+  'pt-BR': { day: ['dia', 'dias'], hour: ['hora', 'horas'], minute: ['minuto', 'minutos'], second: ['segundo', 'segundos'], and: 'e', now: 'agora', lessThanMinute: 'menos de 1 minuto' },
+  'en-US': { day: ['day', 'days'], hour: ['hour', 'hours'], minute: ['minute', 'minutes'], second: ['second', 'seconds'], and: 'and', now: 'now', lessThanMinute: 'less than 1 minute' },
+  'en-GB': { day: ['day', 'days'], hour: ['hour', 'hours'], minute: ['minute', 'minutes'], second: ['second', 'seconds'], and: 'and', now: 'now', lessThanMinute: 'less than 1 minute' },
+  'es-ES': { day: ['día', 'días'], hour: ['hora', 'horas'], minute: ['minuto', 'minutos'], second: ['segundo', 'segundos'], and: 'y', now: 'ahora', lessThanMinute: 'menos de 1 minuto' },
+};
+
+function formatDuration(ms, locale = 'pt-BR') {
+  const w = DURATION_WORDS[locale] || DURATION_WORDS['pt-BR'];
+  if (ms <= 0) return w.now;
 
   const days    = Math.floor(ms / 86_400_000);
   const hours   = Math.floor((ms % 86_400_000) / 3_600_000);
@@ -58,15 +67,15 @@ function formatDuration(ms) {
   const seconds = Math.floor((ms % 60_000) / 1_000);
 
   const parts = [];
-  if (days)    parts.push(`${days} dia${days > 1 ? 's' : ''}`);
-  if (hours)   parts.push(`${hours} hora${hours > 1 ? 's' : ''}`);
-  if (minutes) parts.push(`${minutes} minuto${minutes > 1 ? 's' : ''}`);
+  if (days)    parts.push(`${days} ${days > 1 ? w.day[1] : w.day[0]}`);
+  if (hours)   parts.push(`${hours} ${hours > 1 ? w.hour[1] : w.hour[0]}`);
+  if (minutes) parts.push(`${minutes} ${minutes > 1 ? w.minute[1] : w.minute[0]}`);
   // Só mostra segundos se for a única unidade (evita "1 hora, 2 minutos e 14 segundos" verboso)
-  if (!days && !hours && !minutes && seconds) parts.push(`${seconds} segundo${seconds > 1 ? 's' : ''}`);
+  if (!days && !hours && !minutes && seconds) parts.push(`${seconds} ${seconds > 1 ? w.second[1] : w.second[0]}`);
 
-  if (!parts.length) return 'menos de 1 minuto';
+  if (!parts.length) return w.lessThanMinute;
   if (parts.length === 1) return parts[0];
-  return parts.slice(0, -1).join(', ') + ' e ' + parts[parts.length - 1];
+  return parts.slice(0, -1).join(', ') + ` ${w.and} ` + parts[parts.length - 1];
 }
 
 /**
@@ -255,8 +264,9 @@ class LogicEngine {
    * (ephemeral, não enche o canal), senão envia no canal normalmente.
    */
   async _sendCooldownWarning(discordCtx, remainingMs) {
-    const timeText = formatDuration(remainingMs);
-    const content  = `⏳ Ainda faltam **${timeText}** pra poder usar isso de novo!`;
+    const ctx      = localeCtx(discordCtx.interaction);
+    const timeText = formatDuration(remainingMs, ctx.system?.locale);
+    const content  = this.client.t('logicbuilder.cooldown_warning', { ...ctx, time: timeText });
 
     try {
       if (discordCtx.interaction) {

@@ -1,6 +1,7 @@
 'use strict';
 
 const DiscordRequest = require('../../DiscordRequest.js');
+const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 /**
  * ConditionEvaluator
@@ -16,6 +17,17 @@ class ConditionEvaluator {
 
   constructor(client) {
     this.client = client;
+  }
+
+  /**
+   * Monta o ctx de locale a partir do discordCtx do fluxo. Quando o
+   * trigger vem de um componente/interação (botão, select, modal),
+   * `discord.interaction` tem `.locale` do Discord; quando vem de uma
+   * mensagem comum (comando por prefixo), não há essa info e cai no
+   * idioma padrão do sistema.
+   */
+  _ctxFrom(discord) {
+    return localeCtx(discord?.interaction);
   }
 
   /* ═══════════════════════════════════════════
@@ -508,11 +520,12 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
         }
 
         if (!valid && p.errorMsg?.trim()) {
+          const tctx = this._ctxFrom(discord);
           const typeLabel = {
-            user_mention:    'uma menção de usuário (@Alguém)',
-            channel_mention: 'uma menção de canal (#canal)',
-            number:          'um número',
-            text:            'um texto'
+            user_mention:    this.client.t('logicbuilder.arg_type_user_mention', tctx),
+            channel_mention: this.client.t('logicbuilder.arg_type_channel_mention', tctx),
+            number:          this.client.t('logicbuilder.arg_type_number', tctx),
+            text:            this.client.t('logicbuilder.arg_type_text', tctx)
           }[p.argType] || p.argType;
 
           const msg = p.errorMsg
