@@ -67,45 +67,63 @@ module.exports = {
       {
         type:        1,
         name:        'ver',
-        description: 'Veja suas missões diárias e semanais pessoais'
+        name_localizations: { 'en-US': "view", 'en-GB': "view", 'es-ES': "ver" },
+        description: 'Veja suas missões diárias e semanais pessoais',
+        description_localizations: { 'en-US': "See your personal daily and weekly missions", 'en-GB': "See your personal daily and weekly missions", 'es-ES': "Consulta tus misiones diarias y semanales personales" }
       },
       {
         type:        1,
         name:        'guilda',
-        description: 'Missões semanais e eventos do servidor'
+        name_localizations: { 'en-US': "guild", 'en-GB': "guild", 'es-ES': "gremio" },
+        description: 'Missões semanais e eventos do servidor',
+        description_localizations: { 'en-US': "Weekly missions and server events", 'en-GB': "Weekly missions and server events", 'es-ES': "Misiones semanales y eventos del servidor" }
       },
       {
         type:        2,
         name:        'grupo',
+        name_localizations: { 'en-US': "group", 'en-GB': "group", 'es-ES': "grupo" },
         description: 'Gerencie seu Grupo de Aventureiros',
+        description_localizations: { 'en-US': "Manage your Adventurer Group", 'en-GB': "Manage your Adventurer Group", 'es-ES': "Gestiona tu Grupo de Aventureros" },
         options: [
           {
             type:        1,
             name:        'criar',
-            description: 'Cria um novo grupo de aventureiros'
+            name_localizations: { 'en-US': "create", 'en-GB': "create", 'es-ES': "crear" },
+            description: 'Cria um novo grupo de aventureiros',
+            description_localizations: { 'en-US': "Creates a new adventurer group", 'en-GB': "Creates a new adventurer group", 'es-ES': "Crea un nuevo grupo de aventureros" }
           },
           {
             type:        1,
             name:        'convidar',
+            name_localizations: { 'en-US': "invite", 'en-GB': "invite", 'es-ES': "invitar" },
             description: 'Convida um usuário para o seu grupo',
+            description_localizations: { 'en-US': "Invites a user to your group", 'en-GB': "Invites a user to your group", 'es-ES': "Invita a un usuario a tu grupo" },
             options: [
-              { type: 6, name: 'usuario', description: 'Usuário a convidar', required: true }
+              { type: 6, name: 'usuario',
+              name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" }, description: 'Usuário a convidar',
+              description_localizations: { 'en-US': "User to invite", 'en-GB': "User to invite", 'es-ES': "Usuario a invitar" }, required: true }
             ]
           },
           {
             type:        1,
             name:        'aceitar',
-            description: 'Aceita um convite pendente de grupo'
+            name_localizations: { 'en-US': "accept", 'en-GB': "accept", 'es-ES': "aceptar" },
+            description: 'Aceita um convite pendente de grupo',
+            description_localizations: { 'en-US': "Accepts a pending group invite", 'en-GB': "Accepts a pending group invite", 'es-ES': "Acepta una invitacion de grupo pendiente" }
           },
           {
             type:        1,
             name:        'sair',
-            description: 'Sai do grupo atual (líderes dissolvem o grupo)'
+            name_localizations: { 'en-US': "leave", 'en-GB': "leave", 'es-ES': "salir" },
+            description: 'Sai do grupo atual (líderes dissolvem o grupo)',
+            description_localizations: { 'en-US': "Leaves the current group (leaders dissolve the group)", 'en-GB': "Leaves the current group (leaders dissolve the group)", 'es-ES': "Sale del grupo actual (los lideres disuelven el grupo)" }
           },
           {
             type:        1,
             name:        'ver',
-            description: 'Vê as missões e membros do seu grupo'
+            name_localizations: { 'en-US': "view", 'en-GB': "view", 'es-ES': "ver" },
+            description: 'Vê as missões e membros do seu grupo',
+            description_localizations: { 'en-US': "Views your group's missions and members", 'en-GB': "Views your group's missions and members", 'es-ES': "Ve las misiones y miembros de tu grupo" }
           }
         ]
       }

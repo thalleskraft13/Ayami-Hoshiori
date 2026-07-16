@@ -487,10 +487,7 @@ async _onReactionAdd(d) {
     async _onReady(d) {
     console.log(`\n----------> SHARD: ${d.shard[0]}`)
 
-    // Seção 5 (correção): marca ANTES de qualquer outra coisa, não depende
-    // de Mongo. `d.guilds` é a lista (parcial/unavailable) de guilds que
-    // esse shard já tinha antes desse READY — GUILD_CREATE pra uma dessas
-    // logo em seguida é resync, não entrada nova.
+    /
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
     await this.MediaManager.init()
     if (!this._commandsLoaded) {
@@ -525,9 +522,7 @@ async _onReactionAdd(d) {
     }
    
 
-    // Seção 6: se alguém já definiu uma presence customizada via comando,
-    // ela foi persistida no Mongo — usa ela em vez do texto hardcoded, senão
-    // todo restart desfaria a mudança.
+
     let customPresence = null;
     try {
         const BotConfig = require('../Mongodb/botConfig.js');

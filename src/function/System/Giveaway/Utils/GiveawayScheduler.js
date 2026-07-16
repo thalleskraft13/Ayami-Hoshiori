@@ -149,13 +149,13 @@ class GiveawayScheduler {
     // Mensagem de resultado
     const winnersMention = result.winners.length
       ? result.winners.map(w => `<@${w.userId}>`).join(' ')
-      : 'Nenhum vencedor elegível.';
+      : this.client.t('sorteio.embed_ended_no_winner', {});
 
     await DiscordRequest(`/channels/${ch}/messages`, {
       method: 'POST',
       body:   {
         content: `🎉 ${winnersMention}`,
-        embeds:  [GiveawayEmbed.buildEndReport(doc, result)],
+        embeds:  [GiveawayEmbed.buildEndReport(doc, result, this.client)],
       },
     }).catch(err => console.error('[GiveawayScheduler] Erro ao enviar resultado:', err));
 
@@ -164,7 +164,7 @@ class GiveawayScheduler {
       await DiscordRequest(`/channels/${ch}/messages/${mid}`, {
         method: 'PATCH',
         body:   {
-          embeds:     [GiveawayEmbed.buildEnded(doc, result)],
+          embeds:     [GiveawayEmbed.buildEnded(doc, result, this.client)],
           components: [],
         },
       }).catch(() => {});

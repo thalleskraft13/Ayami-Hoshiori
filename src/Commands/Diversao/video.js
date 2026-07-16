@@ -16,90 +16,120 @@ module.exports = {
         type: 1,
         options: [{
             name: 'homer',
+            name_localizations: { 'en-US': "homer", 'en-GB': "homer", 'es-ES': "homer" },
             description: 'Coloca o avatar ou uma imagem na cena do Homer',
+            description_localizations: { 'en-US': "Puts the avatar or an image in Homer's scene", 'en-GB': "Puts the avatar or an image in Homer's scene", 'es-ES': "Coloca el avatar o una imagen en la escena de Homer" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ],
         },{
             name: 'what',
+            name_localizations: { 'en-US': "what", 'en-GB': "what", 'es-ES': "what" },
             description: 'Coloca o avatar ou uma imagem em..WHAT?',
+            description_localizations: { 'en-US': "Puts the avatar or an image in..WHAT?", 'en-GB': "Puts the avatar or an image in..WHAT?", 'es-ES': "Coloca el avatar o una imagen en..¿WHAT?" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'henrydanger',
+            name_localizations: { 'en-US': "henrydanger", 'en-GB': "henrydanger", 'es-ES': "henrydanger" },
             description: 'Coloca o avatar ou uma imagem no PC do Henry',
+            description_localizations: { 'en-US': "Puts the avatar or an image on Henry's computer", 'en-GB': "Puts the avatar or an image on Henry's computer", 'es-ES': "Coloca el avatar o una imagen en la PC de Henry" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'carta-da-jujuba',
+            name_localizations: { 'en-US': "bubblegum-letter", 'en-GB': "bubblegum-letter", 'es-ES': "carta-de-bombucha" },
             description: 'Coloca o avatar ou uma imagem na carta para Princesa Jujuba',
+            description_localizations: { 'en-US': "Puts the avatar or an image on the letter to Princess Bubblegum", 'en-GB': "Puts the avatar or an image on the letter to Princess Bubblegum", 'es-ES': "Coloca el avatar o una imagen en la carta para la Princesa Bombucha" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'homelander',
+            name_localizations: { 'en-US': "homelander", 'en-GB': "homelander", 'es-ES': "homelander" },
             description: 'Coloca o avatar ou uma imagem na tela do Homerland',
+            description_localizations: { 'en-US': "Puts the avatar or an image on the Homelander screen", 'en-GB': "Puts the avatar or an image on the Homelander screen", 'es-ES': "Coloca el avatar o una imagen en la pantalla de Homelander" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }

@@ -17,12 +17,16 @@ module.exports = {
     options: [
       {
         name: "mondstadt",
+        name_localizations: { 'en-US': "mondstadt", 'en-GB': "mondstadt", 'es-ES': "mondstadt" },
         description: "Explore a Cidade da Liberdade e descubra o que os ventos de Barbatos insistem em esconder",
+        description_localizations: { 'en-US': "Explore the City of Freedom and discover what the winds of Barbatos insist on hiding", 'en-GB': "Explore the City of Freedom and discover what the winds of Barbatos insist on hiding", 'es-ES': "Explora la Ciudad de la Libertad y descubre lo que los vientos de Barbatos insisten en ocultar" },
         type: 1
       },
       {
         name: "tempo",
+        name_localizations: { 'en-US': "time", 'en-GB': "time", 'es-ES': "tiempo" },
         description: "Veja o tempo que falta de cada exploração",
+        description_localizations: { 'en-US': "See the time remaining for each exploration", 'en-GB': "See the time remaining for each exploration", 'es-ES': "Consulta el tiempo restante de cada exploracion" },
         type: 1
       }
     ]

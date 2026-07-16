@@ -65,44 +65,60 @@ module.exports = {
     options: [
       {
         name: "saldo",
+        name_localizations: { 'en-US': "balance", 'en-GB': "balance", 'es-ES': "saldo" },
         description: "Veja quantas primogemas você (ou alguém) tem!",
+        description_localizations: { 'en-US': "See how many primogems you (or someone) have!", 'en-GB': "See how many primogems you (or someone) have!", 'es-ES': "¡Consulta cuantos primogemas tienes tu (o alguien)!" },
         type: 1,
         options: [{
           name: "user",
+          name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
           description: "Mencione ou insira o ID do usuário",
+          description_localizations: { 'en-US': "Mention or enter the user's ID", 'en-GB': "Mention or enter the user's ID", 'es-ES': "Menciona o ingresa el ID del usuario" },
           type: 6,
           required: false
         }]
       },
       {
         name: "daily",
+        name_localizations: { 'en-US': "daily", 'en-GB': "daily", 'es-ES': "diario" },
         description: "Resgate suas primogemas diárias e encha o bolso! ✨",
+        description_localizations: { 'en-US': "Claim your daily primogems and fill your pockets! ✨", 'en-GB': "Claim your daily primogems and fill your pockets! ✨", 'es-ES': "¡Reclama tus primogemas diarios y llena tu bolsillo! ✨" },
         type: 1
       },
       {
         name: "placar",
+        name_localizations: { 'en-US': "leaderboard", 'en-GB': "leaderboard", 'es-ES': "clasificacion" },
         description: "Veja os aventureiros mais ricos em primogemas! 🏆",
+        description_localizations: { 'en-US': "See the richest adventurers in primogems! 🏆", 'en-GB': "See the richest adventurers in primogems! 🏆", 'es-ES': "¡Consulta a los aventureros mas ricos en primogemas! 🏆" },
         type: 1
       },
       {
         name: "pagar",
+        name_localizations: { 'en-US': "pay", 'en-GB': "pay", 'es-ES': "pagar" },
         description: "Envie primogemas para um amiguinho~ 💸",
+        description_localizations: { 'en-US': "Send primogems to a friend~ 💸", 'en-GB': "Send primogems to a friend~ 💸", 'es-ES': "Envia primogemas a un amiguito~ 💸" },
         type: 1,
         options: [{
           name: "usuario",
+          name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
           description: "Mencione ou insira o ID",
+          description_localizations: { 'en-US': "Mention or enter the ID", 'en-GB': "Mention or enter the ID", 'es-ES': "Menciona o ingresa el ID" },
           type: 6,
           required: true
         },{
           name: "quantidade",
+          name_localizations: { 'en-US': "amount", 'en-GB': "amount", 'es-ES': "cantidad" },
           description: "Quanto você quer enviar?",
+          description_localizations: { 'en-US': "How much do you want to send?", 'en-GB': "How much do you want to send?", 'es-ES': "¿Cuanto quieres enviar?" },
           type: 3,
           required: true
         }]
       },
       {
         name: "transferências",
+        name_localizations: { 'en-US': "transfers", 'en-GB': "transfers", 'es-ES': "transferencias" },
         description: "Veja todo o seu histórico de primogemas! 📜",
+        description_localizations: { 'en-US': "See your entire primogem history! 📜", 'en-GB': "See your entire primogem history! 📜", 'es-ES': "¡Consulta todo tu historial de primogemas! 📜" },
         type: 1
       }
     ]

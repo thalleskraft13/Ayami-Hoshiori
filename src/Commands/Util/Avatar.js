@@ -24,11 +24,15 @@ module.exports = {
        type: 1,
        options: [{
          name: "avatar",
+         name_localizations: { 'en-US': "avatar", 'en-GB': "avatar", 'es-ES': "avatar" },
          description: "Mostre o avatar do usuario mencionado",
+         description_localizations: { 'en-US': "Shows the mentioned user's avatar", 'en-GB': "Shows the mentioned user's avatar", 'es-ES': "Muestra el avatar del usuario mencionado" },
          type: 1,
          options: [{
            name: "user",
+           name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
            description: "Mencione ou insira o ID do usuario",
+           description_localizations: { 'en-US': "Mention or enter the user's ID", 'en-GB': "Mention or enter the user's ID", 'es-ES': "Menciona o ingresa el ID del usuario" },
            type: 6,
            required: true
          }]

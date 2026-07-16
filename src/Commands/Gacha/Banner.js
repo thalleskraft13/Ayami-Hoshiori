@@ -39,13 +39,18 @@ module.exports = {
     options: [
       {
         name: "tipo",
+        name_localizations: { 'en-US': "type", 'en-GB': "type", 'es-ES': "tipo" },
         description: "Escolha o banner",
+        description_localizations: { 'en-US': "Choose the banner", 'en-GB': "Choose the banner", 'es-ES': "Elige el banner" },
         type: 3,
         required: true,
         choices: [
-          { name: "Banner 1",    value: "0" },
-          { name: "Banner 2",    value: "1" },
-          { name: "Mochileiro",  value: "2" }
+          { name: "Banner 1",
+          name_localizations: { 'en-US': "Banner 1", 'en-GB': "Banner 1", 'es-ES': "Banner 1" },    value: "0" },
+          { name: "Banner 2",
+          name_localizations: { 'en-US': "Banner 2", 'en-GB': "Banner 2", 'es-ES': "Banner 2" },    value: "1" },
+          { name: "Mochileiro",
+          name_localizations: { 'en-US': "Backpacker", 'en-GB': "Backpacker", 'es-ES': "Mochilero" },  value: "2" }
         ]
       }
     ]

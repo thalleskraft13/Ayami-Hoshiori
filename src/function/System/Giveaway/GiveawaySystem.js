@@ -9,6 +9,7 @@ const GiveawayExport  = require('./Utils/GiveawayExport.js');
 const PremiumManager  = require('../../Utils/PremiumManager.js');
 const { isPlanAtLeast, PLAN_KEYS } = require('../../Utils/PremiumPlans.js');
 const TaskDb          = require('../../../Mongodb/tarefas.js');
+const { localeCtx }   = require('../../Utils/ctxLocale.js');
 
 const E = Object.freeze({
   feliz:    '<:ayamifeliz:1513904597649981561>',
@@ -25,6 +26,12 @@ class GiveawaySystem {
   constructor(client) {
     this.client  = client;
     this._drafts = new Map();
+  }
+
+  // Atalho para o LanguageManager — sempre resolve o locale a partir da
+  // interação (via localeCtx) e injeta variáveis extras pro render(ctx).
+  t(interaction, key, extra = {}) {
+    return this.client.t(`sorteio.${key}`, localeCtx(interaction, extra));
   }
 
   /* ═══════════════════════════════════════
@@ -104,8 +111,8 @@ class GiveawaySystem {
     // 1. Atualiza a msg original mostrando que está aguardando input
     await this.editOriginal(interaction, {
       embeds: [{
-        ...this._embedDraft(draft),
-        footer: { text: '⌨️ Aguardando sua resposta no chat...' },
+        ...this._embedDraft(draft, interaction),
+        footer: { text: this.t(interaction, 'engine_wait_footer') },
       }],
       components: [],
     });
@@ -115,7 +122,7 @@ class GiveawaySystem {
       embeds: [{
         description: questionEmbed,
         color: DEFAULT_COLOR,
-        footer: { text: 'Digite "cancelar" para cancelar. Tempo: 2 minutos.' }
+        footer: { text: this.t(interaction, 'engine_ask_footer') }
       }]
     });
 
@@ -210,19 +217,20 @@ class GiveawaySystem {
   async save(doc) { await doc.save(); }
   _genId() { return 'giveaway_' + Date.now(); }
 
-  _embedDraft(draft) {
+  _embedDraft(draft, interaction) {
     const endsTs = draft.endsAt ? Math.floor(new Date(draft.endsAt).getTime() / 1000) : null;
+    const L = (key) => this.t(interaction, key);
     return {
-      title: `${E.animada} Configurando o Sorteio`,
+      title: `${E.animada} ${this.t(interaction, 'engine_draft_title')}`,
       description: [
-        `**Prêmio:** ${draft.prize || '—'}`,
-        `**Descrição:** ${draft.description || '—'}`,
-        `**Canal:** ${draft.channelId ? `<#${draft.channelId}>` : '—'}`,
-        `**Vencedores:** ${draft.winners}`,
-        `**Encerra:** ${endsTs ? `<t:${endsTs}:R>` : '—'}`,
-        `**Entradas bônus:** ${draft.bonusEntries.length}`,
-        `**Requisitos:** ${draft.requirements.length}`,
-        `**Multi-Servidor:** ${draft.isMultiServer ? '✅' : '❌'}`,
+        `**${L('engine_draft_prize_label')}:** ${draft.prize || '—'}`,
+        `**${L('engine_draft_desc_label')}:** ${draft.description || '—'}`,
+        `**${L('engine_draft_channel_label')}:** ${draft.channelId ? `<#${draft.channelId}>` : '—'}`,
+        `**${L('engine_draft_winners_label')}:** ${draft.winners}`,
+        `**${L('engine_draft_ends_label')}:** ${endsTs ? `<t:${endsTs}:R>` : '—'}`,
+        `**${L('engine_draft_bonus_label')}:** ${draft.bonusEntries.length}`,
+        `**${L('engine_draft_reqs_label')}:** ${draft.requirements.length}`,
+        `**${L('engine_draft_multi_label')}:** ${draft.isMultiServer ? '✅' : '❌'}`,
       ].join('\n'),
       color: draft.color,
       thumbnail: draft.thumbnail ? { url: draft.thumbnail } : undefined,
@@ -247,12 +255,12 @@ class GiveawaySystem {
       ? actives.map(g => ({
           label:       g.prize.slice(0, 80),
           value:       g.giveawayId,
-          description: `${g.participants.length} participante(s)`,
+          description: this.t(interaction, 'engine_menu_option_participants', { count: g.participants.length }),
         }))
-      : [{ label: 'Nenhum sorteio ativo', value: 'none' }];
+      : [{ label: this.t(interaction, 'engine_menu_none_option'), value: 'none' }];
 
     const selectSorteio = this.select(
-      user, selectOptions, 'Selecionar sorteio para gerenciar',
+      user, selectOptions, this.t(interaction, 'engine_menu_select_placeholder'),
       async (i) => {
         await this.deferUpdate(i);
         if (!actives.length) return;
@@ -263,11 +271,8 @@ class GiveawaySystem {
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Sistema de Sorteios`,
-        description:
-          `Olá! Bem-vindo ao painel de sorteios~\n\n` +
-          `**Sorteios ativos:** ${actives.length}\n\n` +
-          `Use \`/sorteio criar\` para criar um novo sorteio!`,
+        title: `${E.animada} ${this.t(interaction, 'engine_menu_title')}`,
+        description: this.t(interaction, 'engine_menu_desc', { count: actives.length }),
         color: DEFAULT_COLOR,
       }],
       components: actives.length ? [this.row(selectSorteio)] : [],
@@ -290,24 +295,24 @@ class GiveawaySystem {
 
     const modal = this.client.interactions.createModal({
       user,
-      title: '🎉 Criar Sorteio',
+      title: this.t(interaction, 'engine_modal_title'),
       components: [
         {
           type: 1,
           components: [{
             type: 4, custom_id: 'prize',
-            label: 'Qual é o prêmio?',
+            label: this.t(interaction, 'engine_modal_prize_label'),
             style: 1, required: true, max_length: 200,
-            placeholder: 'Ex: Nitro Classic por 1 mês',
+            placeholder: this.t(interaction, 'engine_modal_prize_placeholder'),
           }]
         },
         {
           type: 1,
           components: [{
             type: 4, custom_id: 'description',
-            label: 'Descrição (opcional)',
+            label: this.t(interaction, 'engine_modal_desc_label'),
             style: 2, required: false, max_length: 1000,
-            placeholder: 'Descreva o prêmio ou informações extras...',
+            placeholder: this.t(interaction, 'engine_modal_desc_placeholder'),
           }]
         },
       ],
@@ -325,7 +330,7 @@ class GiveawaySystem {
             body: {
               type: 4,
               data: {
-                embeds: [this._embedDraft(draft)],
+                embeds: [this._embedDraft(draft, mi)],
                 components: [],
               //  flags: 64,
               }
@@ -347,14 +352,13 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
 
     const resp = await this._ask(interaction, draft,
-      `${E.animada} **Passo 1/4 — Canal**\n\n` +
-      `Envie a **menção ou ID** do canal onde o sorteio será publicado:`
+      `${E.animada} ${this.t(interaction, 'engine_step_channel')}`
     );
 
     if (resp === null) {
       this._clearDraft(user);
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.pensando} Criação cancelada.`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_creation_cancelled')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     }
@@ -362,7 +366,7 @@ class GiveawaySystem {
     const id = resp.match(/\d{17,19}/)?.[0];
     if (!id) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Canal inválido! Tente novamente.`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_channel_invalid')}`, color: DEFAULT_COLOR }]
       });
       return this._criarStep_Canal(interaction, user);
     }
@@ -378,14 +382,13 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
 
     const resp = await this._ask(interaction, draft,
-      `${E.animada} **Passo 2/4 — Vencedores**\n\n` +
-      `Quantos vencedores o sorteio terá? *(1 a 100)*`
+      `${E.animada} ${this.t(interaction, 'engine_step_winners')}`
     );
 
     if (resp === null) {
       this._clearDraft(user);
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.pensando} Criação cancelada.`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_creation_cancelled')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     }
@@ -393,7 +396,7 @@ class GiveawaySystem {
     const n = parseInt(resp);
     if (!n || n < 1 || n > 100) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Número inválido! Use entre 1 e 100.`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_winners_invalid')}`, color: DEFAULT_COLOR }]
       });
       return this._criarStep_Vencedores(interaction, user);
     }
@@ -409,15 +412,13 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
 
     const resp = await this._ask(interaction, draft,
-      `${E.animada} **Passo 3/4 — Duração**\n\n` +
-      `Por quanto tempo o sorteio ficará aberto?\n\n` +
-      `\`7d\` → 7 dias · \`12h\` → 12 horas · \`30m\` → 30 minutos`
+      `${E.animada} ${this.t(interaction, 'engine_step_duration')}`
     );
 
     if (resp === null) {
       this._clearDraft(user);
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.pensando} Criação cancelada.`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_creation_cancelled')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     }
@@ -425,7 +426,7 @@ class GiveawaySystem {
     const ms = this._parseDuration(resp);
     if (!ms) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Duração inválida! Use \`1d\`, \`12h\` ou \`30m\`.`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_duration_invalid')}`, color: DEFAULT_COLOR }]
       });
       return this._criarStep_Duracao(interaction, user);
     }
@@ -446,14 +447,14 @@ class GiveawaySystem {
     const select = this.select(
       user,
       [
-        { label: '🎁 Entradas Bônus',        value: 'bonus'   },
-        { label: '✅ Requisitos',             value: 'reqs'    },
-        { label: '🎨 Aparência',             value: 'visual'  },
-        { label: premium ? '🌐 Multi-Servidor' : '🔒 Multi-Servidor (Premium)', value: 'multi' },
-        { label: '📨 Mensagem Personalizada', value: 'msg'     },
-        { label: '🚀 Publicar Sorteio',       value: 'publish' },
+        { label: this.t(interaction, 'engine_extras_opt_bonus'),   value: 'bonus'   },
+        { label: this.t(interaction, 'engine_extras_opt_reqs'),    value: 'reqs'    },
+        { label: this.t(interaction, 'engine_extras_opt_visual'),  value: 'visual'  },
+        { label: premium ? this.t(interaction, 'engine_extras_opt_multi') : this.t(interaction, 'engine_extras_opt_multi_locked'), value: 'multi' },
+        { label: this.t(interaction, 'engine_extras_opt_msg'),     value: 'msg'     },
+        { label: this.t(interaction, 'engine_extras_opt_publish'), value: 'publish' },
       ],
-      'O que deseja configurar?',
+      this.t(interaction, 'engine_extras_placeholder'),
       async (i) => {
         await this.deferUpdate(i);
         const v = i.data.values[0];
@@ -468,8 +469,8 @@ class GiveawaySystem {
 
     return this.editOriginal(interaction, {
       embeds: [{
-        ...this._embedDraft(draft),
-        footer: { text: 'Selecione uma opção ou clique em Publicar Sorteio.' }
+        ...this._embedDraft(draft, interaction),
+        footer: { text: this.t(interaction, 'engine_extras_footer') }
       }],
       components: [this.row(select)],
     });
@@ -486,27 +487,27 @@ class GiveawaySystem {
 
     const draft = this._getDraft(user);
     const atual = draft.bonusEntries.length
-      ? draft.bonusEntries.map(b => `<@&${b.roleId}> → +${b.entries} entradas`).join('\n')
-      : 'Nenhuma configurada.';
+      ? draft.bonusEntries.map(b => this.t(interaction, 'engine_bonus_line', { mention: `<@&${b.roleId}>`, entries: b.entries })).join('\n')
+      : this.t(interaction, 'engine_bonus_none');
 
-    const btnAdd = this.btn(user, '➕ Adicionar', 3, async (i) => {
+    const btnAdd = this.btn(user, this.t(interaction, 'engine_btn_add'), 3, async (i) => {
       await this.deferUpdate(i);
       return this._bonusAdd(i, user);
     });
-    const btnDel = this.btn(user, '🗑 Remover Última', 4, async (i) => {
+    const btnDel = this.btn(user, this.t(interaction, 'engine_btn_del_last'), 4, async (i) => {
       await this.deferUpdate(i);
       draft.bonusEntries.pop();
       return this._telaBonus(i, user);
     });
-    const btnVoltar = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnVoltar = this.btn(user, this.t(interaction, 'engine_btn_back'), 2, async (i) => {
       await this.deferUpdate(i);
       return this._telaExtras(i, user);
     });
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Entradas Bônus`,
-        description: `Cargos que concedem entradas extras.\n\n**Configuradas:**\n${atual}`,
+        title: `${E.animada} ${this.t(interaction, 'engine_bonus_title')}`,
+        description: this.t(interaction, 'engine_bonus_desc', { atual }),
         color: DEFAULT_COLOR,
       }],
       components: [this.row(btnAdd, btnDel, btnVoltar)],
@@ -519,27 +520,27 @@ class GiveawaySystem {
 
     // Pergunta o cargo — followUp efêmero, msg original continua visível
     const respRole = await this._ask(interaction, draft,
-      `${E.animada} Envie a **menção ou ID** do cargo que receberá entradas bônus:`
+      `${E.animada} ${this.t(interaction, 'engine_bonus_ask_role')}`
     );
     if (!respRole) return this._telaBonus(interaction, user);
 
     const roleId = respRole.match(/\d{17,19}/)?.[0];
     if (!roleId) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Cargo inválido!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_role_invalid')}`, color: DEFAULT_COLOR }]
       });
       return this._telaBonus(interaction, user);
     }
 
     const respQtd = await this._ask(interaction, draft,
-      `${E.animada} Quantas entradas extras o cargo <@&${roleId}> receberá?`
+      `${E.animada} ${this.t(interaction, 'engine_bonus_ask_qty', { mention: `<@&${roleId}>` })}`
     );
     if (!respQtd) return this._telaBonus(interaction, user);
 
     const entries = parseInt(respQtd);
     if (!entries || entries < 1) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Número inválido!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_number_invalid')}`, color: DEFAULT_COLOR }]
       });
       return this._telaBonus(interaction, user);
     }
@@ -554,50 +555,48 @@ class GiveawaySystem {
 
     const draft = this._getDraft(user);
     const atual = draft.requirements.length
-      ? draft.requirements.map((r, i) => `\`${i + 1}.\` ${this._reqLabel(r)}`).join('\n')
-      : 'Nenhum configurado.';
+      ? draft.requirements.map((r, i) => `\`${i + 1}.\` ${this._reqLabel(r, interaction)}`).join('\n')
+      : this.t(interaction, 'engine_reqs_none');
 
     const options = [
-      { label: '🔒 Cargo obrigatório',      value: 'REQUIRED_ROLE' },
-      { label: '🚫 Cargo proibido',          value: 'FORBIDDEN_ROLE' },
-      { label: '💬 Mínimo de mensagens',     value: 'MIN_MESSAGES' },
-      { label: '📅 Dias no servidor',        value: 'MIN_DAYS_IN_SERVER' },
-      { label: '🎂 Idade mínima da conta',   value: 'MIN_ACCOUNT_AGE' },
-      { label: '🌐 Estar em outro servidor', value: 'IN_SERVER' },
+      { label: this.t(interaction, 'engine_reqs_opt_required_role'),      value: 'REQUIRED_ROLE' },
+      { label: this.t(interaction, 'engine_reqs_opt_forbidden_role'),     value: 'FORBIDDEN_ROLE' },
+      { label: this.t(interaction, 'engine_reqs_opt_min_messages'),       value: 'MIN_MESSAGES' },
+      { label: this.t(interaction, 'engine_reqs_opt_min_days_server'),    value: 'MIN_DAYS_IN_SERVER' },
+      { label: this.t(interaction, 'engine_reqs_opt_min_account_age'),    value: 'MIN_ACCOUNT_AGE' },
+      { label: this.t(interaction, 'engine_reqs_opt_in_server'),          value: 'IN_SERVER' },
       ...(premium ? [
-        { label: '🔑 Cargo em outro servidor',      value: 'REQUIRED_ROLE_IN_SERVER' },
-        { label: '🚫 Sem cargo em outro servidor',  value: 'FORBIDDEN_ROLE_IN_SERVER' },
-        { label: '📅 Dias em outro servidor',       value: 'MIN_DAYS_IN_EXT_SERVER' },
-        { label: '💬 Msgs em outro servidor',       value: 'MIN_MESSAGES_IN_EXT_SERVER' },
-        { label: '📞 Horas em call',                value: 'MIN_HOURS_IN_CALL' },
-        { label: '⭐ Nível mínimo',                 value: 'MIN_LEVEL' },
-        { label: '✨ XP mínima',                    value: 'MIN_XP' },
-        { label: '🚀 Cargo Booster',                value: 'HAS_BOOSTER_ROLE' },
-        { label: '💙 Cargo Apoiador',               value: 'HAS_SUPPORTER_ROLE' },
+        { label: this.t(interaction, 'engine_reqs_opt_required_role_ext'),  value: 'REQUIRED_ROLE_IN_SERVER' },
+        { label: this.t(interaction, 'engine_reqs_opt_forbidden_role_ext'), value: 'FORBIDDEN_ROLE_IN_SERVER' },
+        { label: this.t(interaction, 'engine_reqs_opt_min_days_ext'),       value: 'MIN_DAYS_IN_EXT_SERVER' },
+        { label: this.t(interaction, 'engine_reqs_opt_min_msgs_ext'),       value: 'MIN_MESSAGES_IN_EXT_SERVER' },
+        { label: this.t(interaction, 'engine_reqs_opt_min_hours_call'),     value: 'MIN_HOURS_IN_CALL' },
+        { label: this.t(interaction, 'engine_reqs_opt_min_level'),          value: 'MIN_LEVEL' },
+        { label: this.t(interaction, 'engine_reqs_opt_min_xp'),             value: 'MIN_XP' },
+        { label: this.t(interaction, 'engine_reqs_opt_booster'),            value: 'HAS_BOOSTER_ROLE' },
+        { label: this.t(interaction, 'engine_reqs_opt_supporter'),          value: 'HAS_SUPPORTER_ROLE' },
       ] : []),
     ];
 
-    const selectReq = this.select(user, options, 'Adicionar requisito', async (i) => {
+    const selectReq = this.select(user, options, this.t(interaction, 'engine_reqs_select_placeholder'), async (i) => {
       await this.deferUpdate(i);
       return this._reqAdd(i, user, i.data.values[0], premium);
     });
 
-    const btnDel = this.btn(user, '🗑 Remover Último', 4, async (i) => {
+    const btnDel = this.btn(user, this.t(interaction, 'engine_btn_del_last'), 4, async (i) => {
       await this.deferUpdate(i);
       draft.requirements.pop();
       return this._telaReqs(i, user, premium);
     });
-    const btnVoltar = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnVoltar = this.btn(user, this.t(interaction, 'engine_btn_back'), 2, async (i) => {
       await this.deferUpdate(i);
       return this._telaExtras(i, user);
     });
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Requisitos`,
-        description:
-          `Verificados **apenas no momento do sorteio**, não na entrada.\n\n` +
-          `**Configurados:**\n${atual}`,
+        title: `${E.animada} ${this.t(interaction, 'engine_reqs_title')}`,
+        description: this.t(interaction, 'engine_reqs_desc', { atual }),
         color: DEFAULT_COLOR,
       }],
       components: [this.row(selectReq), this.row(btnDel, btnVoltar)],
@@ -617,7 +616,7 @@ class GiveawaySystem {
 
     if (premiumTypes.includes(type) && !premium) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `🔒 Este requisito é exclusivo premium!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: this.t(interaction, 'engine_reqs_premium_only'), color: DEFAULT_COLOR }]
       });
       return this._telaReqs(interaction, user, premium);
     }
@@ -633,14 +632,14 @@ class GiveawaySystem {
     if (externalTypes.includes(type)) {
 
       const resp = await this._ask(interaction, draft,
-        `${E.animada} Envie o **ID do servidor** alvo:`
+        `${E.animada} ${this.t(interaction, 'engine_ask_ext_guild')}`
       );
       if (!resp) return this._telaReqs(interaction, user, premium);
 
       guildId = resp.match(/\d{17,19}/)?.[0];
       if (!guildId) {
         await this.followUpEphemeral(interaction, {
-          embeds: [{ description: `${E.pensando} ID inválido!`, color: DEFAULT_COLOR }]
+          embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_id_invalid')}`, color: DEFAULT_COLOR }]
         });
         return this._telaReqs(interaction, user, premium);
       }
@@ -648,7 +647,7 @@ class GiveawaySystem {
       const inServer = await this._checkBotInGuild(guildId);
       if (!inServer) {
         await this.followUpEphemeral(interaction, {
-          embeds: [{ description: `${E.pensando} Não estou no servidor \`${guildId}\`!`, color: DEFAULT_COLOR }]
+          embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_not_in_server', { guildId })}`, color: DEFAULT_COLOR }]
         });
         return this._telaReqs(interaction, user, premium);
       }
@@ -663,18 +662,18 @@ class GiveawaySystem {
     }
 
     const needsValue = {
-      REQUIRED_ROLE:             `Envie a **menção ou ID** do cargo obrigatório:`,
-      FORBIDDEN_ROLE:            `Envie a **menção ou ID** do cargo proibido:`,
-      MIN_MESSAGES:              `Quantas **mensagens mínimas**? *(número)*`,
-      MIN_DAYS_IN_SERVER:        `Quantos **dias mínimos** no servidor? *(número)*`,
-      MIN_ACCOUNT_AGE:           `Quantos **dias mínimos** de conta? *(número)*`,
-      REQUIRED_ROLE_IN_SERVER:   `Envie a **menção ou ID** do cargo no servidor externo:`,
-      FORBIDDEN_ROLE_IN_SERVER:  `Envie a **menção ou ID** do cargo proibido no externo:`,
-      MIN_DAYS_IN_EXT_SERVER:    `Quantos **dias mínimos** no servidor externo? *(número)*`,
-      MIN_MESSAGES_IN_EXT_SERVER:`Quantas **mensagens mínimas** no servidor externo? *(número)*`,
-      MIN_HOURS_IN_CALL:         `Quantas **horas mínimas** em call? *(número)*`,
-      MIN_LEVEL:                 `Qual o **nível mínimo**? *(número)*`,
-      MIN_XP:                    `Qual a **XP mínima**? *(número)*`,
+      REQUIRED_ROLE:              this.t(interaction, 'engine_req_val_required_role'),
+      FORBIDDEN_ROLE:             this.t(interaction, 'engine_req_val_forbidden_role'),
+      MIN_MESSAGES:               this.t(interaction, 'engine_req_val_min_messages'),
+      MIN_DAYS_IN_SERVER:         this.t(interaction, 'engine_req_val_min_days_server'),
+      MIN_ACCOUNT_AGE:            this.t(interaction, 'engine_req_val_min_account_age'),
+      REQUIRED_ROLE_IN_SERVER:    this.t(interaction, 'engine_req_val_required_role_ext'),
+      FORBIDDEN_ROLE_IN_SERVER:   this.t(interaction, 'engine_req_val_forbidden_role_ext'),
+      MIN_DAYS_IN_EXT_SERVER:     this.t(interaction, 'engine_req_val_min_days_ext'),
+      MIN_MESSAGES_IN_EXT_SERVER: this.t(interaction, 'engine_req_val_min_msgs_ext'),
+      MIN_HOURS_IN_CALL:          this.t(interaction, 'engine_req_val_min_hours_call'),
+      MIN_LEVEL:                  this.t(interaction, 'engine_req_val_min_level'),
+      MIN_XP:                     this.t(interaction, 'engine_req_val_min_xp'),
     };
 
     let value = null;
@@ -690,7 +689,7 @@ class GiveawaySystem {
 
       if (!value) {
         await this.followUpEphemeral(interaction, {
-          embeds: [{ description: `${E.pensando} Valor inválido!`, color: DEFAULT_COLOR }]
+          embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_value_invalid')}`, color: DEFAULT_COLOR }]
         });
         return this._telaReqs(interaction, user, premium);
       }
@@ -707,7 +706,7 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
 
     const respCor = await this._ask(interaction, draft,
-      `${E.animada} **Aparência — Cor**\n\nEnvie a cor em **hex** *(ex: \`#FFB7C5\`)* ou \`pular\`:`
+      `${E.animada} ${this.t(interaction, 'engine_visual_title_color')}`
     );
     if (respCor && respCor.toLowerCase() !== 'pular') {
       const parsed = parseInt(respCor.trim().replace('#', ''), 16);
@@ -715,14 +714,14 @@ class GiveawaySystem {
     }
 
     const respThumb = await this._ask(interaction, draft,
-      `${E.animada} **Aparência — Thumbnail**\n\nEnvie a URL da thumbnail ou \`pular\`:`
+      `${E.animada} ${this.t(interaction, 'engine_visual_title_thumb')}`
     );
     if (respThumb && respThumb.toLowerCase() !== 'pular' && respThumb.startsWith('http')) {
       draft.thumbnail = respThumb.trim();
     }
 
     const respBanner = await this._ask(interaction, draft,
-      `${E.animada} **Aparência — Banner**\n\nEnvie a URL do banner *(imagem grande)* ou \`pular\`:`
+      `${E.animada} ${this.t(interaction, 'engine_visual_title_banner')}`
     );
     if (respBanner && respBanner.toLowerCase() !== 'pular' && respBanner.startsWith('http')) {
       draft.banner = respBanner.trim();
@@ -738,7 +737,7 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
 
     const resp = await this._ask(interaction, draft,
-      `${E.animada} Envie a **mensagem personalizada** que aparecerá na embed do sorteio, ou \`pular\`:`
+      `${E.animada} ${this.t(interaction, 'engine_custom_msg_ask')}`
     );
     if (resp && resp.toLowerCase() !== 'pular') {
       draft.customMessage = resp.slice(0, 500);
@@ -753,7 +752,7 @@ class GiveawaySystem {
 
     if (!premium) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `🔒 Sorteios Multi-Servidor são exclusivos premium!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: this.t(interaction, 'engine_multi_premium_only'), color: DEFAULT_COLOR }]
       });
       return this._telaExtras(interaction, user);
     }
@@ -761,41 +760,47 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
     const atual = draft.multiServers.length
       ? draft.multiServers.map(s =>
-          `\`${s.guildId}\` — <#${s.channelId}> — ${s.winners || 'global'} vencedor(es)`
+          this.t(interaction, 'engine_multi_server_line', {
+            guildId: s.guildId, channelId: s.channelId,
+            winners: s.winners || this.t(interaction, 'engine_multi_global_word'),
+          })
         ).join('\n')
-      : 'Nenhum servidor adicional.';
+      : this.t(interaction, 'engine_multi_none');
 
     const selectModo = this.select(user, [
-      { label: '🌐 Global — todos competem juntos',     value: 'global'   },
-      { label: '🏆 Separado — vencedores por servidor', value: 'separate' },
-    ], 'Modo do sorteio', async (i) => {
+      { label: this.t(interaction, 'engine_multi_opt_global'),   value: 'global'   },
+      { label: this.t(interaction, 'engine_multi_opt_separate'), value: 'separate' },
+    ], this.t(interaction, 'engine_multi_mode_placeholder'), async (i) => {
       await this.deferUpdate(i);
       draft.isMultiServer = true;
       draft.multiMode     = i.data.values[0];
       return this._telaMulti(i, user, premium);
     });
 
-    const btnAdd = this.btn(user, '➕ Adicionar Servidor', 3, async (i) => {
+    const btnAdd = this.btn(user, this.t(interaction, 'engine_btn_add_server'), 3, async (i) => {
       await this.deferUpdate(i);
       return this._multiAddServer(i, user, premium);
     });
-    const btnDel = this.btn(user, '🗑 Remover Último', 4, async (i) => {
+    const btnDel = this.btn(user, this.t(interaction, 'engine_btn_del_last'), 4, async (i) => {
       await this.deferUpdate(i);
       draft.multiServers.pop();
       if (!draft.multiServers.length) draft.isMultiServer = false;
       return this._telaMulti(i, user, premium);
     });
-    const btnVoltar = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnVoltar = this.btn(user, this.t(interaction, 'engine_btn_back'), 2, async (i) => {
       await this.deferUpdate(i);
       return this._telaExtras(i, user);
     });
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Multi-Servidor`,
-        description:
-          `**Modo:** ${draft.multiMode === 'global' ? '🌐 Global' : '🏆 Separado'}\n\n` +
-          `**Servidores:**\n${atual}`,
+        title: `${E.animada} ${this.t(interaction, 'engine_multi_title')}`,
+        description: this.t(interaction, 'engine_multi_desc', {
+          modo: draft.multiMode === 'global'
+            ? this.t(interaction, 'engine_multi_mode_global_label')
+            : this.t(interaction, 'engine_multi_mode_separate_label'),
+          atual,
+        }),
         color: DEFAULT_COLOR,
       }],
       components: [this.row(selectModo), this.row(btnAdd, btnDel, btnVoltar)],
@@ -807,7 +812,7 @@ class GiveawaySystem {
     const draft = this._getDraft(user);
 
     const respGuild = await this._ask(interaction, draft,
-      `${E.animada} Envie o **ID do servidor** a adicionar:`
+      `${E.animada} ${this.t(interaction, 'engine_ask_add_guild')}`
     );
     if (!respGuild) return this._telaMulti(interaction, user, premium);
 
@@ -817,7 +822,7 @@ class GiveawaySystem {
     const inServer = await this._checkBotInGuild(guildId);
     if (!inServer) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Não estou no servidor \`${guildId}\`!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_not_in_server', { guildId })}`, color: DEFAULT_COLOR }]
       });
       return this._telaMulti(interaction, user, premium);
     }
@@ -829,7 +834,7 @@ class GiveawaySystem {
     }
 
     const respCh = await this._ask(interaction, draft,
-      `${E.animada} Envie o **ID do canal** nesse servidor:`
+      `${E.animada} ${this.t(interaction, 'engine_ask_ext_channel')}`
     );
     if (!respCh) return this._telaMulti(interaction, user, premium);
     const channelExtId = respCh.match(/\d{17,19}/)?.[0];
@@ -837,7 +842,7 @@ class GiveawaySystem {
     let winners = 0;
     if (draft.multiMode === 'separate') {
       const respW = await this._ask(interaction, draft,
-        `${E.animada} Quantos vencedores nesse servidor?`
+        `${E.animada} ${this.t(interaction, 'engine_ask_ext_winners')}`
       );
       if (respW) winners = parseInt(respW) || 1;
     }
@@ -856,13 +861,13 @@ class GiveawaySystem {
 
     if (!draft.prize || !draft.channelId || !draft.endsAt) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Preencha prêmio, canal e duração antes de publicar!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_publish_missing_fields')}`, color: DEFAULT_COLOR }]
       });
       return this._telaExtras(interaction, user);
     }
 
     await this.editOriginal(interaction, {
-      embeds: [{ description: `⏳ Publicando sorteio...`, color: DEFAULT_COLOR }],
+      embeds: [{ description: `⏳ ${this.t(interaction, 'engine_publishing')}`, color: DEFAULT_COLOR }],
       components: [],
     });
 
@@ -874,7 +879,7 @@ class GiveawaySystem {
       ...draft,
     });
 
-    const embed      = GiveawayEmbed.buildActive(doc);
+    const embed      = GiveawayEmbed.buildActive(doc, this.client);
     const components = this._buildJoinComponents(doc);
 
     const msg = await DiscordRequest(`/channels/${draft.channelId}/messages`, {
@@ -901,10 +906,8 @@ class GiveawaySystem {
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.festa} Sorteio Publicado!`,
-        description:
-          `O sorteio foi publicado em <#${draft.channelId}>!\n\n` +
-          `**ID:** \`${doc.giveawayId}\``,
+        title: `${E.festa} ${this.t(interaction, 'engine_published_title')}`,
+        description: this.t(interaction, 'engine_published_desc', { channelId: draft.channelId, id: doc.giveawayId }),
         color: DEFAULT_COLOR,
       }],
       components: [],
@@ -915,7 +918,7 @@ class GiveawaySystem {
     return [{
       type: 1,
       components: [{
-        type: 2, label: '🎉 Participar', style: 3,
+        type: 2, label: this.client.t('sorteio.engine_join_button', {}), style: 3,
         custom_id: JSON.stringify({ t: 'giveaway_join', id: doc.giveawayId }),
       }]
     }];
@@ -932,7 +935,7 @@ class GiveawaySystem {
 
       if (!doc || doc.status !== 'active') {
         return this.reply(interaction, {
-          content: `${E.pensando} Este sorteio não está mais ativo!`, flags: 64,
+          content: `${E.pensando} ${this.t(interaction, 'engine_join_not_active')}`, flags: 64,
         });
       }
 
@@ -943,9 +946,7 @@ class GiveawaySystem {
 
       if (existing) {
         return this.reply(interaction, {
-          content:
-            `${E.feliz} Você já está participando!\n\n` +
-            `🎟️ Suas entradas: **${existing.totalEntries}**`,
+          content: `${E.feliz} ${this.t(interaction, 'engine_join_already', { entries: existing.totalEntries })}`,
           flags: 64,
         });
       }
@@ -964,19 +965,17 @@ class GiveawaySystem {
       await this.save(doc);
       await this._refreshEmbed(doc).catch(() => {});
 
+      const bonusSuffix = bonusEntries ? this.t(interaction, 'engine_join_bonus_suffix', { bonus: bonusEntries }) : '';
+
       return this.reply(interaction, {
-        content:
-          `${E.feliz} **Você entrou no sorteio com sucesso!**\n\n` +
-          `🎟️ Suas entradas: **${totalEntries}**` +
-          (bonusEntries ? ` (base: 1 + bônus: ${bonusEntries})` : '') +
-          `\n\nBoa sorte! Estou torcendo por você~`,
+        content: `${E.feliz} ${this.t(interaction, 'engine_join_success', { total: totalEntries, bonus: bonusSuffix })}`,
         flags: 64,
       });
 
     } catch (err) {
       console.error('[GiveawaySystem] join error:', err);
       return this.reply(interaction, {
-        content: `${E.pensando} Ocorreu um erro. Tente novamente!`, flags: 64,
+        content: `${E.pensando} ${this.t(interaction, 'engine_generic_error')}`, flags: 64,
       });
     }
   }
@@ -985,7 +984,7 @@ class GiveawaySystem {
     if (!doc.messageId) return;
     await DiscordRequest(`/channels/${doc.channelId}/messages/${doc.messageId}`, {
       method: 'PATCH',
-      body: { embeds: [GiveawayEmbed.buildActive(doc)], components: this._buildJoinComponents(doc) }
+      body: { embeds: [GiveawayEmbed.buildActive(doc, this.client)], components: this._buildJoinComponents(doc) }
     });
   }
 
@@ -996,20 +995,20 @@ class GiveawaySystem {
   async giveawayMenu(interaction, doc, user) {
 
     const statusMap = {
-      active: '🟢 Ativo', paused: '🟡 Pausado',
-      ended: '🔴 Encerrado', cancelled: '⚫ Cancelado',
+      active: this.t(interaction, 'engine_status_active'), paused: this.t(interaction, 'engine_status_paused'),
+      ended: this.t(interaction, 'engine_status_ended'), cancelled: this.t(interaction, 'engine_status_cancelled'),
     };
 
     const select = this.select(user, [
-      { label: '⏹ Encerrar Agora',       value: 'end'    },
-      { label: doc.status === 'paused' ? '▶️ Reabrir' : '⏸ Pausar', value: 'toggle' },
-      { label: '✏️ Editar',               value: 'edit'   },
-      { label: '⏱ Adicionar Tempo',       value: 'add_t'  },
-      { label: '⏱ Remover Tempo',         value: 'rem_t'  },
-      { label: '🔁 Reroll',               value: 'reroll' },
-      { label: '📤 Exportar',             value: 'export' },
-      { label: '📊 Estatísticas',         value: 'stats'  },
-    ], 'Gerenciar sorteio', async (i) => {
+      { label: this.t(interaction, 'engine_manage_opt_end'),       value: 'end'    },
+      { label: doc.status === 'paused' ? this.t(interaction, 'engine_manage_opt_reopen') : this.t(interaction, 'engine_manage_opt_pause'), value: 'toggle' },
+      { label: this.t(interaction, 'engine_manage_opt_edit'),      value: 'edit'   },
+      { label: this.t(interaction, 'engine_manage_opt_add_time'),  value: 'add_t'  },
+      { label: this.t(interaction, 'engine_manage_opt_rem_time'),  value: 'rem_t'  },
+      { label: this.t(interaction, 'engine_manage_opt_reroll'),    value: 'reroll' },
+      { label: this.t(interaction, 'engine_manage_opt_export'),    value: 'export' },
+      { label: this.t(interaction, 'engine_manage_opt_stats'),     value: 'stats'  },
+    ], this.t(interaction, 'engine_manage_placeholder'), async (i) => {
       await this.deferUpdate(i);
       const v = i.data.values[0];
       if (v === 'end')    return this.endGiveaway(i, doc);
@@ -1022,20 +1021,20 @@ class GiveawaySystem {
       if (v === 'stats')  return this.showStats(i, doc, user);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t(interaction, 'engine_btn_back'), 2, async (i) => {
       await this.deferUpdate(i);
       return this.startMenu(i);
     });
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Gerenciar — ${doc.prize.slice(0, 50)}`,
+        title: `${E.animada} ${this.t(interaction, 'engine_manage_title', { prize: doc.prize.slice(0, 50) })}`,
         description: [
-          `**Status:** ${statusMap[doc.status]}`,
-          `**Canal:** <#${doc.channelId}>`,
-          `**Vencedores:** ${doc.winners}`,
-          `**Participantes:** ${doc.participants.length}`,
-          `**Encerra:** <t:${Math.floor(doc.endsAt.getTime() / 1000)}:R>`,
+          `**${this.t(interaction, 'engine_manage_field_status')}:** ${statusMap[doc.status]}`,
+          `**${this.t(interaction, 'engine_manage_field_channel')}:** <#${doc.channelId}>`,
+          `**${this.t(interaction, 'engine_manage_field_winners')}:** ${doc.winners}`,
+          `**${this.t(interaction, 'engine_manage_field_participants')}:** ${doc.participants.length}`,
+          `**${this.t(interaction, 'engine_manage_field_ends')}:** <t:${Math.floor(doc.endsAt.getTime() / 1000)}:R>`,
         ].join('\n'),
         color: DEFAULT_COLOR,
       }],
@@ -1050,13 +1049,13 @@ class GiveawaySystem {
   async endGiveaway(interaction, doc) {
     if (doc.status === 'ended') {
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.pensando} Este sorteio já foi encerrado!`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_already_ended')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     }
 
     await this.editOriginal(interaction, {
-      embeds: [{ description: `⏳ Sorteando vencedores...`, color: DEFAULT_COLOR }],
+      embeds: [{ description: `⏳ ${this.t(interaction, 'engine_drawing')}`, color: DEFAULT_COLOR }],
       components: [],
     });
 
@@ -1070,7 +1069,7 @@ class GiveawaySystem {
     await this._sendEndReport(doc, result);
 
     return this.editOriginal(interaction, {
-      embeds: [{ description: `${E.festa} Sorteio encerrado! Resultado enviado no canal.`, color: DEFAULT_COLOR }],
+      embeds: [{ description: `${E.festa} ${this.t(interaction, 'engine_ended_ok')}`, color: DEFAULT_COLOR }],
       components: [],
     });
   }
@@ -1095,15 +1094,16 @@ class GiveawaySystem {
 
   async modifyTime(interaction, doc, user, mode) {
 
+    const acao = mode === 'add' ? this.t(interaction, 'engine_time_add_word') : this.t(interaction, 'engine_time_remove_word');
     const resp = await this._ask(interaction, { ...doc.toObject(), prize: doc.prize },
-      `${E.animada} Envie o tempo para ${mode === 'add' ? 'adicionar' : 'remover'} *(ex: \`2h\`, \`30m\`)*:`
+      `${E.animada} ${this.t(interaction, 'engine_modify_time_ask', { acao })}`
     );
     if (!resp) return this.giveawayMenu(interaction, doc, user);
 
     const ms = this._parseDuration(resp);
     if (!ms) {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Tempo inválido!`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_time_invalid')}`, color: DEFAULT_COLOR }]
       });
       return this.giveawayMenu(interaction, doc, user);
     }
@@ -1114,7 +1114,7 @@ class GiveawaySystem {
       const newEnd = new Date(doc.endsAt.getTime() - ms);
       if (newEnd <= new Date()) {
         await this.followUpEphemeral(interaction, {
-          embeds: [{ description: `${E.pensando} Tempo removido ultrapassaria o horário atual!`, color: DEFAULT_COLOR }]
+          embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_time_would_pass')}`, color: DEFAULT_COLOR }]
         });
         return this.giveawayMenu(interaction, doc, user);
       }
@@ -1131,13 +1131,13 @@ class GiveawaySystem {
   async reroll(interaction, doc, user) {
     if (doc.status !== 'ended') {
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.pensando} Só é possível reroll em sorteios encerrados!`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_reroll_only_ended')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     }
 
     await this.editOriginal(interaction, {
-      embeds: [{ description: `⏳ Realizando reroll...`, color: DEFAULT_COLOR }],
+      embeds: [{ description: `⏳ ${this.t(interaction, 'engine_rerolling')}`, color: DEFAULT_COLOR }],
       components: [],
     });
 
@@ -1146,7 +1146,7 @@ class GiveawaySystem {
     await this._sendEndReport(doc, result);
 
     return this.editOriginal(interaction, {
-      embeds: [{ description: `${E.festa} Reroll realizado! Resultado enviado no canal.`, color: DEFAULT_COLOR }],
+      embeds: [{ description: `${E.festa} ${this.t(interaction, 'engine_reroll_ok')}`, color: DEFAULT_COLOR }],
       components: [],
     });
   }
@@ -1156,7 +1156,7 @@ class GiveawaySystem {
     const fakeDraft = { prize: doc.prize, description: doc.description, channelId: doc.channelId, winners: doc.winners, endsAt: doc.endsAt, color: doc.color, thumbnail: doc.thumbnail, banner: doc.banner, bonusEntries: doc.bonusEntries, requirements: doc.requirements, isMultiServer: doc.isMultiServer, customMessage: doc.customMessage, multiServers: doc.multiServers };
 
     const respPrize = await this._ask(interaction, fakeDraft,
-      `${E.animada} Novo prêmio ou \`pular\`:\n*Atual: **${doc.prize}***`
+      `${E.animada} ${this.t(interaction, 'engine_edit_ask_prize', { atual: doc.prize })}`
     );
     if (respPrize === null) return this.giveawayMenu(interaction, doc, user);
     if (respPrize.toLowerCase() !== 'pular') doc.prize = respPrize.trim().slice(0, 200);
@@ -1164,13 +1164,13 @@ class GiveawaySystem {
     fakeDraft.prize = doc.prize;
 
     const respDesc = await this._ask(interaction, fakeDraft,
-      `${E.animada} Nova descrição ou \`pular\`:`
+      `${E.animada} ${this.t(interaction, 'engine_edit_ask_desc')}`
     );
     if (respDesc === null) return this.giveawayMenu(interaction, doc, user);
     if (respDesc.toLowerCase() !== 'pular') doc.description = respDesc.trim().slice(0, 1000);
 
     const respW = await this._ask(interaction, fakeDraft,
-      `${E.animada} Novo número de vencedores ou \`pular\`:\n*Atual: **${doc.winners}***`
+      `${E.animada} ${this.t(interaction, 'engine_edit_ask_winners', { atual: doc.winners })}`
     );
     if (respW === null) return this.giveawayMenu(interaction, doc, user);
     if (respW.toLowerCase() !== 'pular') {
@@ -1190,24 +1190,24 @@ class GiveawaySystem {
   async exportMenu(interaction, doc, user) {
 
     const select = this.select(user, [
-      { label: '🌐 HTML',  value: 'html' },
-      { label: '📄 CSV',   value: 'csv'  },
-      { label: '📊 XLSX',  value: 'xlsx' },
-      { label: '🔧 JSON',  value: 'json' },
-    ], 'Formato de exportação', async (i) => {
+      { label: this.t(interaction, 'engine_export_opt_html'), value: 'html' },
+      { label: this.t(interaction, 'engine_export_opt_csv'),  value: 'csv'  },
+      { label: this.t(interaction, 'engine_export_opt_xlsx'), value: 'xlsx' },
+      { label: this.t(interaction, 'engine_export_opt_json'), value: 'json' },
+    ], this.t(interaction, 'engine_export_placeholder'), async (i) => {
       await this.deferUpdate(i);
       return this.exportGiveaway(i, doc, i.data.values[0]);
     });
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t(interaction, 'engine_btn_back'), 2, async (i) => {
       await this.deferUpdate(i);
       return this.giveawayMenu(i, doc, user);
     });
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Exportar Participantes`,
-        description: 'Escolha o formato de exportação:',
+        title: `${E.animada} ${this.t(interaction, 'engine_export_title')}`,
+        description: this.t(interaction, 'engine_export_desc'),
         color: DEFAULT_COLOR,
       }],
       components: [this.row(select), this.row(btnBack)],
@@ -1217,7 +1217,7 @@ class GiveawaySystem {
   async exportGiveaway(interaction, doc, format) {
     try {
       await this.editOriginal(interaction, {
-        embeds: [{ description: `⏳ Gerando arquivo **${format.toUpperCase()}**...`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `⏳ ${this.t(interaction, 'engine_exporting', { format: format.toUpperCase() })}`, color: DEFAULT_COLOR }],
         components: [],
       });
 
@@ -1225,18 +1225,18 @@ class GiveawaySystem {
 
       await DiscordRequest(`/channels/${interaction.channel_id}/messages`, {
         method: 'POST',
-        body:   { content: `${E.feliz} Exportação dos participantes!` },
+        body:   { content: `${E.feliz} ${this.t(interaction, 'engine_export_sent_channel')}` },
         files:  [file],
       });
 
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.feliz} Arquivo enviado no canal!`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.feliz} ${this.t(interaction, 'engine_export_sent_ok')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     } catch (err) {
       console.error('[GiveawaySystem] export error:', err);
       return this.editOriginal(interaction, {
-        embeds: [{ description: `${E.pensando} Erro ao exportar!`, color: DEFAULT_COLOR }],
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_export_error')}`, color: DEFAULT_COLOR }],
         components: [],
       });
     }
@@ -1259,24 +1259,24 @@ class GiveawaySystem {
     }, {});
 
     const byGuildLines = Object.entries(byGuild)
-      .map(([gId, c]) => `\`${gId}\`: ${c} participante(s)`)
+      .map(([gId, c]) => this.t(interaction, 'engine_stats_guild_line', { guildId: gId, count: c }))
       .join('\n') || '—';
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+    const btnBack = this.btn(user, this.t(interaction, 'engine_btn_back'), 2, async (i) => {
       await this.deferUpdate(i);
       return this.giveawayMenu(i, doc, user);
     });
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: `${E.animada} Estatísticas`,
+        title: `${E.animada} ${this.t(interaction, 'engine_stats_title')}`,
         fields: [
-          { name: '👥 Participantes',    value: String(total),      inline: true },
-          { name: '🏆 Vencedores',       value: String(winners),    inline: true },
-          { name: '❌ Desclassificados', value: String(disq),       inline: true },
-          { name: '🎟️ Entradas totais', value: String(totalEnt),   inline: true },
-          { name: '✨ Entradas bônus',   value: String(totalBonus), inline: true },
-          { name: '📊 Por Servidor',     value: byGuildLines },
+          { name: this.t(interaction, 'engine_stats_participants'),  value: String(total),      inline: true },
+          { name: this.t(interaction, 'engine_stats_winners'),       value: String(winners),    inline: true },
+          { name: this.t(interaction, 'engine_stats_disq'),          value: String(disq),       inline: true },
+          { name: this.t(interaction, 'engine_stats_total_entries'), value: String(totalEnt),   inline: true },
+          { name: this.t(interaction, 'engine_stats_bonus_entries'), value: String(totalBonus), inline: true },
+          { name: this.t(interaction, 'engine_stats_by_server'),     value: byGuildLines },
         ],
         color: DEFAULT_COLOR,
       }],
@@ -1289,7 +1289,7 @@ class GiveawaySystem {
   ═══════════════════════════════════════ */
 
   async _sendEndReport(doc, result) {
-    const embed = GiveawayEmbed.buildEndReport(doc, result);
+    const embed = GiveawayEmbed.buildEndReport(doc, result, this.client);
 
     await DiscordRequest(`/channels/${doc.channelId}/messages`, {
       method: 'POST',
@@ -1302,7 +1302,7 @@ class GiveawaySystem {
     if (doc.messageId) {
       await DiscordRequest(`/channels/${doc.channelId}/messages/${doc.messageId}`, {
         method: 'PATCH',
-        body: { embeds: [GiveawayEmbed.buildEnded(doc, result)], components: [] },
+        body: { embeds: [GiveawayEmbed.buildEnded(doc, result, this.client)], components: [] },
       }).catch(() => {});
     }
   }
@@ -1334,9 +1334,9 @@ class GiveawaySystem {
   async _requestAuthorization(interaction, ownerGuildId, requesterGuildId, level) {
 
     const levelLabels = {
-      basic:          'Básica — verificar se o usuário está no servidor',
-      advanced:       'Avançada — cargos, atividade, níveis e estatísticas',
-      multi_giveaway: 'Multi-Sorteio — participação em sorteios compartilhados',
+      basic:          this.t(interaction, 'engine_auth_level_basic'),
+      advanced:       this.t(interaction, 'engine_auth_level_advanced'),
+      multi_giveaway: this.t(interaction, 'engine_auth_level_multi'),
     };
 
     // Buscar dados do servidor dono
@@ -1345,7 +1345,7 @@ class GiveawaySystem {
       ownerGuild = await DiscordRequest(`/guilds/${ownerGuildId}?with_counts=false`, { method: 'GET' });
     } catch {
       await this.followUpEphemeral(interaction, {
-        embeds: [{ description: `${E.pensando} Não consegui acessar os dados do servidor \`${ownerGuildId}\`.`, color: DEFAULT_COLOR }]
+        embeds: [{ description: `${E.pensando} ${this.t(interaction, 'engine_auth_cant_access_guild', { guildId: ownerGuildId })}`, color: DEFAULT_COLOR }]
       });
       return;
     }
@@ -1387,13 +1387,14 @@ class GiveawaySystem {
       : null;
 
     const authEmbed = {
-      title: `${E.animada} Solicitação de Autorização`,
-      description:
-        `Olá! O servidor abaixo deseja utilizar dados de **${ownerGuild.name}** em um sorteio.\n\n` +
-        `**Servidor solicitante:** ${requesterGuild.name} \`(${requesterGuildId})\`\n` +
-        `**Configurado por:** ${configurerTag}\n` +
-        `**Permissão solicitada:** ${levelLabels[level]}\n\n` +
-        `Apenas você, como dono do servidor, pode aceitar esta solicitação.`,
+      title: `${E.animada} ${this.t(interaction, 'engine_auth_request_title')}`,
+      description: this.t(interaction, 'engine_auth_request_desc', {
+        ownerName: ownerGuild.name,
+        reqName: requesterGuild.name,
+        reqId: requesterGuildId,
+        configurer: configurerTag,
+        level: levelLabels[level],
+      }),
       color: DEFAULT_COLOR,
       thumbnail: requesterIcon ? { url: requesterIcon } : undefined,
     };
@@ -1402,11 +1403,11 @@ class GiveawaySystem {
       type: 1,
       components: [
         {
-          type: 2, label: 'Autorizar', style: 3,
+          type: 2, label: this.t(interaction, 'engine_auth_btn_approve'), style: 3,
           custom_id: JSON.stringify({ t: 'auth_approve', authId: auth._id.toString() })
         },
         {
-          type: 2, label: 'Recusar', style: 4,
+          type: 2, label: this.t(interaction, 'engine_auth_btn_deny'), style: 4,
           custom_id: JSON.stringify({ t: 'auth_deny', authId: auth._id.toString() })
         },
       ]
@@ -1460,9 +1461,7 @@ class GiveawaySystem {
         } catch {
           await this.followUpEphemeral(interaction, {
             embeds: [{
-              description:
-                `${E.pensando} Não consegui enviar a solicitação para o servidor \`${ownerGuildId}\`.\n` +
-                `Verifique se tenho permissão de enviar mensagens lá.`,
+              description: `${E.pensando} ${this.t(interaction, 'engine_auth_cant_send_guild', { guildId: ownerGuildId })}`,
               color: DEFAULT_COLOR,
             }]
           });
@@ -1473,9 +1472,7 @@ class GiveawaySystem {
 
     await this.followUpEphemeral(interaction, {
       embeds: [{
-        description:
-          `${E.feliz} Solicitação enviada para o dono do servidor \`${ownerGuild.name}\`!\n` +
-          `Assim que aprovada, você poderá continuar a configuração~`,
+        description: `${E.feliz} ${this.t(interaction, 'engine_auth_sent_ok', { ownerName: ownerGuild.name })}`,
         color: DEFAULT_COLOR,
       }]
     });
@@ -1499,7 +1496,7 @@ class GiveawaySystem {
 
     if (!auth || auth.status !== 'pending') {
       return this.reply(interaction, {
-        content: `${E.pensando} Esta solicitação já foi respondida.`, flags: 64,
+        content: `${E.pensando} ${this.t(interaction, 'engine_auth_already_answered')}`, flags: 64,
       });
     }
 
@@ -1507,7 +1504,7 @@ class GiveawaySystem {
     const responderId = interaction.member?.user?.id || interaction.user?.id;
     if (responderId !== auth.ownerId) {
       return this.reply(interaction, {
-        content: `${E.pensando} Apenas o **dono do servidor** pode responder esta solicitação!`,
+        content: `${E.pensando} ${this.t(interaction, 'engine_auth_only_owner')}`,
         flags: 64,
       });
     }
@@ -1525,10 +1522,10 @@ class GiveawaySystem {
           type: 7,
           data: {
             embeds: [{
-              title: approve ? `${E.festa} Autorização Concedida!` : `${E.pensando} Solicitação Recusada`,
+              title: approve ? `${E.festa} ${this.t(interaction, 'engine_auth_granted_title')}` : `${E.pensando} ${this.t(interaction, 'engine_auth_denied_title')}`,
               description: approve
-                ? `O servidor \`${auth.requesterGuildId}\` foi autorizado com sucesso!`
-                : `A solicitação de \`${auth.requesterGuildId}\` foi recusada.`,
+                ? this.t(interaction, 'engine_auth_granted_desc', { guildId: auth.requesterGuildId })
+                : this.t(interaction, 'engine_auth_denied_desc', { guildId: auth.requesterGuildId }),
               color: approve ? 0x57F287 : 0xED4245,
             }],
             components: [],
@@ -1549,23 +1546,23 @@ class GiveawaySystem {
     return parseInt(match[1]) * (ms[match[2].toLowerCase()] || 0) || null;
   }
 
-  _reqLabel(req) {
+  _reqLabel(req, interaction) {
     const map = {
-      REQUIRED_ROLE:             `Cargo obrigatório: <@&${req.value}>`,
-      FORBIDDEN_ROLE:            `Cargo proibido: <@&${req.value}>`,
-      MIN_MESSAGES:              `Mínimo ${req.value} mensagem(s)`,
-      MIN_DAYS_IN_SERVER:        `${req.value} dia(s) no servidor`,
-      MIN_ACCOUNT_AGE:           `Conta com ${req.value}+ dias`,
-      IN_SERVER:                 `Estar no servidor \`${req.guildId}\``,
-      REQUIRED_ROLE_IN_SERVER:   `Cargo em servidor externo`,
-      FORBIDDEN_ROLE_IN_SERVER:  `Sem cargo em servidor externo`,
-      MIN_DAYS_IN_EXT_SERVER:    `${req.value} dia(s) em servidor externo`,
-      MIN_MESSAGES_IN_EXT_SERVER:`${req.value} msgs em servidor externo`,
-      MIN_HOURS_IN_CALL:         `${req.value}h em call`,
-      MIN_LEVEL:                 `Nível ${req.value}+`,
-      MIN_XP:                    `${req.value} XP+`,
-      HAS_BOOSTER_ROLE:          `Cargo Booster`,
-      HAS_SUPPORTER_ROLE:        `Cargo Apoiador`,
+      REQUIRED_ROLE:              this.t(interaction, 'engine_req_label_required_role', { value: req.value }),
+      FORBIDDEN_ROLE:             this.t(interaction, 'engine_req_label_forbidden_role', { value: req.value }),
+      MIN_MESSAGES:               this.t(interaction, 'engine_req_label_min_messages', { value: req.value }),
+      MIN_DAYS_IN_SERVER:         this.t(interaction, 'engine_req_label_min_days_server', { value: req.value }),
+      MIN_ACCOUNT_AGE:            this.t(interaction, 'engine_req_label_min_account_age', { value: req.value }),
+      IN_SERVER:                  this.t(interaction, 'engine_req_label_in_server', { guildId: req.guildId }),
+      REQUIRED_ROLE_IN_SERVER:    this.t(interaction, 'engine_req_label_required_role_ext'),
+      FORBIDDEN_ROLE_IN_SERVER:   this.t(interaction, 'engine_req_label_forbidden_role_ext'),
+      MIN_DAYS_IN_EXT_SERVER:     this.t(interaction, 'engine_req_label_min_days_ext', { value: req.value }),
+      MIN_MESSAGES_IN_EXT_SERVER: this.t(interaction, 'engine_req_label_min_msgs_ext', { value: req.value }),
+      MIN_HOURS_IN_CALL:          this.t(interaction, 'engine_req_label_min_hours_call', { value: req.value }),
+      MIN_LEVEL:                  this.t(interaction, 'engine_req_label_min_level', { value: req.value }),
+      MIN_XP:                     this.t(interaction, 'engine_req_label_min_xp', { value: req.value }),
+      HAS_BOOSTER_ROLE:           this.t(interaction, 'engine_req_label_booster'),
+      HAS_SUPPORTER_ROLE:         this.t(interaction, 'engine_req_label_supporter'),
     };
     return map[req.type] || req.type;
   }

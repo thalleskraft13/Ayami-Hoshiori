@@ -69,12 +69,16 @@ module.exports = {
       {
         type: 1,
         name: 'builder',
+        name_localizations: { 'en-US': "builder", 'en-GB': "builder", 'es-ES': "builder" },
         description: 'Abre o Logic Builder — crie fluxos e automações do servidor',
+        description_localizations: { 'en-US': "Opens the Logic Builder — create server flows and automations", 'en-GB': "Opens the Logic Builder — create server flows and automations", 'es-ES': "Abre el Logic Builder — crea flujos y automatizaciones del servidor" },
       },
       {
         type: 1,
         name: 'script',
+        name_localizations: { 'en-US': "script", 'en-GB': "script", 'es-ES': "script" },
         description: 'Painel informativo do Logic Script (arquivos, plano, execuções, erros)',
+        description_localizations: { 'en-US': "Logic Script info panel (files, plan, executions, errors)", 'en-GB': "Logic Script info panel (files, plan, executions, errors)", 'es-ES': "Panel informativo de Logic Script (archivos, plan, ejecuciones, errores)" },
       },
     ],
   },

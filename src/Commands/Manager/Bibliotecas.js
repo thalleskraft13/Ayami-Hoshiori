@@ -14,6 +14,21 @@ const CATEGORIES = [
   'Diversão','Outros'
 ];
 
+const CATEGORY_LOCALIZATIONS = {
+  'Moderação':   { 'en-US': 'Moderation',   'en-GB': 'Moderation',   'es-ES': 'Moderacion' },
+  'Economia':    { 'en-US': 'Economy',      'en-GB': 'Economy',      'es-ES': 'Economia' },
+  'Automação':   { 'en-US': 'Automation',   'en-GB': 'Automation',   'es-ES': 'Automatizacion' },
+  'Logs':        { 'en-US': 'Logs',         'en-GB': 'Logs',         'es-ES': 'Registros' },
+  'Tickets':     { 'en-US': 'Tickets',      'en-GB': 'Tickets',      'es-ES': 'Tickets' },
+  'Recompensas': { 'en-US': 'Rewards',      'en-GB': 'Rewards',      'es-ES': 'Recompensas' },
+  'Eventos':     { 'en-US': 'Events',       'en-GB': 'Events',       'es-ES': 'Eventos' },
+  'RPG':         { 'en-US': 'RPG',          'en-GB': 'RPG',          'es-ES': 'RPG' },
+  'Utilidade':   { 'en-US': 'Utility',      'en-GB': 'Utility',      'es-ES': 'Utilidad' },
+  'Comunidade':  { 'en-US': 'Community',    'en-GB': 'Community',    'es-ES': 'Comunidad' },
+  'Diversão':    { 'en-US': 'Fun',          'en-GB': 'Fun',          'es-ES': 'Diversion' },
+  'Outros':      { 'en-US': 'Other',        'en-GB': 'Other',        'es-ES': 'Otros' },
+};
+
 const CATEGORY_EMOJI = {
   'Moderação':   '🛡️',
   'Economia':    '💰',
@@ -590,19 +605,35 @@ module.exports = {
       {
         type:        1,
         name:        'pesquisar',
+        name_localizations: { 'en-US': "search", 'en-GB': "search", 'es-ES': "buscar" },
         description: 'Pesquisa fluxos disponíveis na biblioteca',
+        description_localizations: { 'en-US': "Search available flows in the library", 'en-GB': "Search available flows in the library", 'es-ES': "Busca flujos disponibles en la biblioteca" },
         options: [
-          { type: 3, name: 'nome',      description: 'Filtrar por nome',      required: false },
-          { type: 3, name: 'categoria', description: 'Filtrar por categoria', required: false,
-            choices: CATEGORIES.map(c => ({ name: c, value: c })) },
-          { type: 3, name: 'tag',       description: 'Filtrar por tag',       required: false },
-          { type: 3, name: 'autor',     description: 'ID do autor',           required: false },
-          { type: 3, name: 'ordenar',   description: 'Ordenação dos resultados', required: false,
+          { type: 3, name: 'nome',
+          name_localizations: { 'en-US': "name", 'en-GB': "name", 'es-ES': "nombre" },      description: 'Filtrar por nome',
+          description_localizations: { 'en-US': "Filter by name", 'en-GB': "Filter by name", 'es-ES': "Filtrar por nombre" },      required: false },
+          { type: 3, name: 'categoria',
+          name_localizations: { 'en-US': "category", 'en-GB': "category", 'es-ES': "categoria" }, description: 'Filtrar por categoria',
+          description_localizations: { 'en-US': "Filter by category", 'en-GB': "Filter by category", 'es-ES': "Filtrar por categoria" }, required: false,
+            choices: CATEGORIES.map(c => ({ name: c, name_localizations: CATEGORY_LOCALIZATIONS[c], value: c })) },
+          { type: 3, name: 'tag',
+          name_localizations: { 'en-US': "tag", 'en-GB': "tag", 'es-ES': "etiqueta" },       description: 'Filtrar por tag',
+          description_localizations: { 'en-US': "Filter by tag", 'en-GB': "Filter by tag", 'es-ES': "Filtrar por etiqueta" },       required: false },
+          { type: 3, name: 'autor',
+          name_localizations: { 'en-US': "author", 'en-GB': "author", 'es-ES': "autor" },     description: 'ID do autor',
+          description_localizations: { 'en-US': "Author's ID", 'en-GB': "Author's ID", 'es-ES': "ID del autor" },           required: false },
+          { type: 3, name: 'ordenar',
+          name_localizations: { 'en-US': "sort", 'en-GB': "sort", 'es-ES': "ordenar" },   description: 'Ordenação dos resultados',
+          description_localizations: { 'en-US': "Sort order for the results", 'en-GB': "Sort order for the results", 'es-ES': "Orden de los resultados" }, required: false,
             choices: [
-              { name: '📥 Mais instalados', value: 'installs' },
-              { name: '⭐ Melhor avaliados', value: 'rating'   },
-              { name: '🔥 Tendência',        value: 'trending' },
-              { name: '🕐 Mais recentes',    value: 'recent'   }
+              { name: '📥 Mais instalados',
+              name_localizations: { 'en-US': "📥 Most installed", 'en-GB': "📥 Most installed", 'es-ES': "📥 Mas instalados" }, value: 'installs' },
+              { name: '⭐ Melhor avaliados',
+              name_localizations: { 'en-US': "⭐ Top rated", 'en-GB': "⭐ Top rated", 'es-ES': "⭐ Mejor valorados" }, value: 'rating'   },
+              { name: '🔥 Tendência',
+              name_localizations: { 'en-US': "🔥 Trending", 'en-GB': "🔥 Trending", 'es-ES': "🔥 Tendencia" },        value: 'trending' },
+              { name: '🕐 Mais recentes',
+              name_localizations: { 'en-US': "🕐 Most recent", 'en-GB': "🕐 Most recent", 'es-ES': "🕐 Mas recientes" },    value: 'recent'   }
             ]
           }
         ]
@@ -610,65 +641,95 @@ module.exports = {
       {
         type:        1,
         name:        'ver',
+        name_localizations: { 'en-US': "view", 'en-GB': "view", 'es-ES': "ver" },
         description: 'Exibe detalhes de uma entrada da biblioteca',
+        description_localizations: { 'en-US': "Shows details of a library entry", 'en-GB': "Shows details of a library entry", 'es-ES': "Muestra los detalles de una entrada de la biblioteca" },
         options: [
-          { type: 3, name: 'id', description: 'ID da entrada (libId)', required: true }
+          { type: 3, name: 'id',
+          name_localizations: { 'en-US': "id", 'en-GB': "id", 'es-ES': "id" }, description: 'ID da entrada (libId)',
+          description_localizations: { 'en-US': "Entry ID (libId)", 'en-GB': "Entry ID (libId)", 'es-ES': "ID de la entrada (libId)" }, required: true }
         ]
       },
       {
         type:        1,
         name:        'instalar',
+        name_localizations: { 'en-US': "install", 'en-GB': "install", 'es-ES': "instalar" },
         description: 'Instala um sistema da biblioteca neste servidor',
+        description_localizations: { 'en-US': "Installs a library system on this server", 'en-GB': "Installs a library system on this server", 'es-ES': "Instala un sistema de la biblioteca en este servidor" },
         options: [
-          { type: 3, name: 'id', description: 'ID da entrada (libId)', required: true }
+          { type: 3, name: 'id',
+          name_localizations: { 'en-US': "id", 'en-GB': "id", 'es-ES': "id" }, description: 'ID da entrada (libId)',
+          description_localizations: { 'en-US': "Entry ID (libId)", 'en-GB': "Entry ID (libId)", 'es-ES': "ID de la entrada (libId)" }, required: true }
         ]
       },
       {
         type:        1,
         name:        'publicar',
-        description: 'Publica seus fluxos na biblioteca para a comunidade'
+        name_localizations: { 'en-US': "publish", 'en-GB': "publish", 'es-ES': "publicar" },
+        description: 'Publica seus fluxos na biblioteca para a comunidade',
+        description_localizations: { 'en-US': "Publishes your flows to the library for the community", 'en-GB': "Publishes your flows to the library for the community", 'es-ES': "Publica tus flujos en la biblioteca para la comunidad" }
       },
       {
         type:        1,
         name:        'atualizar',
+        name_localizations: { 'en-US': "update", 'en-GB': "update", 'es-ES': "actualizar" },
         description: 'Publica uma nova versão de uma entrada sua',
+        description_localizations: { 'en-US': "Publishes a new version of one of your entries", 'en-GB': "Publishes a new version of one of your entries", 'es-ES': "Publica una nueva version de una de tus entradas" },
         options: [
-          { type: 3, name: 'id', description: 'ID da entrada (libId)', required: true }
+          { type: 3, name: 'id',
+          name_localizations: { 'en-US': "id", 'en-GB': "id", 'es-ES': "id" }, description: 'ID da entrada (libId)',
+          description_localizations: { 'en-US': "Entry ID (libId)", 'en-GB': "Entry ID (libId)", 'es-ES': "ID de la entrada (libId)" }, required: true }
         ]
       },
       {
         type:        1,
         name:        'editar',
+        name_localizations: { 'en-US': "edit", 'en-GB': "edit", 'es-ES': "editar" },
         description: 'Edita os metadados de uma entrada sua (nome, descrição, tags...)',
+        description_localizations: { 'en-US': "Edits the metadata of one of your entries (name, description, tags...)", 'en-GB': "Edits the metadata of one of your entries (name, description, tags...)", 'es-ES': "Edita los metadatos de una de tus entradas (nombre, descripcion, etiquetas...)" },
         options: [
-          { type: 3, name: 'id', description: 'ID da entrada (libId)', required: true }
+          { type: 3, name: 'id',
+          name_localizations: { 'en-US': "id", 'en-GB': "id", 'es-ES': "id" }, description: 'ID da entrada (libId)',
+          description_localizations: { 'en-US': "Entry ID (libId)", 'en-GB': "Entry ID (libId)", 'es-ES': "ID de la entrada (libId)" }, required: true }
         ]
       },
       {
         type:        1,
         name:        'apagar',
+        name_localizations: { 'en-US': "delete", 'en-GB': "delete", 'es-ES': "eliminar" },
         description: 'Remove uma entrada sua da biblioteca',
+        description_localizations: { 'en-US': "Removes one of your entries from the library", 'en-GB': "Removes one of your entries from the library", 'es-ES': "Elimina una de tus entradas de la biblioteca" },
         options: [
-          { type: 3, name: 'id', description: 'ID da entrada (libId)', required: true }
+          { type: 3, name: 'id',
+          name_localizations: { 'en-US': "id", 'en-GB': "id", 'es-ES': "id" }, description: 'ID da entrada (libId)',
+          description_localizations: { 'en-US': "Entry ID (libId)", 'en-GB': "Entry ID (libId)", 'es-ES': "ID de la entrada (libId)" }, required: true }
         ]
       },
       {
         type:        1,
         name:        'minhas',
-        description: 'Lista todas as suas publicações na biblioteca'
+        name_localizations: { 'en-US': "mine", 'en-GB': "mine", 'es-ES': "mias" },
+        description: 'Lista todas as suas publicações na biblioteca',
+        description_localizations: { 'en-US': "Lists all of your publications in the library", 'en-GB': "Lists all of your publications in the library", 'es-ES': "Lista todas tus publicaciones en la biblioteca" }
       },
       {
         type:        1,
         name:        'perfil',
+        name_localizations: { 'en-US': "profile", 'en-GB': "profile", 'es-ES': "perfil" },
         description: 'Exibe o perfil de um criador',
+        description_localizations: { 'en-US': "Shows a creator's profile", 'en-GB': "Shows a creator's profile", 'es-ES': "Muestra el perfil de un creador" },
         options: [
-          { type: 6, name: 'usuario', description: 'Usuário (vazio = você mesmo)', required: false }
+          { type: 6, name: 'usuario',
+          name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" }, description: 'Usuário (vazio = você mesmo)',
+          description_localizations: { 'en-US': "User (empty = yourself)", 'en-GB': "User (empty = yourself)", 'es-ES': "Usuario (vacio = tu mismo)" }, required: false }
         ]
       },
       {
         type:        1,
         name:        'destaques',
-        description: 'Exibe os destaques da semana na biblioteca'
+        name_localizations: { 'en-US': "featured", 'en-GB': "featured", 'es-ES': "destacados" },
+        description: 'Exibe os destaques da semana na biblioteca',
+        description_localizations: { 'en-US': "Shows this week's featured entries in the library", 'en-GB': "Shows this week's featured entries in the library", 'es-ES': "Muestra los destacados de la semana en la biblioteca" }
       }
     ]
   },

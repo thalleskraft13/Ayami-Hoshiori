@@ -18,12 +18,16 @@ module.exports = {
     options: [
       {
         name: "ver",
+        name_localizations: { 'en-US': "view", 'en-GB': "view", 'es-ES': "ver" },
         description: "Veja seu Rank de Aventureiro atual",
+        description_localizations: { 'en-US': "See your current Adventurer Rank", 'en-GB': "See your current Adventurer Rank", 'es-ES': "Consulta tu Rango de Aventurero actual" },
         type: 1,
         options: [
           {
             name: "usuario",
+            name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
             description: "Mencione ou insira o ID",
+            description_localizations: { 'en-US': "Mention or enter the ID", 'en-GB': "Mention or enter the ID", 'es-ES': "Menciona o ingresa el ID" },
             type: 6,
             required: false
           }
@@ -31,7 +35,9 @@ module.exports = {
       },
       {
         name: "placar",
+        name_localizations: { 'en-US': "leaderboard", 'en-GB': "leaderboard", 'es-ES': "clasificacion" },
         description: "Veja os maiores aventureiros",
+        description_localizations: { 'en-US': "See the top adventurers", 'en-GB': "See the top adventurers", 'es-ES': "Consulta a los mejores aventureros" },
         type: 1
       }
     ]

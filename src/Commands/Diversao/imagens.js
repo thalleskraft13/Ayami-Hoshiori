@@ -16,137 +16,183 @@ module.exports = {
         type: 1,
         options: [{
             name: 'cinema',
+            name_localizations: { 'en-US': "cinema", 'en-GB': "cinema", 'es-ES': "cine" },
             description: 'Coloca o avatar ou uma imagem na tela do cinema',
+            description_localizations: { 'en-US': "Puts the avatar or an image on the cinema screen", 'en-GB': "Puts the avatar or an image on the cinema screen", 'es-ES': "Coloca el avatar o una imagen en la pantalla de cine" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'rezando',
+            name_localizations: { 'en-US': "praying", 'en-GB': "praying", 'es-ES': "rezando" },
             description: 'Coloca o avatar ou uma imagem na tela de TV rezando',
+            description_localizations: { 'en-US': "Puts the avatar or an image on the praying TV screen", 'en-GB': "Puts the avatar or an image on the praying TV screen", 'es-ES': "Coloca el avatar o una imagen en la pantalla de TV rezando" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'jornal',
+            name_localizations: { 'en-US': "newspaper", 'en-GB': "newspaper", 'es-ES': "periodico" },
             description: 'Coloca o avatar ou uma imagem na tela de TV rezando',
+            description_localizations: { 'en-US': "Puts the avatar or an image on the praying TV screen", 'en-GB': "Puts the avatar or an image on the praying TV screen", 'es-ES': "Coloca el avatar o una imagen en la pantalla de TV rezando" },
             type: 1,
             options: [{
                     name: 'titulo',
+                    name_localizations: { 'en-US': "title", 'en-GB': "title", 'es-ES': "titulo" },
                     description: 'Titulo da noticia',
+                    description_localizations: { 'en-US': "News headline", 'en-GB': "News headline", 'es-ES': "Titulo de la noticia" },
                     type: 3,
                     required: true,
                 },
                 {
                     name: 'descrição',
+                    name_localizations: { 'en-US': "description", 'en-GB': "description", 'es-ES': "descripcion" },
                     description: 'Descrição da noticia',
+                    description_localizations: { 'en-US': "News description", 'en-GB': "News description", 'es-ES': "Descripcion de la noticia" },
                     type: 3,
                     required: true,
                 },
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
               name: 'gohan',
+              name_localizations: { 'en-US': "gohan", 'en-GB': "gohan", 'es-ES': "gohan" },
             description: 'Coloca o avatar ou uma imagem nos oculos do Gohan',
+            description_localizations: { 'en-US': "Puts the avatar or an image on Gohan's glasses", 'en-GB': "Puts the avatar or an image on Gohan's glasses", 'es-ES': "Coloca el avatar o una imagen en las gafas de Gohan" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'prisao',
+            name_localizations: { 'en-US': "prison", 'en-GB': "prison", 'es-ES': "prision" },
             description: 'Coloca o avatar ou uma imagem em uma prisão',
+            description_localizations: { 'en-US': "Puts the avatar or an image in a prison", 'en-GB': "Puts the avatar or an image in a prison", 'es-ES': "Coloca el avatar o una imagen en una prision" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'pinkiepie',
+            name_localizations: { 'en-US': "pinkiepie", 'en-GB': "pinkiepie", 'es-ES': "pinkiepie" },
             description: 'Coloca o avatar ou uma imagem em uma decoração da Pinkiepie',
+            description_localizations: { 'en-US': "Puts the avatar or an image in a Pinkie Pie decoration", 'en-GB': "Puts the avatar or an image in a Pinkie Pie decoration", 'es-ES': "Coloca el avatar o una imagen en una decoracion de Pinkie Pie" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }
             ]
         },{
             name: 'planomaligno',
+            name_localizations: { 'en-US': "evilplan", 'en-GB': "evilplan", 'es-ES': "planmaligno" },
             description: 'Coloca o avatar ou uma imagem em plano maligno',
+            description_localizations: { 'en-US': "Puts the avatar or an image in an evil plan", 'en-GB': "Puts the avatar or an image in an evil plan", 'es-ES': "Coloca el avatar o una imagen en un plan malvado" },
             type: 1,
             options: [
                 {
                     name: 'usuario',
+                    name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
                     description: 'Usuário cujo avatar será usado',
+                    description_localizations: { 'en-US': "User whose avatar will be used", 'en-GB': "User whose avatar will be used", 'es-ES': "Usuario cuyo avatar sera usado" },
                     type: 6,
                     required: false,
                 },
                 {
                     name: 'arquivo',
+                    name_localizations: { 'en-US': "file", 'en-GB': "file", 'es-ES': "archivo" },
                     description: 'Envie uma imagem PNG ou JPEG',
+                    description_localizations: { 'en-US': "Send a PNG or JPEG image", 'en-GB': "Send a PNG or JPEG image", 'es-ES': "Envia una imagen PNG o JPEG" },
                     type: 11,
                     required: false,
                 }

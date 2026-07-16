@@ -14,13 +14,17 @@ module.exports = {
         options: [
             {
                 name: "tempo",
+                name_localizations: { 'en-US': "time", 'en-GB': "time", 'es-ES': "tiempo" },
                 description: "Tempo do lembrete (ex: 10s, 5m, 1h30m, 2d)",
+                description_localizations: { 'en-US': "Reminder time (e.g. 10s, 5m, 1h30m, 2d)", 'en-GB': "Reminder time (e.g. 10s, 5m, 1h30m, 2d)", 'es-ES': "Tiempo del recordatorio (ej: 10s, 5m, 1h30m, 2d)" },
                 type: 3,
                 required: true
             },
             {
                 name: "mensagem",
+                name_localizations: { 'en-US': "message", 'en-GB': "message", 'es-ES': "mensaje" },
                 description: "Mensagem do lembrete",
+                description_localizations: { 'en-US': "Reminder message", 'en-GB': "Reminder message", 'es-ES': "Mensaje del recordatorio" },
                 type: 3,
                 required: true
             }

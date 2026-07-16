@@ -255,15 +255,23 @@ module.exports = {
     },
     type       : 1,
     options    : [
-      { name: "embed",        description: "Editor avançado de Embed com preview em tempo real", type: 1 },
-      { name: "componentsv2", description: "Editor visual de Components V2 da Discord API",      type: 1 },
+      { name: "embed",
+      name_localizations: { 'en-US': "embed", 'en-GB': "embed", 'es-ES': "embed" },        description: "Editor avançado de Embed com preview em tempo real",
+      description_localizations: { 'en-US': "Advanced Embed editor with real-time preview", 'en-GB': "Advanced Embed editor with real-time preview", 'es-ES': "Editor avanzado de Embed con vista previa en tiempo real" }, type: 1 },
+      { name: "componentsv2",
+      name_localizations: { 'en-US': "componentsv2", 'en-GB': "componentsv2", 'es-ES': "componentsv2" }, description: "Editor visual de Components V2 da Discord API",
+      description_localizations: { 'en-US': "Visual editor for Discord API's Components V2", 'en-GB': "Visual editor for Discord API's Components V2", 'es-ES': "Editor visual de Components V2 de la API de Discord" },      type: 1 },
       {
         name       : "editar",
+        name_localizations: { 'en-US': "edit", 'en-GB': "edit", 'es-ES': "editar" },
         description: "Reabrir e editar uma mensagem salva anteriormente",
+        description_localizations: { 'en-US': "Reopen and edit a previously saved message", 'en-GB': "Reopen and edit a previously saved message", 'es-ES': "Reabrir y editar un mensaje guardado anteriormente" },
         type       : 1,
         options    : [{
           name       : "id",
+          name_localizations: { 'en-US': "id", 'en-GB': "id", 'es-ES': "id" },
           description: "ID da mensagem salva (deixe vazio para ver a lista)",
+          description_localizations: { 'en-US': "ID of the saved message (leave empty to see the list)", 'en-GB': "ID of the saved message (leave empty to see the list)", 'es-ES': "ID del mensaje guardado (dejar vacio para ver la lista)" },
           type       : 3,
           required   : false
         }]

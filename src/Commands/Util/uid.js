@@ -18,38 +18,51 @@ module.exports = {
     type: 1,
     options: [{
       name: "salvar",
+      name_localizations: { 'en-US': "save", 'en-GB': "save", 'es-ES': "guardar" },
       description: "Salve seu Uid para todos visualizar",
+      description_localizations: { 'en-US': "Save your UID for everyone to see", 'en-GB': "Save your UID for everyone to see", 'es-ES': "Guarda tu UID para que todos lo vean" },
       type: 1,
       options: [{
         name: "uid",
+        name_localizations: { 'en-US': "uid", 'en-GB': "uid", 'es-ES': "uid" },
         description: "Insira seu Uid do jogo",
+        description_localizations: { 'en-US': "Enter your in-game UID", 'en-GB': "Enter your in-game UID", 'es-ES': "Ingresa tu UID del juego" },
         type: 10,
         max_length: 15,
         min_length: 7,
         required: true
       },{
         name: "servidor",
+        name_localizations: { 'en-US': "server", 'en-GB': "server", 'es-ES': "servidor" },
         description: "Coloque qual servidor você usa",
+        description_localizations: { 'en-US': "Enter which server you play on", 'en-GB': "Enter which server you play on", 'es-ES': "Indica que servidor usas" },
         type: 3,
         required: true,
         choices: [{
           name: "America Server",
+          name_localizations: { 'en-US': "America Server", 'en-GB': "America Server", 'es-ES': "Servidor America" },
           value: "1"
         },{
           name: "Europa Server",
+          name_localizations: { 'en-US': "Europe Server", 'en-GB': "Europe Server", 'es-ES': "Servidor Europa" },
           value: "2"
         },{
           name: "Asia Server",
+          name_localizations: { 'en-US': "Asia Server", 'en-GB': "Asia Server", 'es-ES': "Servidor Asia" },
           value: "3"
         }]
       }]
     },{
       name: "ver",
+      name_localizations: { 'en-US': "view", 'en-GB': "view", 'es-ES': "ver" },
       description: "Veja o Uid de algum membro",
+      description_localizations: { 'en-US': "See a member's UID", 'en-GB': "See a member's UID", 'es-ES': "Consulta el UID de algun miembro" },
       type: 1,
       options: [{
         name: "usuario",
+        name_localizations: { 'en-US': "user", 'en-GB': "user", 'es-ES': "usuario" },
         description: "Mencione ou insira o ID do usuario",
+        description_localizations: { 'en-US': "Mention or enter the user's ID", 'en-GB': "Mention or enter the user's ID", 'es-ES': "Menciona o ingresa el ID del usuario" },
         type: 6,
         required: true
       }]

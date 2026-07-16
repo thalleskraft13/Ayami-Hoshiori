@@ -10,8 +10,17 @@ const AuthorizationDb  = require('../../../../Mongodb/giveawayAuthorization.js')
  * no sorteio. Chamado exclusivamente durante o sorteio (não na entrada).
  *
  * Retorna: { ok: boolean, reason: string | null }
+ *
+ * Os "reason" aparecem no relatório público de encerramento (histórico
+ * do sorteio) — não há um usuário específico assistindo nesse momento,
+ * então traduzimos via client.t() com fallback automático em pt-BR.
  */
 class GiveawayRequirements {
+
+  static _t(client, key, extra = {}) {
+    if (client?.t) return client.t(`sorteio.${key}`, extra);
+    return key;
+  }
 
   /**
    * @param {object} participant  Objeto do participante (userId, guildId)
@@ -41,32 +50,32 @@ class GiveawayRequirements {
       switch (req.type) {
 
         case 'REQUIRED_ROLE':
-          return this._checkRequiredRole(req, participant, doc.guildId);
+          return this._checkRequiredRole(req, participant, doc.guildId, client);
 
         case 'FORBIDDEN_ROLE':
-          return this._checkForbiddenRole(req, participant, doc.guildId);
+          return this._checkForbiddenRole(req, participant, doc.guildId, client);
 
         case 'MIN_MESSAGES':
           return this._checkMinMessages(req, participant, doc.guildId, client);
 
         case 'MIN_DAYS_IN_SERVER':
-          return this._checkMinDaysInServer(req, participant, doc.guildId);
+          return this._checkMinDaysInServer(req, participant, doc.guildId, client);
 
         case 'MIN_ACCOUNT_AGE':
-          return this._checkMinAccountAge(req, participant);
+          return this._checkMinAccountAge(req, participant, client);
 
         case 'IN_SERVER':
-          return this._checkInServer(req, participant);
+          return this._checkInServer(req, participant, client);
 
         // Premium — servidor externo
         case 'REQUIRED_ROLE_IN_SERVER':
-          return this._checkRequiredRoleInServer(req, participant);
+          return this._checkRequiredRoleInServer(req, participant, client);
 
         case 'FORBIDDEN_ROLE_IN_SERVER':
-          return this._checkForbiddenRoleInServer(req, participant);
+          return this._checkForbiddenRoleInServer(req, participant, client);
 
         case 'MIN_DAYS_IN_EXT_SERVER':
-          return this._checkMinDaysInExtServer(req, participant);
+          return this._checkMinDaysInExtServer(req, participant, client);
 
         case 'MIN_MESSAGES_IN_EXT_SERVER':
           return this._checkMinMessagesInExtServer(req, participant, client);
@@ -81,7 +90,7 @@ class GiveawayRequirements {
           return this._checkMinXP(req, participant, client);
 
         case 'HAS_BOOSTER_ROLE':
-          return this._checkBooster(participant, req.guildId || doc.guildId);
+          return this._checkBooster(participant, req.guildId || doc.guildId, client);
 
         case 'HAS_SUPPORTER_ROLE':
           return this._checkSupporter(req, participant, client);
@@ -101,27 +110,27 @@ class GiveawayRequirements {
      VERIFICAÇÕES — SERVIDOR ATUAL
   ───────────────────────────────────────── */
 
-  static async _checkRequiredRole(req, participant, guildId) {
+  static async _checkRequiredRole(req, participant, guildId, client) {
 
     const member = await this._getMember(guildId, participant.userId);
-    if (!member) return { ok: false, reason: 'Não está mais no servidor.' };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const has = member.roles.includes(req.value);
     return {
       ok: has,
-      reason: has ? null : `Não possui o cargo obrigatório <@&${req.value}>.`,
+      reason: has ? null : this._t(client, 'req_missing_required_role', { value: req.value }),
     };
   }
 
-  static async _checkForbiddenRole(req, participant, guildId) {
+  static async _checkForbiddenRole(req, participant, guildId, client) {
 
     const member = await this._getMember(guildId, participant.userId);
-    if (!member) return { ok: false, reason: 'Não está mais no servidor.' };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const has = member.roles.includes(req.value);
     return {
       ok: !has,
-      reason: has ? `Possui o cargo proibido <@&${req.value}>.` : null,
+      reason: has ? this._t(client, 'req_has_forbidden_role', { value: req.value }) : null,
     };
   }
 
@@ -134,19 +143,19 @@ class GiveawayRequirements {
       const count = await client.giveaway?.messageTracker?.getCount(participant.userId, guildId) ?? 0;
       return {
         ok: count >= minMsg,
-        reason: count >= minMsg ? null : `Possui apenas ${count} mensagem(s) (mínimo: ${minMsg}).`,
+        reason: count >= minMsg ? null : this._t(client, 'req_not_enough_messages', { count, min: minMsg }),
       };
     } catch {
       return { ok: true, reason: null };
     }
   }
 
-  static async _checkMinDaysInServer(req, participant, guildId) {
+  static async _checkMinDaysInServer(req, participant, guildId, client) {
 
     const minDays = parseInt(req.value) || 0;
     const member  = await this._getMember(guildId, participant.userId);
 
-    if (!member) return { ok: false, reason: 'Não está mais no servidor.' };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const joinedAt = new Date(member.joined_at);
     const days     = Math.floor((Date.now() - joinedAt.getTime()) / 864e5);
@@ -155,11 +164,11 @@ class GiveawayRequirements {
       ok: days >= minDays,
       reason: days >= minDays
         ? null
-        : `Está no servidor há apenas ${days} dia(s) (mínimo: ${minDays}).`,
+        : this._t(client, 'req_not_enough_days_server', { days, min: minDays }),
     };
   }
 
-  static async _checkMinAccountAge(req, participant) {
+  static async _checkMinAccountAge(req, participant, client) {
 
     const minDays = parseInt(req.value) || 0;
 
@@ -172,7 +181,7 @@ class GiveawayRequirements {
       ok: days >= minDays,
       reason: days >= minDays
         ? null
-        : `Conta criada há apenas ${days} dia(s) (mínimo: ${minDays}).`,
+        : this._t(client, 'req_account_too_new', { days, min: minDays }),
     };
   }
 
@@ -180,12 +189,12 @@ class GiveawayRequirements {
      VERIFICAÇÕES — OUTRO SERVIDOR (GRATUITO)
   ───────────────────────────────────────── */
 
-  static async _checkInServer(req, participant) {
+  static async _checkInServer(req, participant, client) {
 
     const member = await this._getMember(req.guildId, participant.userId);
     return {
       ok: !!member,
-      reason: member ? null : `Não está no servidor parceiro \`${req.guildId}\`.`,
+      reason: member ? null : this._t(client, 'req_not_in_partner_server', { guildId: req.guildId }),
     };
   }
 
@@ -193,36 +202,36 @@ class GiveawayRequirements {
      VERIFICAÇÕES — OUTRO SERVIDOR (PREMIUM)
   ───────────────────────────────────────── */
 
-  static async _checkRequiredRoleInServer(req, participant) {
+  static async _checkRequiredRoleInServer(req, participant, client) {
 
     const member = await this._getMember(req.guildId, participant.userId);
-    if (!member) return { ok: false, reason: `Não está no servidor \`${req.guildId}\`.` };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_ext_server', { guildId: req.guildId }) };
 
     const has = member.roles.includes(req.value);
     return {
       ok: has,
-      reason: has ? null : `Não possui o cargo necessário no servidor \`${req.guildId}\`.`,
+      reason: has ? null : this._t(client, 'req_missing_role_ext', { guildId: req.guildId }),
     };
   }
 
-  static async _checkForbiddenRoleInServer(req, participant) {
+  static async _checkForbiddenRoleInServer(req, participant, client) {
 
     const member = await this._getMember(req.guildId, participant.userId);
-    if (!member) return { ok: false, reason: `Não está no servidor \`${req.guildId}\`.` };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_ext_server', { guildId: req.guildId }) };
 
     const has = member.roles.includes(req.value);
     return {
       ok: !has,
-      reason: has ? `Possui cargo proibido no servidor \`${req.guildId}\`.` : null,
+      reason: has ? this._t(client, 'req_has_forbidden_role_ext', { guildId: req.guildId }) : null,
     };
   }
 
-  static async _checkMinDaysInExtServer(req, participant) {
+  static async _checkMinDaysInExtServer(req, participant, client) {
 
     const minDays = parseInt(req.value) || 0;
     const member  = await this._getMember(req.guildId, participant.userId);
 
-    if (!member) return { ok: false, reason: `Não está no servidor \`${req.guildId}\`.` };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_ext_server', { guildId: req.guildId }) };
 
     const joinedAt = new Date(member.joined_at);
     const days     = Math.floor((Date.now() - joinedAt.getTime()) / 864e5);
@@ -231,7 +240,7 @@ class GiveawayRequirements {
       ok: days >= minDays,
       reason: days >= minDays
         ? null
-        : `Está no servidor parceiro há apenas ${days} dia(s) (mínimo: ${minDays}).`,
+        : this._t(client, 'req_not_enough_days_ext', { days, min: minDays }),
     };
   }
 
@@ -246,7 +255,7 @@ class GiveawayRequirements {
         ok: count >= minMsg,
         reason: count >= minMsg
           ? null
-          : `Possui apenas ${count} mensagens no servidor parceiro (mínimo: ${minMsg}).`,
+          : this._t(client, 'req_not_enough_messages_ext', { count, min: minMsg }),
       };
     } catch {
       return { ok: true, reason: null };
@@ -264,7 +273,7 @@ class GiveawayRequirements {
         ok: hours >= minHours,
         reason: hours >= minHours
           ? null
-          : `Ficou apenas ${hours.toFixed(1)}h em call (mínimo: ${minHours}h).`,
+          : this._t(client, 'req_not_enough_call_hours', { hours: hours.toFixed(1), min: minHours }),
       };
     } catch {
       return { ok: true, reason: null };
@@ -282,7 +291,7 @@ class GiveawayRequirements {
         ok: level >= minLevel,
         reason: level >= minLevel
           ? null
-          : `Nível ${level} insuficiente (mínimo: ${minLevel}).`,
+          : this._t(client, 'req_level_too_low', { level, min: minLevel }),
       };
     } catch {
       return { ok: true, reason: null };
@@ -300,22 +309,22 @@ class GiveawayRequirements {
         ok: xp >= minXP,
         reason: xp >= minXP
           ? null
-          : `XP ${xp} insuficiente (mínimo: ${minXP}).`,
+          : this._t(client, 'req_xp_too_low', { xp, min: minXP }),
       };
     } catch {
       return { ok: true, reason: null };
     }
   }
 
-  static async _checkBooster(participant, guildId) {
+  static async _checkBooster(participant, guildId, client) {
 
     const member = await this._getMember(guildId, participant.userId);
-    if (!member) return { ok: false, reason: 'Não está no servidor.' };
+    if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const isBooster = !!member.premium_since;
     return {
       ok: isBooster,
-      reason: isBooster ? null : 'Não é um Booster do servidor.',
+      reason: isBooster ? null : this._t(client, 'req_not_booster'),
     };
   }
 
@@ -329,7 +338,7 @@ class GiveawayRequirements {
       const isSupporter = await client.supporter?.check?.(participant.userId, req.guildId);
       return {
         ok: !!isSupporter,
-        reason: isSupporter ? null : 'Não é um Apoiador do servidor.',
+        reason: isSupporter ? null : this._t(client, 'req_not_supporter'),
       };
     } catch {
       return { ok: true, reason: null };

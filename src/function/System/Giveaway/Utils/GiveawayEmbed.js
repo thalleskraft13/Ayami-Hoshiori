@@ -12,34 +12,45 @@ const E = Object.freeze({
  *
  * Centraliza a construção de todas as embeds relacionadas a sorteios,
  * garantindo visual consistente e personalidade da Ayami.
+ *
+ * Estas embeds são PÚBLICAS (mensagem no canal, visível a todo mundo),
+ * então não há um "locale de quem está vendo" — usamos o client (se
+ * fornecido) pra traduzir com fallback automático em pt-BR quando não
+ * há contexto de usuário/idioma específico.
  */
 class GiveawayEmbed {
+
+  static _t(client, key, extra = {}) {
+    if (client?.t) return client.t(`sorteio.${key}`, extra);
+    return key; // fallback defensivo — nunca deve ser atingido em produção
+  }
 
   /* ─────────────────────────────────────────
      SORTEIO ATIVO
   ───────────────────────────────────────── */
 
-  static buildActive(doc) {
+  static buildActive(doc, client) {
 
+    const t = (key, extra) => this._t(client, key, extra);
     const endsTs    = Math.floor(doc.endsAt.getTime() / 1000);
     const totalPart = doc.participants.length;
     const isPaused  = doc.status === 'paused';
 
     const fields = [
       {
-        name:   '⏰ Encerramento',
+        name:   t('embed_field_ends'),
         value:  isPaused
-          ? `⏸ Pausado`
+          ? t('embed_ends_paused')
           : `<t:${endsTs}:R> (<t:${endsTs}:F>)`,
         inline: true,
       },
       {
-        name:   '🏆 Vencedores',
+        name:   t('embed_field_winners'),
         value:  String(doc.winners),
         inline: true,
       },
       {
-        name:   '👥 Participantes',
+        name:   t('embed_field_participants'),
         value:  String(totalPart),
         inline: true,
       },
@@ -47,7 +58,7 @@ class GiveawayEmbed {
 
     if (doc.bonusEntries?.length) {
       fields.push({
-        name: '✨ Entradas Bônus',
+        name: t('embed_field_bonus'),
         value: doc.bonusEntries
           .map(b => `<@&${b.roleId}> → +${b.entries}`)
           .join('\n'),
@@ -56,9 +67,9 @@ class GiveawayEmbed {
 
     if (doc.requirements?.length) {
       fields.push({
-        name: '📋 Requisitos',
+        name: t('embed_field_reqs'),
         value: doc.requirements
-          .map(r => `• ${this._reqLabel(r)}`)
+          .map(r => `• ${this._reqLabel(r, client)}`)
           .join('\n')
           .slice(0, 1000),
       });
@@ -66,15 +77,18 @@ class GiveawayEmbed {
 
     if (doc.customMessage) {
       fields.push({
-        name:  '📨 Mensagem',
+        name:  t('embed_field_msg'),
         value: doc.customMessage.slice(0, 500),
       });
     }
 
     if (doc.isMultiServer) {
       fields.push({
-        name:  '🌐 Multi-Servidor',
-        value: `Modo: ${doc.multiMode === 'global' ? 'Global' : 'Separado'} • ${doc.multiServers.length + 1} servidor(es)`,
+        name:  t('embed_field_multi'),
+        value: t('embed_multi_mode_line', {
+          modo: doc.multiMode === 'global' ? t('embed_multi_mode_global') : t('embed_multi_mode_separate'),
+          count: doc.multiServers.length + 1,
+        }),
       });
     }
 
@@ -82,12 +96,11 @@ class GiveawayEmbed {
       title: `${E.animada} ${doc.prize}`,
       description:
         doc.description
-          ? `${doc.description}\n\n` +
-            `Clique no botão abaixo para participar!`
-          : `Clique no botão abaixo para participar!`,
+          ? `${doc.description}\n\n${t('embed_join_hint')}`
+          : t('embed_join_hint'),
       color:     doc.color ?? 0xFFB7C5,
       fields,
-      footer:    { text: `ID: ${doc.giveawayId} • ${isPaused ? '⏸ Pausado' : '🟢 Ativo'}` },
+      footer:    { text: t('embed_footer_active', { id: doc.giveawayId, status: isPaused ? t('embed_footer_status_paused') : t('embed_footer_status_active') }) },
       timestamp: doc.endsAt.toISOString(),
       thumbnail: doc.thumbnail ? { url: doc.thumbnail } : undefined,
       image:     doc.banner    ? { url: doc.banner }    : undefined,
@@ -98,17 +111,19 @@ class GiveawayEmbed {
      SORTEIO ENCERRADO (mensagem original)
   ───────────────────────────────────────── */
 
-  static buildEnded(doc, result) {
+  static buildEnded(doc, result, client) {
+
+    const t = (key, extra) => this._t(client, key, extra);
 
     const winnersMention = result.winners.length
       ? result.winners.map(w => `<@${w.userId}>`).join(', ')
-      : 'Nenhum vencedor elegível.';
+      : t('embed_ended_no_winner');
 
     return {
-      title:       `${E.festa} ${doc.prize} — Encerrado!`,
-      description: `**Vencedor(es):** ${winnersMention}`,
+      title:       `${E.festa} ${t('embed_ended_title', { prize: doc.prize })}`,
+      description: t('embed_ended_desc', { winners: winnersMention }),
       color:       0x57F287,
-      footer:      { text: `ID: ${doc.giveawayId} • 🔴 Encerrado` },
+      footer:      { text: t('embed_footer_active', { id: doc.giveawayId, status: t('embed_footer_status_ended') }) },
       timestamp:   doc.endedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
@@ -117,7 +132,9 @@ class GiveawayEmbed {
      RELATÓRIO DE ENCERRAMENTO
   ───────────────────────────────────────── */
 
-  static buildEndReport(doc, result) {
+  static buildEndReport(doc, result, client) {
+
+    const t = (key, extra) => this._t(client, key, extra);
 
     const {
       winners,
@@ -129,26 +146,26 @@ class GiveawayEmbed {
 
     const winnerLines = winners.length
       ? winners.map(w => `🏆 <@${w.userId}>`).join('\n')
-      : 'Nenhum vencedor elegível encontrado.';
+      : t('embed_report_no_winner');
 
     const fields = [
       {
-        name:   '🏆 Vencedores',
+        name:   t('embed_report_field_winners'),
         value:  winnerLines,
         inline: false,
       },
       {
-        name:   '👥 Total de participantes',
+        name:   t('embed_report_field_total'),
         value:  String(totalParticipants),
         inline: true,
       },
       {
-        name:   '✅ Elegíveis',
+        name:   t('embed_report_field_eligible'),
         value:  String(winners.length),
         inline: true,
       },
       {
-        name:   '❌ Desclassificados',
+        name:   t('embed_report_field_disq'),
         value:  String(disqualifiedCount),
         inline: true,
       },
@@ -169,7 +186,7 @@ class GiveawayEmbed {
         .join('\n');
 
       fields.push({
-        name:  '📜 Histórico do Sorteio',
+        name:  t('embed_report_history_field'),
         value: historyLines || '—',
       });
     }
@@ -177,21 +194,19 @@ class GiveawayEmbed {
     // Quem teria vencido
     if (wouldHaveWon?.length) {
       const wouldLines = wouldHaveWon
-        .map(w => `• <@${w.userId}> — ${w.reason || 'Sem motivo'}`)
+        .map(w => `• <@${w.userId}> — ${w.reason || t('embed_would_no_reason')}`)
         .slice(0, 5)
         .join('\n');
 
       fields.push({
-        name:  `${E.pensando} Teriam Vencido (se elegíveis)`,
+        name:  `${E.pensando} ${t('embed_report_would_have_won_field')}`,
         value: wouldLines,
       });
     }
 
     return {
-      title:       `${E.festa} Sorteio Encerrado! — ${doc.prize}`,
-      description:
-        `O sorteio foi encerrado!\n\n` +
-        `Parabéns aos vencedores! ${E.festa}`,
+      title:       `${E.festa} ${t('embed_report_title', { prize: doc.prize })}`,
+      description: t('embed_report_desc', { festa: E.festa }),
       color:   0xFFB7C5,
       fields,
       footer:  { text: `ID: ${doc.giveawayId}` },
@@ -203,23 +218,24 @@ class GiveawayEmbed {
      HELPER
   ───────────────────────────────────────── */
 
-  static _reqLabel(req) {
+  static _reqLabel(req, client) {
+    const t = (key, extra) => this._t(client, key, extra);
     const labels = {
-      REQUIRED_ROLE:             `Cargo obrigatório`,
-      FORBIDDEN_ROLE:            `Sem cargo específico`,
-      MIN_MESSAGES:              `Mínimo ${req.value} mensagem(s)`,
-      MIN_DAYS_IN_SERVER:        `${req.value} dia(s) no servidor`,
-      MIN_ACCOUNT_AGE:           `Conta com ${req.value}+ dia(s)`,
-      IN_SERVER:                 `Estar no servidor parceiro`,
-      REQUIRED_ROLE_IN_SERVER:   `Cargo em servidor externo`,
-      FORBIDDEN_ROLE_IN_SERVER:  `Sem cargo em servidor externo`,
-      MIN_DAYS_IN_EXT_SERVER:    `${req.value} dia(s) em servidor externo`,
-      MIN_MESSAGES_IN_EXT_SERVER:`${req.value} msg em servidor externo`,
-      MIN_HOURS_IN_CALL:         `${req.value}h em call`,
-      MIN_LEVEL:                 `Nível ${req.value}+`,
-      MIN_XP:                    `${req.value} XP+`,
-      HAS_BOOSTER_ROLE:          `Cargo Booster`,
-      HAS_SUPPORTER_ROLE:        `Cargo Apoiador`,
+      REQUIRED_ROLE:              t('embed_req_required_role'),
+      FORBIDDEN_ROLE:             t('embed_req_forbidden_role'),
+      MIN_MESSAGES:               t('embed_req_min_messages', { value: req.value }),
+      MIN_DAYS_IN_SERVER:         t('embed_req_min_days_server', { value: req.value }),
+      MIN_ACCOUNT_AGE:            t('embed_req_min_account_age', { value: req.value }),
+      IN_SERVER:                  t('embed_req_in_server'),
+      REQUIRED_ROLE_IN_SERVER:    t('embed_req_required_role_ext'),
+      FORBIDDEN_ROLE_IN_SERVER:   t('embed_req_forbidden_role_ext'),
+      MIN_DAYS_IN_EXT_SERVER:     t('embed_req_min_days_ext', { value: req.value }),
+      MIN_MESSAGES_IN_EXT_SERVER: t('embed_req_min_msgs_ext', { value: req.value }),
+      MIN_HOURS_IN_CALL:          t('embed_req_min_hours_call', { value: req.value }),
+      MIN_LEVEL:                  t('embed_req_min_level', { value: req.value }),
+      MIN_XP:                     t('embed_req_min_xp', { value: req.value }),
+      HAS_BOOSTER_ROLE:           t('embed_req_booster'),
+      HAS_SUPPORTER_ROLE:         t('embed_req_supporter'),
     };
     return labels[req.type] || req.type;
   }

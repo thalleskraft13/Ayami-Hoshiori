@@ -75,22 +75,30 @@ module.exports = {
       {
         type: 1,
         name: "visualizar",
-        description: "Visualize sua assinatura Constellation"
+        name_localizations: { 'en-US': "view", 'en-GB': "view", 'es-ES': "ver" },
+        description: "Visualize sua assinatura Constellation",
+        description_localizations: { 'en-US': "View your Constellation subscription", 'en-GB': "View your Constellation subscription", 'es-ES': "Visualiza tu suscripcion Constellation" }
       },
       {
         type: 1,
         name: "comprar",
-        description: "Conheça os planos Constellation"
+        name_localizations: { 'en-US': "buy", 'en-GB': "buy", 'es-ES': "comprar" },
+        description: "Conheça os planos Constellation",
+        description_localizations: { 'en-US': "Learn about the Constellation plans", 'en-GB': "Learn about the Constellation plans", 'es-ES': "Conoce los planes Constellation" }
       },
       {
         type: 1,
         name: "resgatar",
+        name_localizations: { 'en-US': "redeem", 'en-GB': "redeem", 'es-ES': "canjear" },
         description: "Resgatar um código Constellation",
+        description_localizations: { 'en-US': "Redeem a Constellation code", 'en-GB': "Redeem a Constellation code", 'es-ES': "Canjear un codigo Constellation" },
         options: [
           {
             type: 3,
             name: "codigo",
+            name_localizations: { 'en-US': "code", 'en-GB': "code", 'es-ES': "codigo" },
             description: "Seu código de resgate",
+            description_localizations: { 'en-US': "Your redemption code", 'en-GB': "Your redemption code", 'es-ES': "Tu codigo de canje" },
             required: true
           }
         ]
