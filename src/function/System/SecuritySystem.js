@@ -7,6 +7,7 @@ const getPerm = require("../Utils/Permission.js");
 const TTLCache = require("../Utils/TTLCache.js");
 const NativeAutoMod = require("./Security/NativeAutoMod.js");
 const RaidIntelligence = require("./Security/RaidIntelligence.js");
+const MemberVerification = require("./Security/MemberVerification.js");
 
 // Módulos de Filtro cuja detecção acontece via Discord AutoMod nativo
 // (ver Security/NativeAutoMod.js) — o restante (anticaps, antiemoji,
@@ -22,6 +23,7 @@ class SecuritySystem {
     this._botPermCache  = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
     this.nativeAutoMod  = new NativeAutoMod(client);
     this.raidIntelligence = new RaidIntelligence(this);
+    this.memberVerification = new MemberVerification(this);
   }
 
   /**
@@ -241,6 +243,9 @@ class SecuritySystem {
     if (!guild.security.raid.state) {
       guild.security.raid.state = { emergencyActive: false, lastHighRiskAt: null, flaggedUserIds: [] };
     }
+    if (!guild.security.verification) {
+      guild.security.verification = { enabled: false, rules: { minAccountAge: {}, requireCustomAvatar: {} }, history: [] };
+    }
     return guild.security;
   }
 
@@ -396,6 +401,7 @@ class SecuritySystem {
         { label: "👮 Cargos e Permissões",         value: "roles_permissions" },
         { label: "📜 Logs",                        value: "logs"              },
         { label: "🔍 Verificação de Permissões",   value: "permission_check"  },
+        { label: "🧾 Verificação de Novos Membros",value: "member_verification" },
         { label: "🚨 AntiRaid Inteligente",        value: "raid_detection"    },
         { label: "🔒 Modo Emergência",             value: "emergency_mode"    },
         { label: "🧬 Monitoramento de Alterações", value: "monitoring"        },
@@ -412,6 +418,7 @@ class SecuritySystem {
         if (v === "roles_permissions") return this.rolesPermissionsMenu(i, guild, user);
         if (v === "logs")              return this.logsMenu(i, guild, user);
         if (v === "permission_check")  return this.permissionCheck(i, guild, user);
+        if (v === "member_verification") return this.verificationMenu(i, guild, user);
         if (v === "raid_detection")    return this.raidDetection(i, guild, user);
         if (v === "emergency_mode")    return this.emergencyMode(i, guild, user);
         if (v === "monitoring")        return this.monitoringSystem(i, guild, user);
@@ -2446,6 +2453,260 @@ class SecuritySystem {
     });
   }
 
+  /* ================= 5B. VERIFICAÇÃO DE NOVOS MEMBROS ================= */
+  // Motor real mora em Security/MemberVerification.js. Sempre informa
+  // exatamente qual regra foi violada — nunca um veredito genérico.
+
+  _verificationActionLabels() {
+    return {
+      none:       "Nenhuma",
+      log:        "Apenas log",
+      timeout:    "Timeout (1h)",
+      kick:       "Kick",
+      ban:        "Ban",
+      quarantine: "Cargo de quarentena"
+    };
+  }
+
+  async verificationMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = sec.verification;
+    const actionLabels = this._verificationActionLabels();
+
+    const rulesActive = Object.values(cfg.rules || {}).filter(r => r?.enabled).length;
+
+    const select = this.select(
+      user,
+      [
+        { label: `${cfg.enabled ? "🟢" : "🔴"} Verificação de Novos Membros`,          value: "toggle"        },
+        { label: `📋 Regras (${rulesActive}/2 ativas)`,                                 value: "rules"         },
+        { label: `⚙️ Modo: ${cfg.mode === "auto_punish" ? "Aplicar punições automáticas" : "Apenas registrar"}`, value: "mode" },
+        { label: `📝 Registrar atividades suspeitas: ${cfg.logSuspicious !== false ? "🟢" : "🔴"}`, value: "log_suspicious" },
+        { label: `⚡ Punição: ${actionLabels[cfg.punishment || "none"]}`,                value: "punishment"    },
+        { label: `🚧 Cargo de Quarentena: ${cfg.quarantineRoleId ? `<@&${cfg.quarantineRoleId}>` : "Não definido"}`, value: "quarantine_role" },
+        { label: "📊 Ver Histórico",                                                    value: "history"       }
+      ],
+      "Configurar Verificação",
+      async (i) => {
+        await this.deferUpdate(i);
+        const v = i.data.values[0];
+        if (v === "toggle")           return this.toggleVerification(i, guild, user);
+        if (v === "rules")            return this.verificationRulesMenu(i, guild, user);
+        if (v === "mode")             return this.setVerificationMode(i, guild, user);
+        if (v === "log_suspicious")   return this.toggleVerificationLogSuspicious(i, guild, user);
+        if (v === "punishment")       return this.setVerificationPunishment(i, guild, user);
+        if (v === "quarantine_role")  return this.setVerificationQuarantineRole(i, guild, user);
+        if (v === "history")          return this.verificationHistory(i, guild, user);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "🧾 Verificação de Novos Membros",
+        description:
+          `Analisa cada novo membro no momento em que entra e sempre informa exatamente qual regra foi violada.\n\n` +
+          `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"}\n` +
+          `**Regras ativas:** ${rulesActive}/2\n` +
+          `**Modo:** ${cfg.mode === "auto_punish" ? "Aplicar punições automáticas" : "Apenas registrar"}\n` +
+          `**Punição:** ${actionLabels[cfg.punishment || "none"]}`
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.startSetup(i)))
+      ]
+    });
+  }
+
+  async toggleVerification(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    sec.verification.enabled = !sec.verification.enabled;
+    guild.markModified("security");
+    await this.save(guild);
+    return this.verificationMenu(interaction, guild, user);
+  }
+
+  async verificationRulesMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const r   = sec.verification.rules || {};
+
+    const select = this.select(
+      user,
+      [
+        { label: `${r.minAccountAge?.enabled ? "🟢" : "🔴"} ⏳ Idade mínima da conta — ${r.minAccountAge?.hours ?? 48}h`, value: "minAccountAge" },
+        { label: `${r.requireCustomAvatar?.enabled ? "🟢" : "🔴"} 🖼️ Exigir avatar personalizado`,                        value: "requireCustomAvatar" }
+      ],
+      "Selecionar regra",
+      async (i) => {
+        const key = i.data.values[0];
+        if (key === "requireCustomAvatar") {
+          await this.deferUpdate(i);
+          const sec2 = this.getSecurity(guild);
+          sec2.verification.rules.requireCustomAvatar.enabled = !sec2.verification.rules.requireCustomAvatar.enabled;
+          guild.markModified("security");
+          await this.save(guild);
+          return this.verificationRulesMenu(i, guild, user);
+        }
+        // minAccountAge: primeiro pergunta se liga/desliga, depois oferece editar horas via submenu simples
+        return this.verificationMinAgeDetail(i, guild, user);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{ title: "📋 Regras de Verificação", description: "Cada regra pode ser ligada/desligada independentemente." }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.verificationMenu(i, guild, user)))
+      ]
+    });
+  }
+
+  async verificationMinAgeDetail(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const r   = sec.verification.rules.minAccountAge ||= {};
+
+    const select = this.select(
+      user,
+      [
+        { label: `${r.enabled ? "🟢 Desativar" : "🔴 Ativar"} esta regra`, value: "toggle" },
+        { label: `⚙️ Horas mínimas: ${r.hours ?? 48}`,                     value: "set_hours" }
+      ],
+      "Editar regra",
+      async (i) => {
+        const v = i.data.values[0];
+        if (v === "toggle") {
+          await this.deferUpdate(i);
+          const sec2 = this.getSecurity(guild);
+          sec2.verification.rules.minAccountAge.enabled = !sec2.verification.rules.minAccountAge.enabled;
+          guild.markModified("security");
+          await this.save(guild);
+          return this.verificationMinAgeDetail(i, guild, user);
+        }
+        await this.followUpEphemeral(i, { content: "Idade mínima da conta em horas (ex: `48`):" });
+        let msg;
+        try { msg = await this.client.NextMessageCollector.wait({ channelId: i.channel_id, userId: user }); } catch { return; }
+        const val = parseInt(msg.content);
+        if (isNaN(val) || val < 0) return this.followUpEphemeral(i, { content: "❌ Inválido." });
+        const sec2 = this.getSecurity(guild);
+        sec2.verification.rules.minAccountAge.hours = val;
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: `✅ Idade mínima: ${val}h.` });
+        return this.verificationMinAgeDetail(i, guild, user);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{ title: "⏳ Idade Mínima da Conta", description: `Status: ${r.enabled ? "🟢 Ativo" : "🔴 Inativo"}` }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.verificationRulesMenu(i, guild, user)))
+      ]
+    });
+  }
+
+  async setVerificationMode(interaction, guild, user) {
+    const select = this.select(
+      user,
+      [
+        { label: "📋 Apenas registrar",                value: "log_only"    },
+        { label: "⚡ Aplicar punições automáticas",     value: "auto_punish" }
+      ],
+      "Selecionar modo",
+      async (i) => {
+        await this.deferUpdate(i);
+        const sec = this.getSecurity(guild);
+        sec.verification.mode = i.data.values[0];
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: "✅ Modo definido." });
+        return this.verificationMenu(i, guild, user);
+      }
+    );
+
+    return this.followUpEphemeral(interaction, {
+      content: "No modo **apenas registrar**, violações só ficam no histórico e no log — nenhuma punição é aplicada.",
+      components: [this.row(select)]
+    });
+  }
+
+  async toggleVerificationLogSuspicious(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    sec.verification.logSuspicious = sec.verification.logSuspicious === false ? true : false;
+    guild.markModified("security");
+    await this.save(guild);
+    return this.verificationMenu(interaction, guild, user);
+  }
+
+  async setVerificationPunishment(interaction, guild, user) {
+    const labels = this._verificationActionLabels();
+    const select = this.select(
+      user,
+      [
+        { label: `🚫 ${labels.none}`,        value: "none"       },
+        { label: `📝 ${labels.log}`,         value: "log"        },
+        { label: `⏱️ ${labels.timeout}`,     value: "timeout"    },
+        { label: `👢 ${labels.kick}`,        value: "kick"       },
+        { label: `🔨 ${labels.ban}`,         value: "ban"        },
+        { label: `🚧 ${labels.quarantine}`,  value: "quarantine" }
+      ],
+      "Selecionar punição",
+      async (i) => {
+        await this.deferUpdate(i);
+        const sec = this.getSecurity(guild);
+        sec.verification.punishment = i.data.values[0];
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: "✅ Punição definida." });
+        return this.verificationMenu(i, guild, user);
+      }
+    );
+
+    return this.followUpEphemeral(interaction, {
+      content: "Só é aplicada no modo **Aplicar punições automáticas**. Cargo de quarentena precisa estar configurado.",
+      components: [this.row(select)]
+    });
+  }
+
+  async setVerificationQuarantineRole(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, { content: "Mencione ou envie o ID do cargo de quarentena:" });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+    const id = this.extractId(msg.content);
+    if (!id) return this.followUpEphemeral(interaction, { content: "❌ Não consegui identificar um cargo." });
+    const sec = this.getSecurity(guild);
+    sec.verification.quarantineRoleId = id;
+    guild.markModified("security");
+    await this.save(guild);
+    await this.followUpEphemeral(interaction, { content: "✅ Cargo de quarentena definido." });
+    return this.verificationMenu(interaction, guild, user);
+  }
+
+  async verificationHistory(interaction, guild, user) {
+    const sec     = this.getSecurity(guild);
+    const history = sec.verification.history || [];
+
+    if (!history.length) {
+      return this.editOriginal(interaction, {
+        embeds: [{ title: "📊 Histórico de Verificação", description: "Nenhuma violação registrada até agora." }],
+        components: [this.row(this.backBtn(user, (i) => this.verificationMenu(i, guild, user)))]
+      });
+    }
+
+    const lines = history
+      .slice(-10)
+      .reverse()
+      .map(h => {
+        const rulesTxt = (h.violations || []).map(v => `└ ${v.label}`).join("\n") || "└ —";
+        return `👤 **${h.username}** (<@${h.userId}>) — ${new Date(h.timestamp).toLocaleString("pt-BR")}\n${rulesTxt}\n└ Ação: ${h.action}`;
+      })
+      .join("\n\n");
+
+    return this.editOriginal(interaction, {
+      embeds: [{ title: "📊 Histórico de Verificação (últimos 10)", description: lines }],
+      components: [this.row(this.backBtn(user, (i) => this.verificationMenu(i, guild, user)))]
+    });
+  }
+
   /* ================= 6. ANTIRAID INTELIGENTE ================= */
   // Motor real de detecção mora em Security/RaidIntelligence.js (multi-fator,
   // nunca aciona a resposta com base em um único evento isolado). Os métodos
@@ -3691,14 +3952,22 @@ class SecuritySystem {
     try {
       const guild = await this.getGuild(data.guild_id);
       const sec   = this.getSecurity(guild);
-      if (!sec.raid?.enabled) return;
 
       const userId = data.user?.id;
       if (!userId) return;
 
-      // Toda a lógica de multi-fator, cálculo de score e resposta automática
-      // (kick/ban/timeout/quarantine/lockdown + auto-restore) mora em
-      // RaidIntelligence — aqui só alimentamos o motor com o evento.
+      // Verificação de Novos Membros — roda independente do AntiRaid (regras
+      // individuais sobre o membro que entrou: idade da conta, avatar, etc).
+      if (sec.verification?.enabled) {
+        await this.memberVerification.check(guild, data.guild_id, sec, data.user)
+          .catch(err => console.error("[Security] memberVerification.check:", err));
+      }
+
+      if (!sec.raid?.enabled) return;
+
+      // Multi-fator, cálculo de score e resposta automática (kick/ban/
+      // timeout/quarantine/lockdown + auto-restore) mora em RaidIntelligence
+      // — aqui só alimentamos o motor com o evento.
       await this.raidIntelligence.registerJoin(guild, data.guild_id, sec, userId);
 
     } catch (err) { console.error("[Security] handleMemberJoin:", err); }

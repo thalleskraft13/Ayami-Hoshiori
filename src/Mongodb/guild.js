@@ -331,7 +331,45 @@ const activityAnalyticsSchema = new Schema({
   ignoredUsers:    { type: [String], default: [] },
 }, { _id: false });
 
-/* ── Security root ── */
+/* ── Verificação de Novos Membros ──
+   `violations` no histórico sempre guarda EXATAMENTE quais regras foram
+   violadas (nunca um veredito genérico de "suspeito"). ── */
+const verificationViolationSchema = new Schema({
+  key:   { type: String, required: true },  // minAccountAge | requireCustomAvatar
+  label: { type: String, required: true }   // texto humano, ex: "Conta criada há 2h (mínimo: 48h)"
+}, { _id: false });
+
+const verificationHistorySchema = new Schema({
+  timestamp:  { type: Number, required: true },
+  userId:     { type: String, required: true },
+  username:   { type: String, default: "" },
+  violations: { type: [verificationViolationSchema], default: [] },
+  action:     { type: String, required: true } // none | log | timeout | kick | ban | quarantine
+}, { _id: false });
+
+const verificationRuleMinAgeSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  hours:   { type: Number,  default: 48 }
+}, { _id: false });
+
+const verificationRuleAvatarSchema = new Schema({
+  enabled: { type: Boolean, default: false }
+}, { _id: false });
+
+const verificationSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  rules: {
+    minAccountAge:       { type: verificationRuleMinAgeSchema, default: () => ({}) },
+    requireCustomAvatar: { type: verificationRuleAvatarSchema, default: () => ({}) }
+  },
+  // "apenas registrar" (log_only) nunca pune, só documenta a violação;
+  // "auto_punish" aplica o `punishment` configurado abaixo.
+  mode:             { type: String,  default: "log_only" }, // log_only | auto_punish
+  logSuspicious:    { type: Boolean, default: true },        // registra mesmo as violações no modo log_only
+  punishment:       { type: String,  default: "none" },      // none | log | timeout | kick | ban | quarantine
+  quarantineRoleId: { type: String,  default: null },
+  history:          { type: [verificationHistorySchema], default: [] }
+}, { _id: false });
 const securitySchema = new Schema({
   automod: {
     simple:   { type: securitySimpleSchema,   default: () => ({}) },
@@ -348,6 +386,7 @@ const securitySchema = new Schema({
     types:    { type: Object, default: {} }
   },
   raid:       { type: raidSchema,       default: () => ({}) },
+  verification: { type: verificationSchema, default: () => ({}) },
   emergency:  { type: emergencySchema,  default: () => ({}) },
   monitoring: { type: monitoringSchema, default: () => ({}) },
   backups:    { type: [backupEntrySchema], default: [] }
