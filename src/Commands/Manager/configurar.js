@@ -125,12 +125,6 @@ module.exports = {
             emoji: { name: "🎫" }
           },
           {
-            label: client.t("configurar.opt_uid_label", ctx),
-            description: client.t("configurar.opt_uid_desc", ctx),
-            value: "uid",
-            emoji: { name: "✨" }
-          },
-          {
             label: client.t("configurar.opt_security_label", ctx),
             description: client.t("configurar.opt_security_desc", ctx),
             value: "verification",

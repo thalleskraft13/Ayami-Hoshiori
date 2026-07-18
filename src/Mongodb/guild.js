@@ -29,7 +29,9 @@ const badwordsSchema = new Schema({
   escalation:      { type: [escalationLevelSchema], default: [] },
   ignoredChannels: { type: [String], default: [] },
   ignoredRoles:    { type: [String], default: [] },
-  list:            { type: [String], default: [] }
+  list:            { type: [String], default: [] },
+  // ID da regra nativa de AutoMod do Discord que espelha esta config (ver NativeAutoMod.js)
+  nativeRuleId:    { type: String, default: null }
 }, { _id: false });
 
 /* ── Antispam extends simple ── */
@@ -39,8 +41,12 @@ const antispamSchema = new Schema({
   escalation:      { type: [escalationLevelSchema], default: [] },
   ignoredChannels: { type: [String], default: [] },
   ignoredRoles:    { type: [String], default: [] },
+  // maxMessages/intervalSeconds ficam guardados por compatibilidade, mas a
+  // detecção real passou a ser a heurística nativa do Discord AutoMod
+  // (trigger_type SPAM), que não aceita threshold customizado.
   maxMessages:     { type: Number, default: 5 },
-  intervalSeconds: { type: Number, default: 5 }
+  intervalSeconds: { type: Number, default: 5 },
+  nativeRuleId:    { type: String, default: null }
 }, { _id: false });
 
 /* ── Anticaps extends simple ── */
@@ -62,7 +68,10 @@ const antilinksSchema = new Schema({
   ignoredChannels: { type: [String], default: [] },
   ignoredRoles:    { type: [String], default: [] },
   allowedDomains:  { type: [String], default: [] },
-  blockedDomains:  { type: [String], default: [] }
+  blockedDomains:  { type: [String], default: [] },
+  blockInvites:    { type: Boolean, default: false },
+  nativeRuleId:    { type: String, default: null },
+  invitesRuleId:   { type: String, default: null }
 }, { _id: false });
 
 /* ── Antimention extends simple ── */
@@ -72,7 +81,29 @@ const antimentionSchema = new Schema({
   escalation:      { type: [escalationLevelSchema], default: [] },
   ignoredChannels: { type: [String], default: [] },
   ignoredRoles:    { type: [String], default: [] },
-  maxMentions:     { type: Number, default: 5 }
+  maxMentions:     { type: Number, default: 5 },
+  nativeRuleId:    { type: String, default: null }
+}, { _id: false });
+
+/* ── Antiemoji extends simple (sem equivalente nativo no Discord AutoMod) ── */
+const antiemojiSchema = new Schema({
+  enabled:         { type: Boolean, default: false },
+  actions:         { type: [String], default: ["delete"] },
+  escalation:      { type: [escalationLevelSchema], default: [] },
+  ignoredChannels: { type: [String], default: [] },
+  ignoredRoles:    { type: [String], default: [] },
+  maxEmojis:       { type: Number, default: 10 }
+}, { _id: false });
+
+/* ── Antifiles extends simple (sem equivalente nativo no Discord AutoMod) ── */
+const antifilesSchema = new Schema({
+  enabled:         { type: Boolean, default: false },
+  actions:         { type: [String], default: ["delete"] },
+  escalation:      { type: [escalationLevelSchema], default: [] },
+  ignoredChannels: { type: [String], default: [] },
+  ignoredRoles:    { type: [String], default: [] },
+  // Extensões bloqueadas, sem o ponto. Ex: ["exe", "bat", "scr"]
+  blockedExtensions: { type: [String], default: ["exe", "bat", "scr", "cmd", "msi", "vbs", "jar"] }
 }, { _id: false });
 
 /* ── Warn entry ── */
@@ -102,7 +133,9 @@ const securitySimpleSchema = new Schema({
   antispam:    { type: antispamSchema,    default: () => ({}) },
   anticaps:    { type: anticapsSchema,    default: () => ({}) },
   antilinks:   { type: antilinksSchema,   default: () => ({}) },
-  antimention: { type: antimentionSchema, default: () => ({}) }
+  antimention: { type: antimentionSchema, default: () => ({}) },
+  antiemoji:   { type: antiemojiSchema,   default: () => ({}) },
+  antifiles:   { type: antifilesSchema,   default: () => ({}) }
 }, { _id: false });
 
 /* ── Channel snapshot (emergency) ── */

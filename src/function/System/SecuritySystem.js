@@ -5,6 +5,13 @@ const DiscordRequest = require("../DiscordRequest.js");
 const PremiumManager = require("../Utils/PremiumManager.js");
 const getPerm = require("../Utils/Permission.js");
 const TTLCache = require("../Utils/TTLCache.js");
+const NativeAutoMod = require("./Security/NativeAutoMod.js");
+
+// Módulos de Filtro cuja detecção acontece via Discord AutoMod nativo
+// (ver Security/NativeAutoMod.js) — o restante (anticaps, antiemoji,
+// antifiles) não tem equivalente na API do Discord e continua sendo
+// detecção própria da Ayami em handleMessage().
+const NATIVE_FILTER_MODULES = ["badwords", "antispam", "antilinks", "antimention"];
 
 class SecuritySystem {
 
@@ -13,6 +20,36 @@ class SecuritySystem {
     this._joinTracker   = {};
     this._spamTracker   = {};
     this._botPermCache  = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
+    this.nativeAutoMod  = new NativeAutoMod(client);
+  }
+
+  /**
+   * Sincroniza a regra nativa de AutoMod do Discord para um módulo de
+   * Filtro (badwords/antispam/antilinks/antimention), a partir da config
+   * atual salva em `sec.automod.simple[module]`, e persiste o
+   * `nativeRuleId` retornado. Chame sempre depois de alterar toggle,
+   * ações, listas ou limites de um desses módulos.
+   */
+  async _syncNativeModule(guild, module) {
+    if (!NATIVE_FILTER_MODULES.includes(module)) return;
+    const sec = this.getSecurity(guild);
+    const cfg = sec.automod.simple[module];
+    if (!cfg) return;
+
+    try {
+      if (module === "badwords")    await this.nativeAutoMod.syncBadwords(guild.guildId, cfg);
+      if (module === "antispam")    await this.nativeAutoMod.syncAntispam(guild.guildId, cfg);
+      if (module === "antimention") await this.nativeAutoMod.syncAntimention(guild.guildId, cfg);
+      if (module === "antilinks") {
+        await this.nativeAutoMod.syncAntilinks(guild.guildId, cfg);
+        await this.nativeAutoMod.syncInvites(guild.guildId, cfg);
+      }
+    } catch (err) {
+      console.error(`[Security] Falha ao sincronizar AutoMod nativo (${module}):`, err);
+    }
+
+    guild.markModified("security");
+    await this.save(guild);
   }
 
   /* ================= INTERACTIONS ================= */
@@ -335,18 +372,20 @@ class SecuritySystem {
     const s   = sec.automod.simple;
 
     const modules = [
-      { key: "badwords",    label: "Palavras Proibidas", desc: `${s.badwords?.list?.length || 0} palavras` },
-      { key: "antispam",    label: "Anti-Spam",          desc: `${s.antispam?.maxMessages || 5} msgs/${s.antispam?.intervalSeconds || 5}s` },
-      { key: "anticaps",    label: "Anti-Caps",          desc: `${s.anticaps?.percent || 70}% caps` },
-      { key: "antilinks",   label: "Anti-Links",         desc: `${s.antilinks?.allowedDomains?.length || 0} permitidos / ${s.antilinks?.blockedDomains?.length || 0} bloqueados` },
-      { key: "antimention", label: "Anti-Mass Mention",  desc: `max ${s.antimention?.maxMentions || 5} menções` }
+      { key: "badwords",    label: "Palavras Proibidas", desc: `${s.badwords?.list?.length || 0} palavras`, native: true },
+      { key: "antispam",    label: "Anti-Spam",          desc: "heurística nativa do Discord", native: true },
+      { key: "antilinks",   label: "Links / Convites",   desc: `${s.antilinks?.allowedDomains?.length || 0} permitidos / ${s.antilinks?.blockedDomains?.length || 0} bloqueados`, native: true },
+      { key: "antimention", label: "Anti-Mass Mention",  desc: `max ${s.antimention?.maxMentions || 5} menções`, native: true },
+      { key: "anticaps",    label: "Anti-Caps",          desc: `${s.anticaps?.percent || 70}% caps`, native: false },
+      { key: "antiemoji",   label: "Anti-Emoji",         desc: `max ${s.antiemoji?.maxEmojis || 10} emojis/msg`, native: false },
+      { key: "antifiles",   label: "Arquivos Proibidos", desc: `${s.antifiles?.blockedExtensions?.length || 0} extensões`, native: false }
     ];
 
     const select = this.select(
       user,
       modules.map(m => ({
         label:       `${s[m.key]?.enabled ? "🟢" : "🔴"} ${m.label}`,
-        description: m.desc,
+        description: `${m.native ? "⚡ Nativo" : "🤖 Ayami"} — ${m.desc}`,
         value:       m.key
       })),
       "Selecionar módulo",
@@ -358,15 +397,19 @@ class SecuritySystem {
         if (v === "anticaps")    return this.anticapsMenu(i, guild, user);
         if (v === "antilinks")   return this.antilinksMenu(i, guild, user);
         if (v === "antimention") return this.antimentionMenu(i, guild, user);
+        if (v === "antiemoji")   return this.antiemojiMenu(i, guild, user);
+        if (v === "antifiles")   return this.antifilesMenu(i, guild, user);
       }
     );
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: "🛡️ AutoMod Simples",
+        title: "🛡️ Filtros",
         description:
-          "Clique em um módulo para configurar.\n\n" +
-          modules.map(m => `${s[m.key]?.enabled ? "🟢" : "🔴"} **${m.label}** — ${m.desc}`).join("\n")
+          "Clique em um módulo para configurar.\n" +
+          "⚡ Nativo = detectado pelo AutoMod do próprio Discord (mais rápido, roda mesmo se a Ayami cair).\n" +
+          "🤖 Ayami = sem equivalente na API do Discord, detecção própria do bot.\n\n" +
+          modules.map(m => `${s[m.key]?.enabled ? "🟢" : "🔴"} **${m.label}** (${m.native ? "⚡" : "🤖"}) — ${m.desc}`).join("\n")
       }],
       components: [
         this.row(select),
@@ -616,6 +659,7 @@ class SecuritySystem {
         }
         guild.markModified("security");
         await this.save(guild);
+        await this._syncNativeModule(guild, module);
         return this.multiActionMenu(i, guild, user, module, backFn, availableActions);
       }
     );
@@ -665,6 +709,7 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, "badwords");
           return this.badwordsMenu(i, guild, user);
         }
         if (v === "add")        return this.addBadword(i, guild, user);
@@ -674,6 +719,7 @@ class SecuritySystem {
           cfg.list = [];
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, "badwords");
           await this.followUpEphemeral(i, { content: "✅ Lista limpa." });
           return this.badwordsMenu(i, guild, user);
         }
@@ -727,6 +773,7 @@ class SecuritySystem {
     cfg.list.push(...words);
     guild.markModified("security");
     await this.save(guild);
+    await this._syncNativeModule(guild, "badwords");
 
     await this.followUpEphemeral(interaction, {
       content: `✅ ${words.length} palavra(s) adicionada(s): ${words.map(w => `\`${w}\``).join(", ")}`
@@ -749,6 +796,7 @@ class SecuritySystem {
         cfg.list = cfg.list.filter(w => w !== i.data.values[0]);
         guild.markModified("security");
         await this.save(guild);
+        await this._syncNativeModule(guild, "badwords");
         await this.followUpEphemeral(i, { content: `✅ \`${i.data.values[0]}\` removida.` });
         return this.badwordsMenu(i, guild, user);
       }
@@ -781,7 +829,7 @@ class SecuritySystem {
       user,
       [
         { label: `${cfg.enabled ? "🟢 Desativar" : "🔴 Ativar"}`,                         value: "toggle"    },
-        { label: `⚙️ Limite: ${cfg.maxMessages} msgs em ${cfg.intervalSeconds}s`,          value: "set_limit" },
+        { label: `⚙️ Sugestão de limite: ${cfg.maxMessages} msgs em ${cfg.intervalSeconds}s`, value: "set_limit" },
         { label: `⚡ Ações (${cfg.actions?.length || 1} ativa(s))`,                        value: "set_action"},
         { label: "⚖️ Escalonamento de Warns",                                              value: "escalation"},
         { label: `🚫 Canais Ignorados (${cfg.ignoredChannels.length})`,                    value: "ig_ch"     },
@@ -795,6 +843,7 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, "antispam");
           return this.antispamMenu(i, guild, user);
         }
         if (v === "set_limit")  return this.setSpamLimit(i, guild, user);
@@ -809,8 +858,8 @@ class SecuritySystem {
       embeds: [{
         title: "🔁 Anti-Spam",
         description:
-          `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"}\n` +
-          `**Limite:** ${cfg.maxMessages} msgs em ${cfg.intervalSeconds}s\n` +
+          `**Status:** ${cfg.enabled ? "🟢 Ativo (AutoMod nativo do Discord)" : "🔴 Inativo"}\n` +
+          `-# A detecção usa a heurística de spam nativa do Discord — não é mais um contador próprio da Ayami. O campo de limite abaixo fica só como referência.\n` +
           `**Ações:** ${(cfg.actions || ["delete"]).map(a => actionLabel[a] || a).join(", ")}\n` +
           `**Canais ignorados:** ${cfg.ignoredChannels.map(c => `<#${c}>`).join(", ") || "Nenhum"}\n` +
           `**Cargos ignorados:** ${cfg.ignoredRoles.map(r => `<@&${r}>`).join(", ")   || "Nenhum"}`
@@ -927,6 +976,198 @@ class SecuritySystem {
     return this.anticapsMenu(interaction, guild, user);
   }
 
+  /* ─── ANTI-EMOJI (sem equivalente nativo — detecção própria da Ayami) ─── */
+
+  async antiemojiMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = this.getSimpleCfg(sec, "antiemoji");
+    if (!cfg.maxEmojis)       cfg.maxEmojis       = 10;
+    if (!cfg.actions)         cfg.actions         = ["delete"];
+    if (!cfg.ignoredChannels) cfg.ignoredChannels = [];
+    if (!cfg.ignoredRoles)    cfg.ignoredRoles    = [];
+    if (!cfg.escalation)      cfg.escalation      = this._defaultEscalation();
+
+    const actionLabel = {
+      delete: "Deletar", warn: "Warn", timeout_10m: "Timeout 10m",
+      timeout_1h: "Timeout 1h", timeout_24h: "Timeout 24h", kick: "Kick", ban: "Ban"
+    };
+
+    const select = this.select(
+      user,
+      [
+        { label: `${cfg.enabled ? "🟢 Desativar" : "🔴 Ativar"}`,                          value: "toggle"    },
+        { label: `⚙️ Limite: ${cfg.maxEmojis} emojis por mensagem`,                        value: "set_limit" },
+        { label: `⚡ Ações (${cfg.actions?.length || 1} ativa(s))`,                        value: "set_action"},
+        { label: "⚖️ Escalonamento de Warns",                                              value: "escalation"},
+        { label: `🚫 Canais Ignorados (${cfg.ignoredChannels.length})`,                    value: "ig_ch"     },
+        { label: `👤 Cargos Ignorados (${cfg.ignoredRoles.length})`,                       value: "ig_role"   }
+      ],
+      "Configurar Anti-Emoji",
+      async (i) => {
+        await this.deferUpdate(i);
+        const v = i.data.values[0];
+        if (v === "toggle") {
+          cfg.enabled = !cfg.enabled;
+          guild.markModified("security");
+          await this.save(guild);
+          return this.antiemojiMenu(i, guild, user);
+        }
+        if (v === "set_limit")  return this.setEmojiLimit(i, guild, user);
+        if (v === "set_action") return this.multiActionMenu(i, guild, user, "antiemoji", (x) => this.antiemojiMenu(x, guild, user));
+        if (v === "escalation") return this.warnEscalationMenu(i, guild, user, "antiemoji", (x) => this.antiemojiMenu(x, guild, user));
+        if (v === "ig_ch")      return this.manageIgnoredList(i, guild, user, "antiemoji", "ignoredChannels", "canal");
+        if (v === "ig_role")    return this.manageIgnoredList(i, guild, user, "antiemoji", "ignoredRoles",    "cargo");
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "😀 Anti-Emoji (excesso)",
+        description:
+          `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"} _(detecção própria da Ayami — sem equivalente no AutoMod nativo)_\n` +
+          `**Limite:** ${cfg.maxEmojis} emojis/msg\n` +
+          `**Ações:** ${(cfg.actions || ["delete"]).map(a => actionLabel[a] || a).join(", ")}\n` +
+          `**Canais ignorados:** ${cfg.ignoredChannels.map(c => `<#${c}>`).join(", ") || "Nenhum"}\n` +
+          `**Cargos ignorados:** ${cfg.ignoredRoles.map(r => `<@&${r}>`).join(", ")   || "Nenhum"}`
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.automodSimpleMenu(i, guild, user)))
+      ]
+    });
+  }
+
+  async setEmojiLimit(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, { content: "Envie o número máximo de emojis por mensagem (ex: `10`):" });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+
+    const limit = parseInt(msg.content);
+    if (isNaN(limit) || limit < 1) return this.followUpEphemeral(interaction, { content: "❌ Número inválido." });
+
+    const sec = this.getSecurity(guild);
+    const cfg = this.getSimpleCfg(sec, "antiemoji");
+    cfg.maxEmojis = limit;
+    guild.markModified("security");
+    await this.save(guild);
+    await this.followUpEphemeral(interaction, { content: `✅ Limite: ${limit} emojis.` });
+    return this.antiemojiMenu(interaction, guild, user);
+  }
+
+  /* ─── ANTI-FILES (arquivos proibidos — sem equivalente nativo) ─── */
+
+  async antifilesMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = this.getSimpleCfg(sec, "antifiles");
+    if (!cfg.blockedExtensions) cfg.blockedExtensions = ["exe", "bat", "scr", "cmd", "msi", "vbs", "jar"];
+    if (!cfg.actions)           cfg.actions           = ["delete"];
+    if (!cfg.ignoredChannels)   cfg.ignoredChannels   = [];
+    if (!cfg.ignoredRoles)      cfg.ignoredRoles      = [];
+    if (!cfg.escalation)        cfg.escalation        = this._defaultEscalation();
+
+    const actionLabel = {
+      delete: "Deletar", warn: "Warn", timeout_10m: "Timeout 10m",
+      timeout_1h: "Timeout 1h", timeout_24h: "Timeout 24h", kick: "Kick", ban: "Ban"
+    };
+
+    const select = this.select(
+      user,
+      [
+        { label: `${cfg.enabled ? "🟢 Desativar" : "🔴 Ativar"}`,                          value: "toggle"     },
+        { label: `➕ Adicionar extensão(ões)`,                                             value: "add"        },
+        { label: `➖ Remover extensão`,                                                    value: "remove"     },
+        { label: `⚡ Ações (${cfg.actions?.length || 1} ativa(s))`,                        value: "set_action" },
+        { label: "⚖️ Escalonamento de Warns",                                              value: "escalation" },
+        { label: `🚫 Canais Ignorados (${cfg.ignoredChannels.length})`,                    value: "ig_ch"      },
+        { label: `👤 Cargos Ignorados (${cfg.ignoredRoles.length})`,                       value: "ig_role"    }
+      ],
+      "Configurar Arquivos Proibidos",
+      async (i) => {
+        await this.deferUpdate(i);
+        const v = i.data.values[0];
+        if (v === "toggle") {
+          cfg.enabled = !cfg.enabled;
+          guild.markModified("security");
+          await this.save(guild);
+          return this.antifilesMenu(i, guild, user);
+        }
+        if (v === "add")        return this.addBlockedExtension(i, guild, user);
+        if (v === "remove")     return this.removeBlockedExtension(i, guild, user);
+        if (v === "set_action") return this.multiActionMenu(i, guild, user, "antifiles", (x) => this.antifilesMenu(x, guild, user));
+        if (v === "escalation") return this.warnEscalationMenu(i, guild, user, "antifiles", (x) => this.antifilesMenu(x, guild, user));
+        if (v === "ig_ch")      return this.manageIgnoredList(i, guild, user, "antifiles", "ignoredChannels", "canal");
+        if (v === "ig_role")    return this.manageIgnoredList(i, guild, user, "antifiles", "ignoredRoles",    "cargo");
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "📎 Arquivos Proibidos",
+        description:
+          `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"} _(detecção própria da Ayami — sem equivalente no AutoMod nativo)_\n` +
+          `**Extensões bloqueadas:** ${cfg.blockedExtensions.map(e => `\`.${e}\``).join(", ") || "Nenhuma"}\n` +
+          `**Ações:** ${(cfg.actions || ["delete"]).map(a => actionLabel[a] || a).join(", ")}\n` +
+          `**Canais ignorados:** ${cfg.ignoredChannels.map(c => `<#${c}>`).join(", ") || "Nenhum"}\n` +
+          `**Cargos ignorados:** ${cfg.ignoredRoles.map(r => `<@&${r}>`).join(", ")   || "Nenhum"}`
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.automodSimpleMenu(i, guild, user)))
+      ]
+    });
+  }
+
+  async addBlockedExtension(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, {
+      content: "Envie a(s) extensão(ões), sem o ponto:\n> Ex: `exe, bat, apk`"
+    });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+
+    const sec = this.getSecurity(guild);
+    const cfg = this.getSimpleCfg(sec, "antifiles");
+    if (!cfg.blockedExtensions) cfg.blockedExtensions = [];
+
+    const exts = msg.content
+      .split(",")
+      .map(e => e.trim().toLowerCase().replace(/^\./, ""))
+      .filter(e => e.length > 0 && !cfg.blockedExtensions.includes(e));
+
+    cfg.blockedExtensions.push(...exts);
+    guild.markModified("security");
+    await this.save(guild);
+    await this.followUpEphemeral(interaction, {
+      content: `✅ ${exts.length} extensão(ões): ${exts.map(e => `\`.${e}\``).join(", ")}`
+    });
+    return this.antifilesMenu(interaction, guild, user);
+  }
+
+  async removeBlockedExtension(interaction, guild, user) {
+    const sec  = this.getSecurity(guild);
+    const cfg  = this.getSimpleCfg(sec, "antifiles");
+    const list = cfg.blockedExtensions || [];
+    if (!list.length) return this.followUpEphemeral(interaction, { content: "Nenhuma extensão cadastrada." });
+
+    const select = this.select(
+      user,
+      list.slice(0, 25).map(e => ({ label: `.${e}`, value: e })),
+      "Selecionar extensão",
+      async (i) => {
+        await this.deferUpdate(i);
+        cfg.blockedExtensions = cfg.blockedExtensions.filter(e => e !== i.data.values[0]);
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: `✅ \`.${i.data.values[0]}\` removida.` });
+        return this.antifilesMenu(i, guild, user);
+      }
+    );
+
+    return this.followUpEphemeral(interaction, {
+      content: "Selecione a extensão para remover:",
+      components: [this.row(select)]
+    });
+  }
+
   /* ─── ANTI-LINKS ─── */
 
   async antilinksMenu(interaction, guild, user) {
@@ -948,6 +1189,7 @@ class SecuritySystem {
       user,
       [
         { label: `${cfg.enabled ? "🟢 Desativar" : "🔴 Ativar"}`,                          value: "toggle"   },
+        { label: `${cfg.blockInvites ? "🟢" : "🔴"} Bloquear Convites (discord.gg)`,        value: "toggle_invites" },
         { label: `✅ Domínios Permitidos (${cfg.allowedDomains.length})`,                   value: "allowed"  },
         { label: `🚫 Domínios Bloqueados (${cfg.blockedDomains.length})`,                   value: "blocked"  },
         { label: `⚡ Ações (${cfg.actions?.length || 1} ativa(s))`,                         value: "set_action"},
@@ -963,6 +1205,14 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, "antilinks");
+          return this.antilinksMenu(i, guild, user);
+        }
+        if (v === "toggle_invites") {
+          cfg.blockInvites = !cfg.blockInvites;
+          guild.markModified("security");
+          await this.save(guild);
+          await this._syncNativeModule(guild, "antilinks");
           return this.antilinksMenu(i, guild, user);
         }
         if (v === "allowed")    return this.manageDomainList(i, guild, user, "allowedDomains", "✅ Domínios Permitidos");
@@ -978,7 +1228,8 @@ class SecuritySystem {
       embeds: [{
         title: "🔗 Anti-Links",
         description:
-          `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"}\n` +
+          `**Status:** ${cfg.enabled ? "🟢 Ativo (AutoMod nativo do Discord)" : "🔴 Inativo"}\n` +
+          `**Bloquear convites:** ${cfg.blockInvites ? "🟢 Sim" : "🔴 Não"}\n` +
           `**Permitidos:** ${cfg.allowedDomains.length} domínio(s)\n` +
           `**Bloqueados:** ${cfg.blockedDomains.length} domínio(s)\n` +
           `**Ações:** ${(cfg.actions || ["delete"]).map(a => actionLabel[a] || a).join(", ")}\n\n` +
@@ -1015,6 +1266,7 @@ class SecuritySystem {
           cfg[listKey] = [];
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, "antilinks");
           await this.followUpEphemeral(i, { content: "✅ Lista limpa." });
           return this.manageDomainList(i, guild, user, listKey, title);
         }
@@ -1054,6 +1306,7 @@ class SecuritySystem {
     cfg[listKey].push(...domains);
     guild.markModified("security");
     await this.save(guild);
+    await this._syncNativeModule(guild, "antilinks");
     await this.followUpEphemeral(interaction, {
       content: `✅ ${domains.length} domínio(s): ${domains.map(d => `\`${d}\``).join(", ")}`
     });
@@ -1075,6 +1328,7 @@ class SecuritySystem {
         cfg[listKey] = cfg[listKey].filter(d => d !== i.data.values[0]);
         guild.markModified("security");
         await this.save(guild);
+        await this._syncNativeModule(guild, "antilinks");
         await this.followUpEphemeral(i, { content: `✅ \`${i.data.values[0]}\` removido.` });
         return this.manageDomainList(i, guild, user, listKey, title);
       }
@@ -1120,6 +1374,7 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, "antimention");
           return this.antimentionMenu(i, guild, user);
         }
         if (v === "set_limit")  return this.setMentionLimit(i, guild, user);
@@ -1160,6 +1415,7 @@ class SecuritySystem {
     cfg.maxMentions = limit;
     guild.markModified("security");
     await this.save(guild);
+    await this._syncNativeModule(guild, "antimention");
     await this.followUpEphemeral(interaction, { content: `✅ Limite: ${limit} menções.` });
     return this.antimentionMenu(interaction, guild, user);
   }
@@ -1179,7 +1435,9 @@ class SecuritySystem {
       antispam:    (i) => this.antispamMenu(i, guild, user),
       anticaps:    (i) => this.anticapsMenu(i, guild, user),
       antilinks:   (i) => this.antilinksMenu(i, guild, user),
-      antimention: (i) => this.antimentionMenu(i, guild, user)
+      antimention: (i) => this.antimentionMenu(i, guild, user),
+      antiemoji:   (i) => this.antiemojiMenu(i, guild, user),
+      antifiles:   (i) => this.antifilesMenu(i, guild, user)
     };
     const backFn = backMap[module] || ((i) => this.automodSimpleMenu(i, guild, user));
 
@@ -1203,6 +1461,7 @@ class SecuritySystem {
           if (!cfg[listKey].includes(id)) cfg[listKey].push(id);
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, module);
           await this.followUpEphemeral(i, { content: `✅ ${type} adicionado!` });
           return this.manageIgnoredList(i, guild, user, module, listKey, type);
         }
@@ -1217,6 +1476,7 @@ class SecuritySystem {
               cfg[listKey] = cfg[listKey].filter(id => id !== i2.data.values[0]);
               guild.markModified("security");
               await this.save(guild);
+              await this._syncNativeModule(guild, module);
               await this.followUpEphemeral(i2, { content: "✅ Removido." });
               return this.manageIgnoredList(i2, guild, user, module, listKey, type);
             }
@@ -1227,6 +1487,7 @@ class SecuritySystem {
           cfg[listKey] = [];
           guild.markModified("security");
           await this.save(guild);
+          await this._syncNativeModule(guild, module);
           await this.followUpEphemeral(i, { content: "✅ Lista limpa." });
           return this.manageIgnoredList(i, guild, user, module, listKey, type);
         }
@@ -3529,31 +3790,14 @@ class SecuritySystem {
         );
       };
 
-      // ── 1. PALAVRAS PROIBIDAS ──
-      const bwCfg = s.badwords;
-      if (bwCfg?.enabled && !isIgnored(bwCfg) && bwCfg.list?.length) {
-        const lower = content.toLowerCase();
-        const found = bwCfg.list.find(w => lower.includes(w));
-        if (found) return await doActions(bwCfg.actions, `Palavra proibida: \`${found}\``, "badwords");
-      }
+      // ── Palavras proibidas, Anti-Spam, Links/Convites e Anti-Mass-Mention ──
+      // Não são mais detectados aqui: essas 4 categorias têm equivalente
+      // nativo no Discord AutoMod e a detecção acontece no servidor do
+      // Discord (ver Security/NativeAutoMod.js). Quando a ação configurada
+      // pede algo além de deletar/timeout (warn/kick/ban), isso é aplicado
+      // reativamente em handleAutoModExecution(), disparado pelo gateway.
 
-      // ── 2. ANTI-SPAM ──
-      const spamCfg = s.antispam;
-      if (spamCfg?.enabled && !isIgnored(spamCfg)) {
-        const key      = `${guildId}:${userId}`;
-        const now      = Date.now();
-        const interval = (spamCfg.intervalSeconds || 5) * 1000;
-        const max      = spamCfg.maxMessages || 5;
-        if (!this._spamTracker[key]) this._spamTracker[key] = [];
-        this._spamTracker[key] = this._spamTracker[key].filter(t => now - t < interval);
-        this._spamTracker[key].push(now);
-        if (this._spamTracker[key].length > max) {
-          this._spamTracker[key] = [];
-          return await doActions(spamCfg.actions, `Spam detectado (${max}+ msgs/${spamCfg.intervalSeconds}s)`, "antispam");
-        }
-      }
-
-      // ── 3. ANTI-CAPS ──
+      // ── ANTI-CAPS (sem equivalente nativo) ──
       const capsCfg = s.anticaps;
       if (capsCfg?.enabled && !isIgnored(capsCfg)) {
         const min     = capsCfg.minLength || 10;
@@ -3568,35 +3812,90 @@ class SecuritySystem {
         }
       }
 
-      // ── 4. ANTI-LINKS ──
-      const linkCfg = s.antilinks;
-      if (linkCfg?.enabled && !isIgnored(linkCfg)) {
-        const urlRegex = /(https?:\/\/|discord\.gg\/|www\.)[^\s]+/gi;
-        const urls     = content.match(urlRegex);
-        if (urls?.length) {
-          const allowed = linkCfg.allowedDomains || [];
-          const blocked = linkCfg.blockedDomains || [];
-          for (const url of urls) {
-            const domain = url.replace(/https?:\/\//g, "").split("/")[0].toLowerCase();
-            if (blocked.some(d => domain.includes(d)))
-              return await doActions(linkCfg.actions, `Link bloqueado: \`${domain}\``, "antilinks");
-            if (allowed.length > 0 && !allowed.some(d => domain.includes(d)))
-              return await doActions(linkCfg.actions, `Link não permitido: \`${domain}\``, "antilinks");
-          }
+      // ── ANTI-EMOJI (sem equivalente nativo) ──
+      const emojiCfg = s.antiemoji;
+      if (emojiCfg?.enabled && !isIgnored(emojiCfg)) {
+        const max = emojiCfg.maxEmojis || 10;
+        const unicodeMatches = content.match(/\p{Extended_Pictographic}/gu) || [];
+        const customMatches  = content.match(/<a?:\w+:\d+>/g) || [];
+        const total = unicodeMatches.length + customMatches.length;
+        if (total > max) {
+          return await doActions(emojiCfg.actions, `Excesso de emojis (${total}/${max})`, "antiemoji");
         }
       }
 
-      // ── 5. ANTI-MASS MENTION ──
-      const mentionCfg = s.antimention;
-      if (mentionCfg?.enabled && !isIgnored(mentionCfg)) {
-        const max      = mentionCfg.maxMentions || 5;
-        const mentions = (data.mentions?.length || 0) + (data.mention_roles?.length || 0);
-        if (mentions >= max) {
-          return await doActions(mentionCfg.actions, `Mass mention (${mentions} menções)`, "antimention");
+      // ── ARQUIVOS PROIBIDOS (sem equivalente nativo) ──
+      const filesCfg = s.antifiles;
+      if (filesCfg?.enabled && !isIgnored(filesCfg) && data.attachments?.length) {
+        const blocked = (filesCfg.blockedExtensions || []).map(e => e.toLowerCase());
+        const bad = data.attachments.find(att => {
+          const ext = (att.filename || "").split(".").pop()?.toLowerCase();
+          return ext && blocked.includes(ext);
+        });
+        if (bad) {
+          const ext = bad.filename.split(".").pop().toLowerCase();
+          return await doActions(filesCfg.actions, `Arquivo proibido: \`.${ext}\` (${bad.filename})`, "antifiles");
         }
       }
 
     } catch (err) { console.error("[Security] handleMessage:", err); }
+  }
+
+  /**
+   * Disparado pelo gateway em AUTO_MODERATION_ACTION_EXECUTION — toda vez
+   * que uma regra nativa de AutoMod (badwords/antispam/antilinks/
+   * antimention) é acionada. A regra nativa já cuida de bloquear a
+   * mensagem e aplicar timeout quando configurado; aqui a Ayami só
+   * completa o que o Discord não pode fazer nativamente: registrar warn
+   * e aplicar kick/ban, além de mandar o alerta no canal de logs
+   * configurado (mesmo formato usado pelos outros módulos).
+   */
+  async handleAutoModExecution(data) {
+    try {
+      const guildId = data.guild_id;
+      const userId  = data.user_id;
+      const ruleId  = data.rule_id;
+      if (!guildId || !userId || !ruleId) return;
+
+      const guild = await this.getGuild(guildId);
+      const sec   = this.getSecurity(guild);
+      const s     = sec.automod.simple;
+
+      const moduleMap = [
+        { key: "badwords",    cfg: s.badwords,    label: "Palavras Proibidas" },
+        { key: "antispam",    cfg: s.antispam,    label: "Anti-Spam" },
+        { key: "antimention", cfg: s.antimention, label: "Anti-Mass Mention" },
+        { key: "antilinks",   cfg: s.antilinks,   label: s.antilinks?.invitesRuleId === ruleId ? "Convites" : "Links" },
+      ];
+      const match = moduleMap.find(m => m.cfg?.nativeRuleId === ruleId || m.cfg?.invitesRuleId === ruleId);
+      if (!match) return; // regra criada manualmente no Discord, fora do escopo da Ayami
+
+      const cfg = match.cfg;
+      const acts = cfg.actions || [];
+      const channelId = data.channel_id || null;
+
+      let warnCount = 0;
+      if (acts.includes("warn")) {
+        warnCount = await this.addWarn(guildId, userId, `${match.label} (AutoMod nativo)`, this.client.clientId, channelId);
+      }
+      if (acts.includes("kick") && await this._hasBotPerms(guildId, ["KICK_MEMBERS"])) {
+        await DiscordRequest(`/guilds/${guildId}/members/${userId}`, { method: "DELETE" }).catch(() => {});
+      }
+      if (acts.includes("ban") && await this._hasBotPerms(guildId, ["BAN_MEMBERS"])) {
+        await DiscordRequest(`/guilds/${guildId}/bans/${userId}`, {
+          method: "PUT", body: { delete_message_seconds: 0 }
+        }).catch(() => {});
+      }
+
+      await this.sendSecurityAlert(guildId,
+        `🛡️ **AutoMod Nativo — ${match.label}** — regra do Discord acionada\n` +
+        `👤 <@${userId}>${channelId ? ` em <#${channelId}>` : ""}\n` +
+        `⚡ Ações extras aplicadas: ${acts.filter(a => ["warn", "kick", "ban"].includes(a)).join(", ") || "nenhuma (bloqueio já feito pelo Discord)"}` +
+        (warnCount ? ` | Warns acumulados: ${warnCount}` : "")
+      );
+    } catch (err) {
+      console.error("[Security] handleAutoModExecution:", err);
+    }
   }
 
   // Apply a single escalation action

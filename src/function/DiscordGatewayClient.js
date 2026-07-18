@@ -396,6 +396,7 @@ if (payload.t === 'GUILD_ROLE_CREATE')   return await this._onRoleCreate(payload
 if (payload.t === 'CHANNEL_CREATE')      return await this._onChannelCreate(payload.d);
 if (payload.t === 'GUILD_MEMBER_UPDATE') return await this._onMemberUpdate(payload.d);
 if (payload.t === 'WEBHOOKS_UPDATE')     return await this._onWebhooksUpdate(payload.d);
+if (payload.t === 'AUTO_MODERATION_ACTION_EXECUTION') return await this._onAutoModExecution(payload.d);
 
         } catch (err) {
             console.error('[Dispatch] Unhandled error:', err);
@@ -425,6 +426,10 @@ async _onMemberUpdate(data) {
 
 async _onWebhooksUpdate(data) {
   await this.security.handleWebhookCreate(data);
+}
+
+async _onAutoModExecution(data) {
+  await this.security.handleAutoModExecution(data);
 }
     
     
@@ -487,7 +492,10 @@ async _onReactionAdd(d) {
     async _onReady(d) {
     console.log(`\n----------> SHARD: ${d.shard[0]}`)
 
-    /
+    // Seção 5 (correção): marca ANTES de qualquer outra coisa, não depende
+    // de Mongo. `d.guilds` é a lista (parcial/unavailable) de guilds que
+    // esse shard já tinha antes desse READY — GUILD_CREATE pra uma dessas
+    // logo em seguida é resync, não entrada nova.
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
     await this.MediaManager.init()
     if (!this._commandsLoaded) {
@@ -522,7 +530,9 @@ async _onReactionAdd(d) {
     }
    
 
-
+    // Seção 6: se alguém já definiu uma presence customizada via comando,
+    // ela foi persistida no Mongo — usa ela em vez do texto hardcoded, senão
+    // todo restart desfaria a mudança.
     let customPresence = null;
     try {
         const BotConfig = require('../Mongodb/botConfig.js');
