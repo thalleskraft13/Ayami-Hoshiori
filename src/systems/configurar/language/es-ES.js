@@ -11,6 +11,8 @@ module.exports = [
   { id: "opt_security_desc", render: () => "Revisa permisos, roles, bots y seguridad" },
   { id: "opt_logic_label", render: () => "Logic Builder" },
   { id: "opt_logic_desc", render: () => "Creación de flujos y automatizaciones" },
+  { id: "opt_activity_label", render: () => "Análisis de Actividad" },
+  { id: "opt_activity_desc", render: () => "Estadísticas e información sobre la actividad del servidor" },
 
   { id: "header", render: (ctx) =>
     `# ⚙️ Centro de Configuración ${ctx.emoji ?? ''}\n` +

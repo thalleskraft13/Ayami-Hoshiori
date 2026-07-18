@@ -135,6 +135,12 @@ module.exports = {
             description: client.t("configurar.opt_logic_desc", ctx),
             value: "logic",
             emoji: { name: "⚡" }
+          },
+          {
+            label: client.t("configurar.opt_activity_label", ctx),
+            description: client.t("configurar.opt_activity_desc", ctx),
+            value: "activity_analytics",
+            emoji: { name: "📊" }
           }
         ]
       },
@@ -172,6 +178,10 @@ module.exports = {
               await client.ticketSystem.deferUpdate(i);
             }
             return client.logicUI.open(i);
+
+          case "activity_analytics":
+            await client.activityAnalytics.deferUpdate(i);
+            return client.activityAnalytics.startSetup(i);
         }
       }
     });

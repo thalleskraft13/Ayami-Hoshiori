@@ -1,6 +1,5 @@
 const DiscordRequest = require("../../function/DiscordRequest.js");
 const db = require("../../Mongodb/userglobal.js");
-const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 module.exports = {
   data: {
@@ -37,8 +36,6 @@ module.exports = {
 
     await userdb.save();
 
-    const ctx = localeCtx(interaction);
-
     await DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
       {
@@ -47,8 +44,8 @@ module.exports = {
           type: 4,
           data: {
             content: userdb.dmNotificacoes
-              ? client.t("notificacoes.enabled", ctx)
-              : client.t("notificacoes.disabled", ctx)
+              ? "✅ Você ativou suas notificações por DM."
+              : "❌ Você desativou suas notificações por DM."
           }
         }
       }

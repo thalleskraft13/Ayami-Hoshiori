@@ -195,35 +195,13 @@ const raidSchema = new Schema({
   history:      { type: [raidHistorySchema], default: [] }
 }, { _id: false });
 
-/* ── Activity ranking entry ── */
-const activityRankingSchema = new Schema({
-  userId:   { type: String, required: true },
-  messages: { type: Number, default: 0     },
-  lastSeen: { type: String, default: null  }
-}, { _id: false });
-
-/* ── Activity history snapshot ── */
-const activityHistorySchema = new Schema({
-  date:   { type: String, required: true },
-  online: { type: Number, default: 0 },
-  total:  { type: Number, default: 0 },
-  score:  { type: Number, default: 0 }
-}, { _id: false });
-
-/* ── Dead channel entry ── */
-const deadChannelSchema = new Schema({
-  channelId:   { type: String, required: true },
-  lastMessage: { type: Number, default: null  }
-}, { _id: false });
-
-/* ── Activity ── */
-const activitySchema = new Schema({
-  ranking:         { type: [activityRankingSchema],  default: [] },
-  history:         { type: [activityHistorySchema],  default: [] },
-  deadChannels:    { type: [deadChannelSchema],       default: [] },
-  channelActivity: { type: Object, default: {} },
-  userActivity:    { type: Object, default: {} }
-}, { _id: false });
+// ⚠️ "Verificação de Atividade" (ranking/history/deadChannels/etc) foi
+// removida daqui — deixou de ser parte de Segurança e virou o módulo
+// independente Análise de Atividade (ver Mongodb/activity*.js e
+// function/System/Activity/ActivityAnalyticsSystem.js). Documentos
+// antigos no Mongo podem ainda ter um campo `security.activity`
+// solto — ele simplesmente não é mais lido nem validado por este
+// schema, e o Mongoose não reclama de campos extras não declarados.
 
 /* ── Backup: role entry ── */
 const backupRoleSchema = new Schema({
@@ -277,6 +255,16 @@ const backupEntrySchema = new Schema({
   channels:    { type: [backupChannelSchema],  default: [] }
 }, { _id: false });
 
+/* ── Análise de Atividade (módulo independente — config apenas;
+   os dados agregados ficam em coleções próprias, ver Mongodb/activity*.js) ── */
+const activityAnalyticsSchema = new Schema({
+  enabled:         { type: Boolean, default: true  },
+  ignoreBots:      { type: Boolean, default: true  },
+  ignoredChannels: { type: [String], default: [] },
+  ignoredRoles:    { type: [String], default: [] },
+  ignoredUsers:    { type: [String], default: [] },
+}, { _id: false });
+
 /* ── Security root ── */
 const securitySchema = new Schema({
   automod: {
@@ -296,7 +284,6 @@ const securitySchema = new Schema({
   raid:       { type: raidSchema,       default: () => ({}) },
   emergency:  { type: emergencySchema,  default: () => ({}) },
   monitoring: { type: monitoringSchema, default: () => ({}) },
-  activity:   { type: activitySchema,   default: () => ({}) },
   backups:    { type: [backupEntrySchema], default: [] }
 }, { _id: false });
 
@@ -534,7 +521,12 @@ const guildSchema = new Schema({
     }
   },
 
-  security: { type: securitySchema, default: () => ({}) }
+  security: { type: securitySchema, default: () => ({}) },
+
+  // Módulo independente Análise de Atividade — só a config fica aqui;
+  // os dados agregados (mensagens, ranking, tendências etc.) ficam em
+  // coleções próprias (Mongodb/activity*.js), não neste documento.
+  activityAnalytics: { type: activityAnalyticsSchema, default: () => ({}) }
 });
 
 /* ─────────────────────────────────────────────

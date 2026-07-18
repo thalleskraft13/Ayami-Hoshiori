@@ -219,7 +219,6 @@ class SecuritySystem {
         raid:       {},
         monitoring: {},
         emergency:  { active: false, channelSnapshot: [] },
-        activity:   {},
         backups:    []
       };
     }
@@ -386,7 +385,6 @@ class SecuritySystem {
         { label: "🔒 Modo Emergência",             value: "emergency_mode"    },
         { label: "🧬 Monitoramento de Alterações", value: "monitoring"        },
         { label: "🤖 Bots Suspeitos",              value: "bot_analysis"      },
-        { label: "📊 Atividade do Servidor",       value: "activity"          },
         { label: "🧠 Verificação Completa",        value: "full_check"        },
         { label: "💾 Backup do Servidor",          value: "backup"            }
       ],
@@ -403,7 +401,6 @@ class SecuritySystem {
         if (v === "emergency_mode")    return this.emergencyMode(i, guild, user);
         if (v === "monitoring")        return this.monitoringSystem(i, guild, user);
         if (v === "bot_analysis")      return this.botAnalysis(i, guild, user);
-        if (v === "activity")          return this.activitySystem(i, guild, user);
         if (v === "full_check")        return this.fullSecurityCheck(i, guild, user);
         if (v === "backup")            return this.backupMenu(i, guild, user);
       }
@@ -2977,203 +2974,14 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 10. ATIVIDADE ================= */
-
-  async activitySystem(interaction, guild, user) {
-    const select = this.select(
-      user,
-      [
-        { label: "📊 Ver Score de Atividade",    value: "activity_score"    },
-        { label: "📅 Histórico de Atividade",    value: "activity_history"  },
-        { label: "📈 Previsão de Atividade",     value: "activity_forecast" },
-        { label: "🏆 Ranking de Usuários",       value: "user_ranking"      },
-        { label: "💀 Canais Mortos",             value: "dead_channels"     }
-      ],
-      "Atividade",
-      async (i) => {
-        await this.deferUpdate(i);
-        const v = i.data.values[0];
-        if (v === "activity_score")    return this.activityScore(i, guild, user);
-        if (v === "activity_history")  return this.activityHistory(i, guild, user);
-        if (v === "activity_forecast") return this.activityForecast(i, guild, user);
-        if (v === "user_ranking")      return this.userRanking(i, guild, user);
-        if (v === "dead_channels")     return this.deadChannels(i, guild, user);
-      }
-    );
-    return this.editOriginal(interaction, {
-      embeds: [{ title: "📊 Atividade do Servidor", description: "Analise o engajamento dos membros." }],
-      components: [
-        this.row(select),
-        this.row(this.backBtn(user, (i) => this.startSetup(i)))
-      ]
-    });
-  }
-
-  async activityScore(interaction, guild, user) {
-    const guildData = await DiscordRequest(`/guilds/${interaction.guild_id}?with_counts=true`);
-    const total     = guildData.approximate_member_count   || 0;
-    const online    = guildData.approximate_presence_count || 0;
-    const score     = Math.max(0, Math.min(100, Math.round(total > 0 ? (online / total) * 100 : 0)));
-    const label     = score < 30 ? "💀 Morto" : score < 60 ? "😐 Fraco" : score < 80 ? "✅ Saudável" : "🔥 Muito Ativo";
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title: "📊 Score de Atividade",
-        description:
-          `**Score:** ${score}/100 — ${label}\n\n` +
-          `**Online agora:** ${online}\n` +
-          `**Total de membros:** ${total}\n` +
-          `**Taxa de presença:** ${total > 0 ? ((online / total) * 100).toFixed(1) : 0}%`,
-        color: score < 30 ? 0xED4245 : score < 60 ? 0xFEE75C : score < 80 ? 0x57F287 : 0x00FF88
-      }],
-      components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-    });
-  }
-
-  async activityHistory(interaction, guild, user) {
-    const sec     = this.getSecurity(guild);
-    const history = sec.activity.history || [];
-
-    if (!history.length) {
-      return this.editOriginal(interaction, {
-        embeds: [{
-          title: "📅 Histórico de Atividade",
-          description:
-            "Nenhum dado histórico disponível ainda.\n\n" +
-            "> O bot registra snapshots de atividade automaticamente a cada 24h quando membros interagem."
-        }],
-        components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-      });
-    }
-
-    const lines = history
-      .slice(-14)
-      .map(h => `**${h.date}** — Online: ${h.online}/${h.total} (${h.score}%)`)
-      .join("\n");
-
-    return this.editOriginal(interaction, {
-      embeds: [{ title: "📅 Histórico de Atividade (14 dias)", description: lines }],
-      components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-    });
-  }
-
-  async activityForecast(interaction, guild, user) {
-    const sec     = this.getSecurity(guild);
-    const history = sec.activity.history || [];
-
-    if (history.length < 3) {
-      return this.editOriginal(interaction, {
-        embeds: [{
-          title: "📈 Previsão de Atividade",
-          description: "Dados insuficientes. É necessário ao menos 3 dias de histórico para gerar previsão."
-        }],
-        components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-      });
-    }
-
-    // Simple linear trend
-    const recent = history.slice(-7);
-    const avg    = recent.reduce((s, h) => s + h.score, 0) / recent.length;
-    const trend  = recent[recent.length - 1].score - recent[0].score;
-    const next   = Math.max(0, Math.min(100, avg + (trend / recent.length)));
-    const label  = trend > 5 ? "📈 Crescendo" : trend < -5 ? "📉 Caindo" : "➡️ Estável";
-
-    return this.editOriginal(interaction, {
-      embeds: [{
-        title: "📈 Previsão de Atividade",
-        description:
-          `**Tendência:** ${label}\n` +
-          `**Média recente:** ${avg.toFixed(1)}%\n` +
-          `**Variação nos últimos ${recent.length} dias:** ${trend > 0 ? "+" : ""}${trend.toFixed(1)}%\n` +
-          `**Previsão próximos dias:** ~${next.toFixed(1)}%`
-      }],
-      components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-    });
-  }
-
-  async userRanking(interaction, guild, user) {
-    const sec     = this.getSecurity(guild);
-    const ranking = sec.activity.ranking || [];
-
-    if (!ranking.length) {
-      return this.editOriginal(interaction, {
-        embeds: [{
-          title: "🏆 Ranking de Usuários",
-          description:
-            "Nenhum dado de ranking disponível ainda.\n\n" +
-            "> O ranking é atualizado conforme os membros interagem no servidor."
-        }],
-        components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-      });
-    }
-
-    const lines = ranking
-      .slice(0, 10)
-      .map((r, i) => `**${i + 1}.** <@${r.userId}> — ${r.messages} msg(s) | ${r.lastSeen ? `Último: ${r.lastSeen}` : ""}`)
-      .join("\n");
-
-    return this.editOriginal(interaction, {
-      embeds: [{ title: "🏆 Top 10 Usuários Ativos", description: lines }],
-      components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-    });
-  }
-
-  async deadChannels(interaction, guild, user) {
-    const sec      = this.getSecurity(guild);
-    const dead     = sec.activity.deadChannels || [];
-    const channels = await DiscordRequest(`/guilds/${interaction.guild_id}/channels`);
-    const textChs  = channels.filter(c => c.type === 0);
-
-    // Use stored data if available, otherwise show all text channels sorted by name
-    if (!dead.length) {
-      return this.editOriginal(interaction, {
-        embeds: [{
-          title: "💀 Canais Mortos",
-          description:
-            `**Total de canais de texto:** ${textChs.length}\n\n` +
-            "> Nenhum dado de atividade por canal registrado ainda.\n" +
-            "> O bot rastreia atividade por canal conforme mensagens são enviadas."
-        }],
-        components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-      });
-    }
-
-    const lines = dead
-      .slice(0, 10)
-      .map(c => `💀 <#${c.channelId}> — Último: ${c.lastMessage ? new Date(c.lastMessage).toLocaleDateString("pt-BR") : "nunca"}`)
-      .join("\n");
-
-    return this.editOriginal(interaction, {
-      embeds: [{ title: "💀 Canais Sem Atividade", description: lines }],
-      components: [this.row(this.backBtn(user, (i) => this.activitySystem(i, guild, user)))]
-    });
-  }
-
-  // Helper: track message activity per channel and user
-  async _trackActivity(guildId, channelId, userId) {
-    try {
-      const guild = await this.getGuild(guildId);
-      const sec   = this.getSecurity(guild);
-      if (!sec.activity.channelActivity) sec.activity.channelActivity = {};
-      if (!sec.activity.userActivity)    sec.activity.userActivity    = {};
-      if (!sec.activity.ranking)         sec.activity.ranking         = [];
-
-      sec.activity.channelActivity[channelId] = Date.now();
-
-      // Update user ranking
-      const existing = sec.activity.ranking.find(r => r.userId === userId);
-      if (existing) {
-        existing.messages++;
-        existing.lastSeen = new Date().toLocaleDateString("pt-BR");
-      } else {
-        sec.activity.ranking.push({ userId, messages: 1, lastSeen: new Date().toLocaleDateString("pt-BR") });
-      }
-      sec.activity.ranking.sort((a, b) => b.messages - a.messages);
-      if (sec.activity.ranking.length > 100) sec.activity.ranking = sec.activity.ranking.slice(0, 100);
-
-      guild.markModified("security");
-      await this.save(guild);
-    } catch (err) { /* non-critical */ }
-  }
+  /* ================= 10. ATIVIDADE =================
+     Removido — a antiga "Verificação de Atividade" (ranking, histórico,
+     previsão, canais mortos, _trackActivity) saiu daqui e virou o
+     módulo independente Análise de Atividade. Ver:
+       - function/System/Activity/ActivityAnalyticsSystem.js
+       - Mongodb/activityDailyStat.js, activityDailyUser.js,
+         activityUserStat.js, activityChannelStat.js, activityTermStat.js
+     Acesse pelo /configurar > Análise de Atividade. */
 
   /* ================= 11. BACKUP DO SERVIDOR ================= */
 
@@ -3838,9 +3646,6 @@ class SecuritySystem {
       const channelId = data.channel_id;
       const content   = data.content || "";
       const guildId   = data.guild_id;
-
-      // Track activity
-      await this._trackActivity(guildId, channelId, userId);
 
       const memberRoles = data.member?.roles || [];
 

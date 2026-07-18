@@ -30,6 +30,7 @@ const BirthdayManager = require("./System/BirthdayManager.js");
 const LibraryManager = require("./System/LogicBuilder/LibraryManager.js");
 const MissionManager = require('./System/MissionManager.js');
 const SecuritySystem = require("./System/SecuritySystem.js")
+const ActivityAnalyticsSystem = require("./System/Activity/ActivityAnalyticsSystem.js")
 const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
 const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js');
 const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
@@ -101,6 +102,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.birthdayManager = new BirthdayManager(this);
         this.missionManager = new MissionManager(this);
         this.security = new SecuritySystem(this);
+        this.activityAnalytics = new ActivityAnalyticsSystem(this);
         this.giveaway   = new GiveawaySystem(this);
         this.gScheduler = new GiveawayScheduler(this);
         this.giveaway.messageTracker = new GiveawayMessageTracker();
@@ -392,6 +394,7 @@ class DiscordGatewayClient extends EventEmitter {
             if (payload.t === 'VOICE_STATE_UPDATE')   return await this._onVoiceStateUpdate(payload.d);   
         if (payload.t === 'MESSAGE_REACTION_ADD') return await this._onReactionAdd(payload.d);        
         if (payload.t === 'GUILD_MEMBER_ADD')    return await this._onMemberAdd(payload.d);
+        if (payload.t === 'GUILD_MEMBER_REMOVE') return await this._onMemberRemove(payload.d);
 if (payload.t === 'GUILD_ROLE_CREATE')   return await this._onRoleCreate(payload.d);
 if (payload.t === 'CHANNEL_CREATE')      return await this._onChannelCreate(payload.d);
 if (payload.t === 'GUILD_MEMBER_UPDATE') return await this._onMemberUpdate(payload.d);
@@ -405,11 +408,17 @@ if (payload.t === 'AUTO_MODERATION_ACTION_EXECUTION') return await this._onAutoM
     
     async _onMessage(data) {
   await this.security.handleMessage(data);
+  await this.activityAnalytics.handleMessage(data);
   await this.giveaway.messageTracker.onMessage(data)
 }
     
     async _onMemberAdd(data) {
   await this.security.handleMemberJoin(data);
+  await this.activityAnalytics.handleMemberAdd(data);
+}
+
+async _onMemberRemove(data) {
+  await this.activityAnalytics.handleMemberRemove(data);
 }
 
 async _onRoleCreate(data) {
@@ -484,6 +493,7 @@ async _onReactionAdd(d) {
     // Ignora bots
     if (!userId || !guildId) return;
 
+    await this.activityAnalytics.handleReactionAdd(d).catch(() => {});
     await this.missionManager.trackEvent(userId, 'add_reaction', 1, guildId).catch(() => {});
 }
 
