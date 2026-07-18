@@ -106,13 +106,22 @@ class SecuritySystem {
    * Em vez de reescrever as ~60 telas deste arquivo uma por uma, a
    * conversão acontece aqui, uma única vez, no ponto de saída — todas
    * as telas continuam definindo `embeds`/`components` normalmente.
+   *
+   * ⚠️ Bug relacionado, corrigido depois: quando `data` NÃO tinha
+   * `embeds` (ex: um followUpEphemeral simples do tipo `{ content: "..." }`),
+   * essa função forçava a flag IS_COMPONENTS_V2 em cima de um payload que
+   * usa `content` — e a API do Discord PROÍBE o campo `content` em
+   * qualquer mensagem com essa flag (erro 50035,
+   * MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2). Isso quebrava
+   * TODO followUp/reply de texto simples do módulo (ex: ao adicionar
+   * palavra proibida pelo Modal). A flag permanente só é uma exigência
+   * real para `editOriginal` (que edita a MESMA mensagem original, já
+   * nascida V2) — `reply()`/`followUp()` criam mensagens NOVAS, que não
+   * têm essa restrição e devem continuar podendo usar `content` livremente
+   * quando não há `embeds` para converter.
    */
   _toV2(data) {
-    if (!data) return data;
-    if (!data.embeds) {
-      // Já não usa embeds — só garante que a flag V2 está presente.
-      return { ...data, flags: (data.flags ?? 0) | 32768 };
-    }
+    if (!data || !data.embeds) return data;
 
     const blocks = [];
     for (const embed of data.embeds) {
@@ -160,9 +169,21 @@ class SecuritySystem {
   }
 
   async editOriginal(interaction, data) {
+    let payload = this._toV2(data);
+    // A mensagem original do /configurar nasce com a flag IS_COMPONENTS_V2,
+    // que é PERMANENTE — todo PATCH nela precisa preservar essa flag. Isso
+    // só se aplica aqui (a mesma mensagem sendo editada repetidamente);
+    // reply()/followUp() criam mensagens novas e não têm essa exigência.
+    // A checagem de `content === undefined` é defensiva: telas de menu
+    // deste arquivo nunca usam `content` (só embeds/components), então
+    // isso nunca deveria conflitar — mas se algum dia usarem, a flag V2
+    // não é aplicada para não quebrar o envio.
+    if (payload && payload.content === undefined) {
+      payload = { ...payload, flags: (payload.flags ?? 0) | 32768 };
+    }
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
-      { method: "PATCH", body: this._toV2(data) }
+      { method: "PATCH", body: payload }
     );
   }
 
