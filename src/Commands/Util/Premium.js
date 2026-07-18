@@ -4,6 +4,10 @@ const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
+// URL principal do site — usada para redirecionar comandos que agora
+// são feitos por lá em vez de dentro do Discord.
+const SITE_URL = "https://ayami-hoshiori.discloud.app";
+
 /* ═══════════════════════════════════════════════════════════
    HELPERS COMPONENTS V2
    (mesmo padrão usado no Logic Builder / Biblioteca / Missões)
@@ -83,8 +87,8 @@ module.exports = {
         type: 1,
         name: "comprar",
         name_localizations: { 'en-US': "buy", 'en-GB': "buy", 'es-ES': "comprar" },
-        description: "Conheça os planos Constellation",
-        description_localizations: { 'en-US': "Learn about the Constellation plans", 'en-GB': "Learn about the Constellation plans", 'es-ES': "Conoce los planes Constellation" }
+        description: "Veja os planos Constellation no nosso site",
+        description_localizations: { 'en-US': "View the Constellation plans on our website", 'en-GB': "View the Constellation plans on our website", 'es-ES': "Consulta los planes Constellation en nuestro sitio" }
       },
       {
         type: 1,
@@ -183,19 +187,13 @@ async function renderBuy(interaction, client, emoji) {
   const blocks = [
     cv2Text(client.t("premium.buy_title", ctx)),
     cv2Divider(),
-    cv2Text(client.t("premium.buy_plans", ctx)),
-    cv2Divider(),
-    cv2Text(client.t("premium.buy_comparison", ctx)),
-    cv2Divider(),
-    cv2Text(client.t("premium.buy_benefits", ctx)),
-    cv2Divider(),
-    cv2Text(client.t("premium.buy_footer", ctx)),
+    cv2Text(client.t("premium.buy_redirect_desc", ctx)),
     cv2Divider(),
     row({
       type: 2,
       style: 5,
       label: client.t("premium.buy_button", ctx),
-      url: "https://discord.gg/WjeVXJPn5p" // Servidor Oficial — é onde a compra/geração da key acontece
+      url: `${SITE_URL}/premium` // Planos, comparativo e assinatura agora ficam no site
     }),
   ];
 
@@ -356,12 +354,12 @@ async function renderPanel(interaction, client, userId, edit = false) {
     components.push(btnRemove);
   }
 
-  // Botão: Comprar (link)
+  // Botão: Comprar (link) — planos agora ficam no site
   components.push({
     type: 2,
     style: 5,
     label: client.t("premium.btn_view_plans", ctx),
-    url: "https://discord.gg/WjeVXJPn5p"
+    url: `${SITE_URL}/premium`
   });
 
   blocks.push(cv2Divider());

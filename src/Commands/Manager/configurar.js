@@ -4,6 +4,9 @@ const getPerm         = require("../../function/Utils/GetPerm.js");
 const DiscordRequest  = require("../../function/DiscordRequest.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
+// URL principal do site — usada para o botão de acesso ao Dashboard.
+const SITE_URL = "https://ayami-hoshiori.discloud.app";
+
 /* ─────────────────────────────────────────────
    CORES DA AYAMI
    ───────────────────────────────────────────── */
@@ -192,12 +195,20 @@ module.exports = {
 
     const headerText = client.t("configurar.header", ctx);
 
+    const dashboardBtn = {
+      type: 2,
+      style: 5,
+      label: client.t("configurar.dashboard_button", ctx),
+      url: `${SITE_URL}/dashboard/${interaction.guild_id}`
+    };
+
     const blocks = [
       thumbUrl ? cv2SectionThumb(headerText, thumbUrl) : cv2Text(headerText),
       cv2Divider(),
       cv2Text(client.t("configurar.body", ctx)),
       cv2Divider(),
       row(configSelect),
+      row(dashboardBtn),
       cv2Divider(),
       cv2Text(`-# ${guildData.name || client.t("configurar.fallback_guild_name", { ...ctx, guildId: interaction.guild_id })}`),
     ];

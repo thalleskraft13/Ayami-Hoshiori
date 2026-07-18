@@ -4,6 +4,9 @@ const UserEconomy = require("../../function/Gacha/Economy.js");
 const UserGlobal = require("../../Mongodb/userglobal.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js")
 
+// URL principal do site — o daily também pode ser resgatado por lá.
+const SITE_URL = "https://ayami-hoshiori.discloud.app";
+
 function MS(time) {
   const value = parseInt(time);
   const unit = time.replace(value, "").toLowerCase();
@@ -312,10 +315,18 @@ module.exports = {
           `🎰 Sistema de giros:\n` +
           `• Usuário normal: **10–20 giros**\n` +
           `• Com assinatura: **20–50 giros** ✨\n\n` +
-          `Cada giro vale **${baseReward} primogemas**~ ⭐`
+          `Cada giro vale **${baseReward} primogemas**~ ⭐\n\n` +
+          `🌐 -# Também dá pra resgatar pelo nosso site!`
         )
         .setTimestamp()
         .build();
+
+      const siteButton = {
+        type: 2,
+        style: 5,
+        label: "🌐 Resgatar pelo Site",
+        url: `${SITE_URL}/dashboard/daily`
+      };
 
       return await DiscordRequest(
         `/webhooks/${interaction.application_id}/${interaction.token}`,
@@ -326,7 +337,7 @@ module.exports = {
             components: [
               {
                 type: 1,
-                components: [button]
+                components: [button, siteButton]
               }
             ]
           }

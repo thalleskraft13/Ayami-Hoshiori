@@ -31,4 +31,5 @@ module.exports = [
     `Crie automações e fluxos personalizados para seu servidor.` },
 
   { id: "fallback_guild_name", render: (ctx) => `Servidor ${ctx.guildId}` },
+  { id: "dashboard_button", render: () => "🌐 Abrir Dashboard do Servidor" },
 ];

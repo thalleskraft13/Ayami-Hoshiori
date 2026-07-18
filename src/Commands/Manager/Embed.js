@@ -10,6 +10,9 @@ const MAX_EMBEDS       = 10;
 const IS_COMPONENTS_V2 = 1 << 15;
 const FLOWS_PER_PAGE   = 24; // máximo seguro para select (1 slot reservado para nav)
 
+// URL principal do site — o editor de Components V2 agora roda por lá.
+const SITE_URL = "https://ayami-hoshiori.discloud.app";
+
 const CTYPE = Object.freeze({
   ACTION_ROW   : 1,
   BUTTON       : 2,
@@ -242,6 +245,28 @@ async function checkExistingAndPrompt(interaction, client, type) {
   });
 }
 
+// ─── Redireciona /criar componentsv2 para o editor no site ───────────────────
+async function redirectComponentsV2ToSite(interaction, client) {
+  const guildId = interaction.guild_id;
+
+  return DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
+    method: "POST",
+    body  : {
+      content   : "🧩 **Editor de Components V2**\nEsse editor agora é feito pelo nosso site — mais rápido, com preview em tempo real e sem limite de tela! Clique no botão abaixo para abrir o Dashboard do servidor.",
+      flags     : 64,
+      components: [{
+        type: 1,
+        components: [{
+          type : 2,
+          style: 5,
+          label: "🌐 Abrir Editor no Site",
+          url  : `${SITE_URL}/dashboard/${guildId}/component-builder`
+        }]
+      }]
+    }
+  });
+}
+
 // ─── MODULE EXPORT ────────────────────────────────────────────────────────────
 module.exports = {
   data: {
@@ -259,8 +284,8 @@ module.exports = {
       name_localizations: { 'en-US': "embed", 'en-GB': "embed", 'es-ES': "embed" },        description: "Editor avançado de Embed com preview em tempo real",
       description_localizations: { 'en-US': "Advanced Embed editor with real-time preview", 'en-GB': "Advanced Embed editor with real-time preview", 'es-ES': "Editor avanzado de Embed con vista previa en tiempo real" }, type: 1 },
       { name: "componentsv2",
-      name_localizations: { 'en-US': "componentsv2", 'en-GB': "componentsv2", 'es-ES': "componentsv2" }, description: "Editor visual de Components V2 da Discord API",
-      description_localizations: { 'en-US': "Visual editor for Discord API's Components V2", 'en-GB': "Visual editor for Discord API's Components V2", 'es-ES': "Editor visual de Components V2 de la API de Discord" },      type: 1 },
+      name_localizations: { 'en-US': "componentsv2", 'en-GB': "componentsv2", 'es-ES': "componentsv2" }, description: "Abre o editor de Components V2 no nosso site",
+      description_localizations: { 'en-US': "Opens the Components V2 editor on our website", 'en-GB': "Opens the Components V2 editor on our website", 'es-ES': "Abre el editor de Components V2 en nuestro sitio" },      type: 1 },
       {
         name       : "editar",
         name_localizations: { 'en-US': "edit", 'en-GB': "edit", 'es-ES': "editar" },
@@ -290,7 +315,7 @@ module.exports = {
     const sub = interaction.data?.options?.[0]?.name;
 
     if (sub === "editar")       return runEditSavedMessage(interaction, client);
-    if (sub === "componentsv2") return checkExistingAndPrompt(interaction, client, "components_v2");
+    if (sub === "componentsv2") return redirectComponentsV2ToSite(interaction, client);
     return checkExistingAndPrompt(interaction, client, "embed");
   }
 };
@@ -1002,7 +1027,7 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
   await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
     method: "POST",
     body  : {
-      content   : null,
+      content   : `-# 🌐 Prefere pelo navegador? Você também pode criar e editar embeds pelo nosso site: ${SITE_URL}/dashboard/${guildId}/embed-builder`,
       embeds    : buildEmbeds(true),
       components: buildEditorRows()
     }

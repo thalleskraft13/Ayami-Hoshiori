@@ -31,4 +31,5 @@ module.exports = [
     `Create custom automations and flows for your server.` },
 
   { id: "fallback_guild_name", render: (ctx) => `Server ${ctx.guildId}` },
+  { id: "dashboard_button", render: () => "🌐 Open Server Dashboard" },
 ];

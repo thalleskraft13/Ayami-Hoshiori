@@ -9,6 +9,10 @@ module.exports = [
   { id: "buy_title", render: (ctx) =>
     `# ${ctx.eFeliz} Constellation — Ayami Hoshiori\n${ctx.eAnimada} **A assinatura oficial da Ayami chegou!**` },
 
+  { id: "buy_redirect_desc", render: (ctx) =>
+    `✨ Confira todos os planos, benefícios e o comparativo completo no nosso site!\n\n` +
+    `${ctx.eCurtida} Por lá você também garante sua assinatura Constellation de um jeito rápido e seguro~` },
+
   { id: "buy_plans", render: (ctx) =>
     `✨ **Escolha seu plano:**\n\n` +
     `> 🌟 **Nova Estrela** — R$ 7,99/mês\n` +
@@ -70,7 +74,7 @@ module.exports = [
     `${ctx.ePensando} *Constellation não é só um plano.*\n*É o seu lugar entre as estrelas.* ${ctx.eSria}\n\n` +
     `🛒 *Assinaturas e keys avulsas são adquiridas exclusivamente no **Servidor Oficial** da Ayami.*` },
 
-  { id: "buy_button", render: () => "✨ Assinar Constellation" },
+  { id: "buy_button", render: () => "🌐 Ver Planos no Site" },
 
   { id: "panel_no_premium", render: (ctx) =>
     `# ${ctx.eEmduvida} Constellation\n` +
