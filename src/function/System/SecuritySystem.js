@@ -8,6 +8,7 @@ const TTLCache = require("../Utils/TTLCache.js");
 const NativeAutoMod = require("./Security/NativeAutoMod.js");
 const RaidIntelligence = require("./Security/RaidIntelligence.js");
 const MemberVerification = require("./Security/MemberVerification.js");
+const TrapChannel = require("./Security/TrapChannel.js");
 
 // Módulos de Filtro cuja detecção acontece via Discord AutoMod nativo
 // (ver Security/NativeAutoMod.js) — o restante (anticaps, antiemoji,
@@ -24,6 +25,7 @@ class SecuritySystem {
     this.nativeAutoMod  = new NativeAutoMod(client);
     this.raidIntelligence = new RaidIntelligence(this);
     this.memberVerification = new MemberVerification(this);
+    this.trapChannel = new TrapChannel(this);
   }
 
   /**
@@ -246,6 +248,13 @@ class SecuritySystem {
     if (!guild.security.verification) {
       guild.security.verification = { enabled: false, rules: { minAccountAge: {}, requireCustomAvatar: {} }, history: [] };
     }
+    if (!guild.security.trapChannel) {
+      guild.security.trapChannel = {
+        enabled: false, channelId: null, punishment: "log", logChannelId: null,
+        deleteRecentMessages: false, recentMessagesWindowMinutes: 5,
+        ignoredRoles: [], ignoredUsers: [], ignoredBots: [], warningMessageSent: false, history: []
+      };
+    }
     return guild.security;
   }
 
@@ -402,6 +411,7 @@ class SecuritySystem {
         { label: "📜 Logs",                        value: "logs"              },
         { label: "🔍 Verificação de Permissões",   value: "permission_check"  },
         { label: "🧾 Verificação de Novos Membros",value: "member_verification" },
+        { label: "🪤 Canal Armadilha",             value: "trap_channel"      },
         { label: "🚨 AntiRaid Inteligente",        value: "raid_detection"    },
         { label: "🔒 Modo Emergência",             value: "emergency_mode"    },
         { label: "🧬 Monitoramento de Alterações", value: "monitoring"        },
@@ -419,6 +429,7 @@ class SecuritySystem {
         if (v === "logs")              return this.logsMenu(i, guild, user);
         if (v === "permission_check")  return this.permissionCheck(i, guild, user);
         if (v === "member_verification") return this.verificationMenu(i, guild, user);
+        if (v === "trap_channel")      return this.trapChannelMenu(i, guild, user);
         if (v === "raid_detection")    return this.raidDetection(i, guild, user);
         if (v === "emergency_mode")    return this.emergencyMode(i, guild, user);
         if (v === "monitoring")        return this.monitoringSystem(i, guild, user);
@@ -2707,6 +2718,302 @@ class SecuritySystem {
     });
   }
 
+  /* ================= 5C. CANAL ARMADILHA ================= */
+  // Motor real mora em Security/TrapChannel.js. Detecta self-bots/scripts
+  // que respondem em todos os canais — inclusive no canal armadilha, onde
+  // nenhum humano deveria escrever.
+
+  _trapPunishmentLabels() {
+    return {
+      log:     "📝 Apenas registrar em logs",
+      timeout: "⏱️ Timeout (1h)",
+      kick:    "👢 Kick",
+      ban:     "🔨 Ban"
+    };
+  }
+
+  async trapChannelMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = sec.trapChannel;
+    const labels = this._trapPunishmentLabels();
+
+    const select = this.select(
+      user,
+      [
+        { label: `${cfg.enabled ? "🟢" : "🔴"} Canal Armadilha`,                              value: "toggle"       },
+        { label: `📌 Canal: ${cfg.channelId ? `#${cfg.channelId}` : "Não definido"}`,          value: "set_channel"  },
+        { label: `⚡ Punição: ${labels[cfg.punishment || "log"]}`,                             value: "punishment"   },
+        { label: `🧹 Apagar mensagens recentes em outros canais: ${cfg.deleteRecentMessages ? "🟢" : "🔴"}`, value: "toggle_delete_recent" },
+        { label: `⏳ Janela de mensagens recentes: ${cfg.recentMessagesWindowMinutes ?? 5}min`, value: "set_window"  },
+        { label: "🚫 Exceções (cargos, usuários, bots)",                                       value: "exceptions"  },
+        { label: `📋 Canal de logs: ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : "Usa o principal (Logs)"}`, value: "set_log_channel" },
+        { label: "📊 Ver Histórico",                                                            value: "history"     }
+      ],
+      "Configurar Canal Armadilha",
+      async (i) => {
+        await this.deferUpdate(i);
+        const v = i.data.values[0];
+        if (v === "toggle")               return this.toggleTrapChannel(i, guild, user);
+        if (v === "set_channel")          return this.setTrapChannel(i, guild, user);
+        if (v === "punishment")           return this.setTrapPunishment(i, guild, user);
+        if (v === "toggle_delete_recent") return this.toggleTrapDeleteRecent(i, guild, user);
+        if (v === "set_window")           return this.setTrapWindow(i, guild, user);
+        if (v === "exceptions")           return this.trapExceptionsMenu(i, guild, user);
+        if (v === "set_log_channel")      return this.setTrapLogChannel(i, guild, user);
+        if (v === "history")              return this.trapHistory(i, guild, user);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "🪤 Canal Armadilha",
+        description:
+          `Escolha um canal onde nenhum humano deve enviar mensagens. A Ayami fixa um aviso lá.\n` +
+          `Qualquer mensagem enviada nesse canal é tratada como sinal de self-bot/script: é apagada, ` +
+          `registrada e punida conforme configurado abaixo.\n\n` +
+          `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"}\n` +
+          `**Canal:** ${cfg.channelId ? `<#${cfg.channelId}>` : "Não definido"}\n` +
+          `**Punição:** ${labels[cfg.punishment || "log"]}\n` +
+          `**Exceções:** ${(sec.roles.staff.length + sec.roles.immune.length + cfg.ignoredRoles.length + cfg.ignoredUsers.length + cfg.ignoredBots.length)} configurada(s) (inclui Staff/Imunes do módulo de Segurança)`
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.startSetup(i)))
+      ]
+    });
+  }
+
+  async toggleTrapChannel(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = sec.trapChannel;
+
+    if (!cfg.enabled && !cfg.channelId) {
+      await this.followUpEphemeral(interaction, { content: "❌ Defina um canal armadilha antes de ativar." });
+      return this.trapChannelMenu(interaction, guild, user);
+    }
+
+    cfg.enabled = !cfg.enabled;
+    guild.markModified("security");
+    await this.save(guild);
+
+    if (cfg.enabled && !cfg.warningMessageSent) {
+      const res = await this.trapChannel.postWarningMessage(guild.guildId, cfg.channelId);
+      if (res.ok) {
+        cfg.warningMessageSent = true;
+        guild.markModified("security");
+        await this.save(guild);
+      } else {
+        await this.followUpEphemeral(interaction, {
+          content: `⚠️ Ativado, mas não consegui postar o aviso no canal — falta permissão \`${res.missing}\`.`
+        });
+      }
+    }
+
+    return this.trapChannelMenu(interaction, guild, user);
+  }
+
+  async setTrapChannel(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, { content: "Envie o canal armadilha (menção ou ID):" });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+    const id = this.extractId(msg.content);
+    if (!id) return this.followUpEphemeral(interaction, { content: "❌ Não consegui identificar um canal." });
+
+    const sec = this.getSecurity(guild);
+    sec.trapChannel.channelId = id;
+    sec.trapChannel.warningMessageSent = false;
+    guild.markModified("security");
+    await this.save(guild);
+
+    const res = await this.trapChannel.postWarningMessage(guild.guildId, id);
+    if (res.ok) {
+      sec.trapChannel.warningMessageSent = true;
+      guild.markModified("security");
+      await this.save(guild);
+      await this.followUpEphemeral(interaction, { content: "✅ Canal armadilha definido e aviso publicado!" });
+    } else {
+      await this.followUpEphemeral(interaction, {
+        content: `✅ Canal definido, mas não consegui publicar o aviso — falta permissão \`${res.missing}\`.`
+      });
+    }
+
+    return this.trapChannelMenu(interaction, guild, user);
+  }
+
+  async setTrapPunishment(interaction, guild, user) {
+    const labels = this._trapPunishmentLabels();
+    const select = this.select(
+      user,
+      Object.entries(labels).map(([value, label]) => ({ label, value })),
+      "Selecionar punição",
+      async (i) => {
+        await this.deferUpdate(i);
+        const sec = this.getSecurity(guild);
+        sec.trapChannel.punishment = i.data.values[0];
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: "✅ Punição definida." });
+        return this.trapChannelMenu(i, guild, user);
+      }
+    );
+    return this.followUpEphemeral(interaction, { content: "Selecione a punição aplicada a quem cair na armadilha:", components: [this.row(select)] });
+  }
+
+  async toggleTrapDeleteRecent(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    sec.trapChannel.deleteRecentMessages = !sec.trapChannel.deleteRecentMessages;
+    guild.markModified("security");
+    await this.save(guild);
+    return this.trapChannelMenu(interaction, guild, user);
+  }
+
+  async setTrapWindow(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, { content: "Janela em minutos para apagar mensagens recentes em outros canais (ex: `5`, máx. 30):" });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+    const val = parseInt(msg.content);
+    if (isNaN(val) || val < 1) return this.followUpEphemeral(interaction, { content: "❌ Inválido." });
+
+    const sec = this.getSecurity(guild);
+    sec.trapChannel.recentMessagesWindowMinutes = Math.min(val, 30);
+    guild.markModified("security");
+    await this.save(guild);
+    await this.followUpEphemeral(interaction, { content: `✅ Janela definida em ${Math.min(val, 30)} minuto(s).` });
+    return this.trapChannelMenu(interaction, guild, user);
+  }
+
+  async setTrapLogChannel(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, {
+      content: "Envie o canal de logs do Canal Armadilha (menção ou ID). Envie `remover` para voltar a usar o canal de logs principal:"
+    });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+
+    const sec = this.getSecurity(guild);
+    if (msg.content.trim().toLowerCase() === "remover") {
+      sec.trapChannel.logChannelId = null;
+      guild.markModified("security");
+      await this.save(guild);
+      await this.followUpEphemeral(interaction, { content: "✅ Voltou a usar o canal de logs principal." });
+      return this.trapChannelMenu(interaction, guild, user);
+    }
+
+    const id = this.extractId(msg.content);
+    if (!id) return this.followUpEphemeral(interaction, { content: "❌ Não consegui identificar um canal." });
+    sec.trapChannel.logChannelId = id;
+    guild.markModified("security");
+    await this.save(guild);
+    await this.followUpEphemeral(interaction, { content: "✅ Canal de logs definido." });
+    return this.trapChannelMenu(interaction, guild, user);
+  }
+
+  async trapExceptionsMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = sec.trapChannel;
+
+    const select = this.select(
+      user,
+      [
+        { label: `➕ Adicionar cargo (${cfg.ignoredRoles.length})`,  value: "add_role"  },
+        { label: "➖ Remover cargo",                                  value: "remove_role" },
+        { label: `➕ Adicionar usuário (${cfg.ignoredUsers.length})`, value: "add_user"  },
+        { label: "➖ Remover usuário",                                value: "remove_user" },
+        { label: `➕ Adicionar bot autorizado (${cfg.ignoredBots.length})`, value: "add_bot" },
+        { label: "➖ Remover bot autorizado",                         value: "remove_bot" }
+      ],
+      "Gerenciar exceções",
+      async (i) => {
+        await this.deferUpdate(i);
+        const v = i.data.values[0];
+        if (v === "add_role")     return this._trapAddException(i, guild, user, "ignoredRoles", "cargo");
+        if (v === "remove_role")  return this._trapRemoveException(i, guild, user, "ignoredRoles");
+        if (v === "add_user")     return this._trapAddException(i, guild, user, "ignoredUsers", "usuário");
+        if (v === "remove_user")  return this._trapRemoveException(i, guild, user, "ignoredUsers");
+        if (v === "add_bot")      return this._trapAddException(i, guild, user, "ignoredBots", "bot");
+        if (v === "remove_bot")   return this._trapRemoveException(i, guild, user, "ignoredBots");
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "🚫 Exceções — Canal Armadilha",
+        description:
+          `Além destas, Staff e Cargos Imunes do módulo de Segurança já são ignorados automaticamente.\n\n` +
+          `**Cargos:** ${cfg.ignoredRoles.map(r => `<@&${r}>`).join(", ") || "Nenhum"}\n` +
+          `**Usuários:** ${cfg.ignoredUsers.map(u => `<@${u}>`).join(", ") || "Nenhum"}\n` +
+          `**Bots autorizados:** ${cfg.ignoredBots.map(b => `<@${b}>`).join(", ") || "Nenhum"}`
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.trapChannelMenu(i, guild, user)))
+      ]
+    });
+  }
+
+  async _trapAddException(interaction, guild, user, field, label) {
+    await this.followUpEphemeral(interaction, { content: `Mencione ou envie o ID do ${label}:` });
+    let msg;
+    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
+    const id = this.extractId(msg.content);
+    if (!id) return this.followUpEphemeral(interaction, { content: "❌ Não consegui identificar um ID." });
+
+    const sec = this.getSecurity(guild);
+    if (!sec.trapChannel[field].includes(id)) sec.trapChannel[field].push(id);
+    guild.markModified("security");
+    await this.save(guild);
+    await this.followUpEphemeral(interaction, { content: "✅ Adicionado!" });
+    return this.trapExceptionsMenu(interaction, guild, user);
+  }
+
+  async _trapRemoveException(interaction, guild, user, field) {
+    const sec  = this.getSecurity(guild);
+    const list = sec.trapChannel[field];
+    if (!list.length) return this.followUpEphemeral(interaction, { content: "Lista vazia." });
+
+    const select = this.select(
+      user,
+      list.map(v => ({ label: v, value: v })),
+      "Selecionar para remover",
+      async (i) => {
+        await this.deferUpdate(i);
+        sec.trapChannel[field] = list.filter(v => v !== i.data.values[0]);
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: "✅ Removido!" });
+        return this.trapExceptionsMenu(i, guild, user);
+      }
+    );
+    return this.followUpEphemeral(interaction, { content: "Selecione:", components: [this.row(select)] });
+  }
+
+  async trapHistory(interaction, guild, user) {
+    const sec     = this.getSecurity(guild);
+    const history = sec.trapChannel.history || [];
+
+    if (!history.length) {
+      return this.editOriginal(interaction, {
+        embeds: [{ title: "📊 Histórico — Canal Armadilha", description: "Nenhum acionamento registrado até agora." }],
+        components: [this.row(this.backBtn(user, (i) => this.trapChannelMenu(i, guild, user)))]
+      });
+    }
+
+    const labels = this._trapPunishmentLabels();
+    const lines = history
+      .slice(-10)
+      .reverse()
+      .map(h =>
+        `👤 **${h.username}** (<@${h.userId}>) — ${new Date(h.timestamp).toLocaleString("pt-BR")}\n` +
+        `└ Ação: ${labels[h.action] || h.action}` +
+        (h.deletedElsewhere ? ` | 🧹 ${h.deletedElsewhere} msg(ns) apagada(s) em outros canais` : "")
+      )
+      .join("\n\n");
+
+    return this.editOriginal(interaction, {
+      embeds: [{ title: "📊 Histórico — Canal Armadilha (últimos 10)", description: lines }],
+      components: [this.row(this.backBtn(user, (i) => this.trapChannelMenu(i, guild, user)))]
+    });
+  }
+
   /* ================= 6. ANTIRAID INTELIGENTE ================= */
   // Motor real de detecção mora em Security/RaidIntelligence.js (multi-fator,
   // nunca aciona a resposta com base em um único evento isolado). Os métodos
@@ -3703,15 +4010,23 @@ class SecuritySystem {
       let errors   = 0;
 
       // ── RESTORE ROLES ──
+      // Guarda um mapa ID-antigo → ID-atual. Isso é essencial: se um cargo
+      // precisou ser recriado (ex: servidor foi "nukado" e o cargo original
+      // não existe mais), o Discord dá um ID NOVO a ele — e é esse ID novo
+      // que precisa aparecer nos permission_overwrites de categorias/canais,
+      // nunca o antigo (que já não significa nada).
+      const roleIdMap = { [guildId]: guildId }; // @everyone nunca muda de ID
       for (const role of backup.roles) {
         if (role.id === guildId) continue; // skip @everyone
 
-        const existing = currentRoles.find(r => r.id === role.id);
+        // Casa primeiro pelo ID original; se sumiu, tenta pelo nome (mesmo
+        // cargo, recriado manualmente ou por outro processo).
+        const existing = currentRoles.find(r => r.id === role.id)
+          || currentRoles.find(r => !r.managed && r.name === role.name);
 
         if (existing) {
-          // Update existing role
           try {
-            await DiscordRequest(`/guilds/${guildId}/roles/${role.id}`, {
+            await DiscordRequest(`/guilds/${guildId}/roles/${existing.id}`, {
               method: "PATCH",
               body: {
                 name:        role.name,
@@ -3721,12 +4036,12 @@ class SecuritySystem {
                 mentionable: role.mentionable
               }
             });
+            roleIdMap[role.id] = existing.id;
             restored++;
-          } catch { errors++; }
+          } catch { errors++; roleIdMap[role.id] = role.id; }
         } else {
-          // Recreate the role
           try {
-            await DiscordRequest(`/guilds/${guildId}/roles`, {
+            const createdRole = await DiscordRequest(`/guilds/${guildId}/roles`, {
               method: "POST",
               body: {
                 name:        role.name,
@@ -3736,73 +4051,99 @@ class SecuritySystem {
                 mentionable: role.mentionable
               }
             });
+            roleIdMap[role.id] = createdRole.id;
             created++;
-          } catch { errors++; }
+          } catch { errors++; roleIdMap[role.id] = role.id; }
         }
       }
 
-      // ── RESTORE CATEGORIES ──
-      for (const cat of (backup.categories || [])) {
-        const existing = currentChannels.find(c => c.id === cat.id);
+      // Remapeia permission_overwrites: overwrites de CARGO (type 0) usam o
+      // ID novo do cargo; overwrites de MEMBRO (type 1) mantêm o ID (contas
+      // de usuário não mudam de ID).
+      const remapOverwrites = (list) => (list || []).map(ow => ({
+        id:    ow.type === 0 ? (roleIdMap[ow.id] || ow.id) : ow.id,
+        type:  ow.type,
+        allow: ow.allow,
+        deny:  ow.deny
+      }));
+
+      // ── RESTORE CATEGORIES ── (na ordem original de posição)
+      const categoryIdMap = {};
+      const sortedCats = [...(backup.categories || [])].sort((a, b) => a.position - b.position);
+      for (const cat of sortedCats) {
+        const existing = currentChannels.find(c => c.id === cat.id && c.type === 4)
+          || currentChannels.find(c => c.type === 4 && c.name === cat.name); // fallback por nome
+        const overwrites = remapOverwrites(cat.permission_overwrites);
 
         if (existing) {
           try {
-            await DiscordRequest(`/channels/${cat.id}`, {
+            await DiscordRequest(`/channels/${existing.id}`, {
               method: "PATCH",
               body: { name: cat.name, position: cat.position }
             });
-            // Restore category permission overwrites
-            for (const ow of cat.permission_overwrites) {
-              await DiscordRequest(`/channels/${cat.id}/permissions/${ow.id}`, {
-                method: "PUT",
-                body: { id: ow.id, type: ow.type, allow: ow.allow, deny: ow.deny }
+            for (const ow of overwrites) {
+              await DiscordRequest(`/channels/${existing.id}/permissions/${ow.id}`, {
+                method: "PUT", body: ow
               }).catch(() => {});
             }
+            categoryIdMap[cat.id] = existing.id;
             restored++;
           } catch { errors++; }
         } else {
-          // Recreate the category
+          // Categoria não existe mais (ID sumiu, nome sumiu) → recriar do zero
           try {
-            await DiscordRequest(`/guilds/${guildId}/channels`, {
+            const createdCat = await DiscordRequest(`/guilds/${guildId}/channels`, {
               method: "POST",
-              body: {
-                name:     cat.name,
-                type:     4,
-                position: cat.position,
-                permission_overwrites: cat.permission_overwrites
-              }
+              body: { name: cat.name, type: 4, position: cat.position, permission_overwrites: overwrites }
             });
+            categoryIdMap[cat.id] = createdCat.id;
             created++;
           } catch { errors++; }
         }
       }
 
-      // ── RESTORE CHANNELS ──
-      for (const ch of backup.channels) {
-        const existing = currentChannels.find(c => c.id === ch.id);
+      // ── RESTORE CHANNELS ── (na ordem original; canal sem categoria no
+      // backup permanece sem categoria — nunca é encaixado em uma à força)
+      const sortedChannels = [...(backup.channels || [])].sort((a, b) => a.position - b.position);
+      const positionUpdates = [];
+
+      for (const ch of sortedChannels) {
+        const targetParentId = ch.parent_id
+          ? (categoryIdMap[ch.parent_id]
+              || currentChannels.find(c => c.type === 4 && c.name === ch.category)?.id
+              || null)
+          : null;
+
+        const overwrites = remapOverwrites(ch.permission_overwrites);
+
+        // Casa pelo ID original + tipo; se sumiu, tenta por nome+tipo+categoria-alvo.
+        const existing = currentChannels.find(c => c.id === ch.id && c.type === ch.type)
+          || currentChannels.find(c => c.type === ch.type && c.name === ch.name && (c.parent_id || null) === targetParentId);
 
         if (existing) {
-          // Update existing channel permissions
           try {
-            await DiscordRequest(`/channels/${ch.id}`, {
+            await DiscordRequest(`/channels/${existing.id}`, {
               method: "PATCH",
               body: {
                 name:                ch.name,
                 topic:               ch.topic,
                 nsfw:                ch.nsfw,
-                rate_limit_per_user: ch.slowmode_delay
+                rate_limit_per_user: ch.slowmode_delay,
+                parent_id:           targetParentId
               }
             });
-            for (const ow of ch.permission_overwrites) {
-              await DiscordRequest(`/channels/${ch.id}/permissions/${ow.id}`, {
-                method: "PUT",
-                body: { id: ow.id, type: ow.type, allow: ow.allow, deny: ow.deny }
+            for (const ow of overwrites) {
+              await DiscordRequest(`/channels/${existing.id}/permissions/${ow.id}`, {
+                method: "PUT", body: ow
               }).catch(() => {});
             }
+            positionUpdates.push({ id: existing.id, position: ch.position });
             restored++;
           } catch { errors++; }
         } else {
-          // Recreate the channel
+          // Categoria existe (ou foi recriada acima) → canal nasce dentro
+          // dela. Categoria não existe/backup não tinha categoria → nasce
+          // sem categoria, exatamente como estava no original.
           try {
             const body = {
               name:                ch.name,
@@ -3810,13 +4151,31 @@ class SecuritySystem {
               position:            ch.position,
               nsfw:                ch.nsfw,
               rate_limit_per_user: ch.slowmode_delay,
-              permission_overwrites: ch.permission_overwrites
+              permission_overwrites: overwrites,
+              parent_id:           targetParentId
             };
             if (ch.topic) body.topic = ch.topic;
-            await DiscordRequest(`/guilds/${guildId}/channels`, { method: "POST", body });
+            const createdCh = await DiscordRequest(`/guilds/${guildId}/channels`, { method: "POST", body });
+            positionUpdates.push({ id: createdCh.id, position: ch.position });
             created++;
           } catch { errors++; }
         }
+      }
+
+      // ── AJUSTE FINAL DE ORDEM ──
+      // Best-effort: reaplica a posição original de categorias e canais em
+      // lote. Não é crítico o bastante pra derrubar a restauração inteira
+      // se falhar — por isso fica isolado num try/catch próprio.
+      try {
+        const catPositions = sortedCats
+          .map(cat => ({ id: categoryIdMap[cat.id], position: cat.position }))
+          .filter(p => p.id);
+        const bulk = [...catPositions, ...positionUpdates];
+        if (bulk.length) {
+          await DiscordRequest(`/guilds/${guildId}/channels`, { method: "PATCH", body: bulk });
+        }
+      } catch (err) {
+        console.error("[Security] restoreBackup: ajuste de ordem falhou (não crítico):", err);
       }
 
       // Limpa o cache de permissões: canais/cargos podem ter sido criados/alterados
@@ -4031,6 +4390,16 @@ class SecuritySystem {
       const guildId   = data.guild_id;
 
       const memberRoles = data.member?.roles || [];
+
+      // ── Canal Armadilha ──
+      // Alimenta o rastreador de mensagens recentes (usado para apagar
+      // mensagens do mesmo autor em outros canais, se configurado) e,
+      // se esta mensagem caiu no canal armadilha, trata como violação
+      // isolada — não passa pelo resto do automod abaixo.
+      this.trapChannel.trackMessage(guildId, userId, channelId, data.id);
+      if (sec.trapChannel?.enabled && sec.trapChannel.channelId && sec.trapChannel.channelId === channelId) {
+        return await this.trapChannel.handle(guild, guildId, sec, data, memberRoles);
+      }
 
       // Alimenta o AntiRaid Inteligente (mensagens repetidas, spam coordenado,
       // menções e convites em massa) — roda em paralelo, nunca bloqueia o

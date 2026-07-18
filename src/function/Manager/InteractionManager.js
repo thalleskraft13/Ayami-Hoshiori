@@ -227,6 +227,10 @@ console.log(parsed)
 if (parsed?.t === 'giveaway_join')  return this.client.giveaway.join(interaction);
 if (parsed?.t === 'auth_approve')   return this.client.giveaway.handleAuthResponse(interaction, true);
 if (parsed?.t === 'auth_deny')      return this.client.giveaway.handleAuthResponse(interaction, false);
+if (parsed?.t === 'ayami_profile_approve') return this.client.ayamiProfile.handleApprove(interaction, parsed.id)
+    .catch((err) => this._replyError(interaction, err, 'Ayami Profile Approve'));
+if (parsed?.t === 'ayami_profile_reject')  return this.client.ayamiProfile.handleReject(interaction, parsed.id)
+    .catch((err) => this._replyError(interaction, err, 'Ayami Profile Reject'));
 
             if (parsed?.t === 'create_ticket') {
                 interaction.data.panelId = parsed.p;
@@ -569,6 +573,8 @@ async _replyError(interaction, err, context = 'Erro interno') {
                 'hub_select',
                 'flow_trigger',
                 'cv2_select',
+                'ayami_profile_approve',
+                'ayami_profile_reject',
             ];
             if (reservedTypes.includes(parsed.t)) return true;
         }

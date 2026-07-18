@@ -370,6 +370,36 @@ const verificationSchema = new Schema({
   quarantineRoleId: { type: String,  default: null },
   history:          { type: [verificationHistorySchema], default: [] }
 }, { _id: false });
+
+/* ── Canal Armadilha ──
+   Detecção isolada de self-bots/scripts: qualquer mensagem enviada no
+   canal-armadilha configurado é tratada como violação, exceto para quem
+   estiver na lista de exceções. Nunca apaga mensagens antigas — só a
+   mensagem-gatilho no próprio canal armadilha e, opcionalmente,
+   mensagens recentes (dentro da janela configurada) do mesmo autor em
+   outros canais. Ver Security/TrapChannel.js. */
+const trapChannelHistorySchema = new Schema({
+  timestamp:        { type: Number, required: true },
+  userId:           { type: String, required: true },
+  username:         { type: String, default: "" },
+  action:           { type: String, required: true }, // log | timeout | kick | ban
+  deletedElsewhere: { type: Number, default: 0 }       // qtd. de mensagens extras apagadas em outros canais
+}, { _id: false });
+
+const trapChannelSchema = new Schema({
+  enabled:                     { type: Boolean, default: false },
+  channelId:                   { type: String,  default: null },
+  punishment:                  { type: String,  default: "log" }, // log | timeout | kick | ban
+  logChannelId:                { type: String,  default: null },  // opcional; sem isso cai no logs.channels.main
+  deleteRecentMessages:        { type: Boolean, default: false },
+  recentMessagesWindowMinutes: { type: Number,  default: 5 },
+  ignoredRoles:                { type: [String], default: [] },
+  ignoredUsers:                { type: [String], default: [] },
+  ignoredBots:                 { type: [String], default: [] },
+  warningMessageSent:          { type: Boolean, default: false }, // já postamos o aviso fixo neste canal
+  history:                     { type: [trapChannelHistorySchema], default: [] }
+}, { _id: false });
+
 const securitySchema = new Schema({
   automod: {
     simple:   { type: securitySimpleSchema,   default: () => ({}) },
@@ -387,6 +417,7 @@ const securitySchema = new Schema({
   },
   raid:       { type: raidSchema,       default: () => ({}) },
   verification: { type: verificationSchema, default: () => ({}) },
+  trapChannel: { type: trapChannelSchema, default: () => ({}) },
   emergency:  { type: emergencySchema,  default: () => ({}) },
   monitoring: { type: monitoringSchema, default: () => ({}) },
   backups:    { type: [backupEntrySchema], default: [] }

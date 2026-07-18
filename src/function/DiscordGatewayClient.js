@@ -38,6 +38,7 @@ const { LanguageManager } = require('./Manager/LanguageManager');
 const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
 const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
 const MediaManager = require('./Manager/MediaManager');
+const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.js');
 
 const EventEmitter = require('events');
 
@@ -107,6 +108,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.gScheduler = new GiveawayScheduler(this);
         this.giveaway.messageTracker = new GiveawayMessageTracker();
         this.logicScriptRunner = new ScriptRunner(this);
+        this.ayamiProfile = new AyamiProfileManager(this);
         
         this.languageManager = new LanguageManager({
             systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
