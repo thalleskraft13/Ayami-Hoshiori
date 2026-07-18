@@ -185,6 +185,8 @@ async function renderBuy(interaction, client, emoji) {
     cv2Divider(),
     cv2Text(client.t("premium.buy_plans", ctx)),
     cv2Divider(),
+    cv2Text(client.t("premium.buy_comparison", ctx)),
+    cv2Divider(),
     cv2Text(client.t("premium.buy_benefits", ctx)),
     cv2Divider(),
     cv2Text(client.t("premium.buy_footer", ctx)),
@@ -193,7 +195,7 @@ async function renderBuy(interaction, client, emoji) {
       type: 2,
       style: 5,
       label: client.t("premium.buy_button", ctx),
-      url: "https://discord.gg/WjeVXJPn5p"
+      url: "https://discord.gg/WjeVXJPn5p" // Servidor Oficial — é onde a compra/geração da key acontece
     }),
   ];
 

@@ -12,31 +12,63 @@ module.exports = [
   { id: "buy_plans", render: (ctx) =>
     `✨ **Pick your plan:**\n\n` +
     `> 🌟 **New Star** — R$ 7.99/month\n` +
-    `> 　 1 server · 25 Logic Builder flows · 15 Logic Script files\n` +
-    `> 　 +25% daily bonus · Advanced Tickets (up to 10 questions)\n\n` +
+    `> 　 1 server with premium · 25 Logic Builder flows\n` +
+    `> 　 15 Logic Script files (up to 40 functions/file)\n` +
+    `> 　 Advanced tickets (up to 10 questions, 2 advanced types, Modal)\n` +
+    `> 　 Advanced settings and systems unlocked\n` +
+    `> 　 +25% Primogems on /daily · 5⭐ chance rises to 20%\n\n` +
     `> 🌙 **Crescent Moon** — R$ 14.99/month\n` +
-    `> 　 3 servers · 35 Logic Builder flows · 35 Logic Script files\n` +
-    `> 　 +60% daily bonus · +0.5% 5⭐ chance · HTTP and Webhooks unlocked in Logic Script\n` +
-    `> 　 Unlimited-question tickets\n\n` +
+    `> 　 3 servers with premium · 35 Logic Builder flows\n` +
+    `> 　 35 Logic Script files (unlimited functions)\n` +
+    `> 　 HTTP and Webhooks unlocked in Logic Script · \`runFlow()\` by ID\n` +
+    `> 　 Unlimited questions and advanced types on tickets\n` +
+    `> 　 Advanced giveaway requirements (external server, level, XP, call time)\n` +
+    `> 　 +60% Primogems on /daily · 5⭐ chance rises to 27.5%\n` +
+    `> 　 Summon and bonus reward perks\n\n` +
     `> ✨ **Constellation** — R$ 24.99/month\n` +
-    `> 　 Unlimited servers · Unlimited Logic Builder and Logic Script\n` +
-    `> 　 +100% daily bonus · +1% 5⭐ chance · Early access and Ayami CANARY\n\n` +
+    `> 　 Unlimited servers, Logic Builder and Logic Script\n` +
+    `> 　 Everything from Crescent Moon, with no caps\n` +
+    `> 　 Custom Ayami Profile on your server (bot's own avatar)\n` +
+    `> 　 +100% Primogems on /daily · 5⭐ chance rises to 35%\n` +
+    `> 　 Early Access and Ayami CANARY\n\n` +
     `${ctx.eCurtida} **Or grab a standalone Code for any plan**\n` +
-    `> 🔑 Talk to staff to generate your key` },
+    `> 🔑 Purchases and key generation happen on the **Official Server**` },
+
+  { id: "buy_comparison", render: () =>
+    `📊 **Quick plan comparison:**\n` +
+    "```\n" +
+    "                      New Star   Crescent   Constellation\n" +
+    "Servers w/ premium       1          3            ∞\n" +
+    "Logic Builder flows      25         35           ∞\n" +
+    "Logic Script files       15         35           ∞\n" +
+    "HTTP / Webhooks (LS)     ✖          ✔            ✔\n" +
+    "runFlow() by ID          ✖          ✔            ✔\n" +
+    "Questions per Ticket     10         ∞            ∞\n" +
+    "Ticket Threads           ✔          ✔            ✔\n" +
+    "Advanced giveaways       ✖          ✔            ✔\n" +
+    "/daily bonus            +25%       +60%         +100%\n" +
+    "Total 5⭐ chance          20%       27.5%         35%\n" +
+    "Ayami Profile            ✖          ✖            ✔\n" +
+    "Early Access / CANARY    ✖          ✖            ✔\n" +
+    "```\n" +
+    "_Base 5⭐ chance without premium: 10%._" },
 
   { id: "buy_benefits", render: (ctx) =>
     `${ctx.eCorao} **Exclusive perks:**\n\n` +
     `🏅 Exclusive role on the Official Server\n` +
     `⭐ Better odds when getting 5-Star Characters\n` +
     `💎 Primogem bonus on Daily\n` +
-    `⚙️ Advanced settings across systems\n` +
+    `⚙️ Advanced settings and systems\n` +
     `　*(Chat Type, Sequential Form, Modal Form,*\n` +
-    `　*Temporary Roles, Ticket Setup and much more)*\n` +
-    `🔗 Webhook usage in Systems\n` +
-    `📌 Pinned Button + Webhook in the Birthday System` },
+    `　*Temporary Roles, Ticket Setup, Threads and much more)*\n` +
+    `🔗 Webhook usage in Systems (Birthday, notifications and more)\n` +
+    `📌 Pinned Button in the Birthday System\n` +
+    `🌐 HTTP and custom Webhooks in Logic Script _(from 🌙 Crescent Moon)_\n` +
+    `👤 Custom Ayami Profile on your server _(✨ Constellation exclusive)_` },
 
   { id: "buy_footer", render: (ctx) =>
-    `${ctx.ePensando} *Constellation isn't just a plan.*\n*It's your place among the stars.* ${ctx.eSria}` },
+    `${ctx.ePensando} *Constellation isn't just a plan.*\n*It's your place among the stars.* ${ctx.eSria}\n\n` +
+    `🛒 *Subscriptions and standalone keys are sold exclusively on Ayami's **Official Server**.*` },
 
   { id: "buy_button", render: () => "✨ Subscribe to Constellation" },
 

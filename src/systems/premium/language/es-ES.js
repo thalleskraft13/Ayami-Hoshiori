@@ -12,31 +12,63 @@ module.exports = [
   { id: "buy_plans", render: (ctx) =>
     `✨ **Elige tu plan:**\n\n` +
     `> 🌟 **Nueva Estrella** — R$ 7,99/mes\n` +
-    `> 　 1 servidor · 25 flujos en Logic Builder · 15 archivos en Logic Script\n` +
-    `> 　 +25% en el daily · Tickets Avanzados (hasta 10 preguntas)\n\n` +
+    `> 　 1 servidor con premium · 25 flujos en Logic Builder\n` +
+    `> 　 15 archivos en Logic Script (hasta 40 funciones/archivo)\n` +
+    `> 　 Tickets avanzados (hasta 10 preguntas, 2 tipos avanzados, Modal)\n` +
+    `> 　 Configuraciones y sistemas avanzados desbloqueados\n` +
+    `> 　 +25% de Primogemas en el /daily · probabilidad de 5⭐ sube a 20%\n\n` +
     `> 🌙 **Luna Creciente** — R$ 14,99/mes\n` +
-    `> 　 3 servidores · 35 flujos en Logic Builder · 35 archivos en Logic Script\n` +
-    `> 　 +60% en el daily · +0.5% de probabilidad 5⭐ · HTTP y Webhooks desbloqueados en Logic Script\n` +
-    `> 　 Tickets con preguntas ilimitadas\n\n` +
+    `> 　 3 servidores con premium · 35 flujos en Logic Builder\n` +
+    `> 　 35 archivos en Logic Script (funciones ilimitadas)\n` +
+    `> 　 HTTP y Webhooks desbloqueados en Logic Script · \`runFlow()\` por ID\n` +
+    `> 　 Preguntas y tipos avanzados ilimitados en tickets\n` +
+    `> 　 Requisitos avanzados de sorteo (servidor externo, nivel, XP, llamada)\n` +
+    `> 　 +60% de Primogemas en el /daily · probabilidad de 5⭐ sube a 27,5%\n` +
+    `> 　 Bonos de invocación y recompensas extra\n\n` +
     `> ✨ **Constellation** — R$ 24,99/mes\n` +
-    `> 　 Servidores ilimitados · Logic Builder y Logic Script ilimitados\n` +
-    `> 　 +100% en el daily · +1% de probabilidad 5⭐ · Acceso anticipado y a Ayami CANARY\n\n` +
+    `> 　 Servidores, Logic Builder y Logic Script ilimitados\n` +
+    `> 　 Todo lo de Luna Creciente, sin límites\n` +
+    `> 　 Perfil Personalizado de Ayami en el servidor (avatar propio del bot)\n` +
+    `> 　 +100% de Primogemas en el /daily · probabilidad de 5⭐ sube a 35%\n` +
+    `> 　 Acceso anticipado y a Ayami CANARY\n\n` +
     `${ctx.eCurtida} **O consigue un Código individual de cualquier plan**\n` +
-    `> 🔑 Habla con el staff para generar tu key` },
+    `> 🔑 La compra y la generación de la key se hacen en el **Servidor Oficial**` },
+
+  { id: "buy_comparison", render: () =>
+    `📊 **Comparativa rápida entre planes:**\n` +
+    "```\n" +
+    "                     Nueva Est. Luna Crec. Constellation\n" +
+    "Servidores premium       1          3            ∞\n" +
+    "Flujos Logic Builder     25         35           ∞\n" +
+    "Archivos Logic Script    15         35           ∞\n" +
+    "HTTP / Webhooks (LS)     ✖          ✔            ✔\n" +
+    "runFlow() por ID         ✖          ✔            ✔\n" +
+    "Preguntas por Ticket     10         ∞            ∞\n" +
+    "Threads en Ticket        ✔          ✔            ✔\n" +
+    "Sorteo avanzado          ✖          ✔            ✔\n" +
+    "Bono /daily             +25%       +60%         +100%\n" +
+    "Probabilidad total 5⭐    20%       27,5%         35%\n" +
+    "Perfil de Ayami          ✖          ✖            ✔\n" +
+    "Acceso anticipado/CANARY ✖          ✖            ✔\n" +
+    "```\n" +
+    "_Probabilidad base de 5⭐ sin premium: 10%._" },
 
   { id: "buy_benefits", render: (ctx) =>
     `${ctx.eCorao} **Beneficios exclusivos:**\n\n` +
     `🏅 Rol exclusivo en el Servidor Oficial\n` +
     `⭐ Más probabilidades al obtener Personajes de 5 Estrellas\n` +
     `💎 Bono de Primogemas en el Daily\n` +
-    `⚙️ Configuraciones avanzadas en los sistemas\n` +
+    `⚙️ Configuraciones y sistemas avanzados\n` +
     `　*(Tipo de Chat, Formulario Secuencial, Formulario por Modal,*\n` +
-    `　*Roles Temporales, Ticket Setup y mucho más)*\n` +
-    `🔗 Uso de Webhook en Sistemas\n` +
-    `📌 Botón Fijo + Webhook en el Sistema de Cumpleaños` },
+    `　*Roles Temporales, Ticket Setup, Threads y mucho más)*\n` +
+    `🔗 Uso de Webhook en Sistemas (Cumpleaños, notificaciones y más)\n` +
+    `📌 Botón Fijo en el Sistema de Cumpleaños\n` +
+    `🌐 HTTP y Webhooks personalizados en Logic Script _(desde 🌙 Luna Creciente)_\n` +
+    `👤 Perfil Personalizado de Ayami en el servidor _(exclusivo ✨ Constellation)_` },
 
   { id: "buy_footer", render: (ctx) =>
-    `${ctx.ePensando} *Constellation no es solo un plan.*\n*Es tu lugar entre las estrellas.* ${ctx.eSria}` },
+    `${ctx.ePensando} *Constellation no es solo un plan.*\n*Es tu lugar entre las estrellas.* ${ctx.eSria}\n\n` +
+    `🛒 *Las suscripciones y keys individuales se venden exclusivamente en el **Servidor Oficial** de Ayami.*` },
 
   { id: "buy_button", render: () => "✨ Suscribirse a Constellation" },
 
