@@ -74,6 +74,38 @@ class NativeAutoMod {
 
   /* ───────────────────────── helpers genéricos ───────────────────────── */
 
+  /**
+   * Lista as regras de AutoMod atualmente cadastradas na Discord para o
+   * servidor (GET /guilds/{id}/auto-moderation/rules).
+   *
+   * Por quê isso importa: vários trigger_type só permitem 1 regra por
+   * servidor (SPAM, KEYWORD_PRESET, MENTION_SPAM — ver docs oficiais,
+   * "Max per Guild"). Se o servidor já tem uma regra desse tipo — seja
+   * porque um admin criou manualmente pelo Configurações > AutoMod do
+   * Discord, seja porque o `nativeRuleId` salvo no Mongo foi perdido
+   * (reset de banco, downgrade, etc.) — um POST direto de criação falha
+   * com 400 "Maximum number of X rules reached", e sem essa checagem
+   * esse erro ficava só no console: a Ayami salvava a config, mostrava
+   * "🟢 Ativo" no painel, e a regra nativa nunca existia de fato.
+   *
+   * Cache curto (10s) porque várias syncs podem rodar em sequência no
+   * mesmo ciclo de configuração (ex: alterar antilinks sincroniza dois
+   * módulos seguidos).
+   */
+  async listRules(guildId, { fresh = false } = {}) {
+    const now = Date.now();
+    if (!fresh && this._rulesCache?.guildId === guildId && now - this._rulesCache.at < 10_000) {
+      return this._rulesCache.rules;
+    }
+    const rules = await DiscordRequest(`/guilds/${guildId}/auto-moderation/rules`, { method: 'GET' }) || [];
+    this._rulesCache = { guildId, at: now, rules };
+    return rules;
+  }
+
+  _invalidateRulesCache(guildId) {
+    if (this._rulesCache?.guildId === guildId) this._rulesCache = null;
+  }
+
   _timeoutSeconds(actions = []) {
     if (actions.includes('timeout_24h')) return 86400;
     if (actions.includes('timeout_1h'))  return 3600;
@@ -105,22 +137,59 @@ class NativeAutoMod {
 
   /**
    * Cria a regra (se `ruleId` for null/inexistente) ou atualiza a existente.
-   * Retorna o novo `ruleId`, ou `null` se a regra deveria deixar de existir
-   * (conteúdo vazio) — nesse caso também tenta deletar a regra antiga.
+   *
+   * Antes de criar do zero, tenta ADOTAR uma regra já existente no Discord
+   * que corresponda (mesmo nome da Ayami, OU — para trigger_types que só
+   * permitem 1 regra por guild — mesmo trigger_type, mesmo que tenha sido
+   * criada manualmente). Isso evita tanto duplicatas quanto o erro
+   * silencioso de "limite de regras atingido".
+   *
+   * Retorna `{ ok, ruleId, error, adopted }`:
+   *   - ok:      true se a regra ficou sincronizada com sucesso
+   *   - ruleId:  id da regra nativa (ou null se ela deveria deixar de existir)
+   *   - error:   mensagem de erro legível, quando ok === false
+   *   - adopted: true se uma regra pré-existente foi reaproveitada
    */
-  async _upsert(guildId, ruleId, payload) {
-    try {
-      if (ruleId) {
+  async _upsert(guildId, ruleId, payload, { triggerType, singleton = false } = {}) {
+    if (ruleId) {
+      try {
         await DiscordRequest(`/guilds/${guildId}/auto-moderation/rules/${ruleId}`, {
           method: 'PATCH',
           body: payload,
         });
-        return ruleId;
+        this._invalidateRulesCache(guildId);
+        return { ok: true, ruleId };
+      } catch (err) {
+        // Regra pode ter sido apagada manualmente no Discord — recria do zero.
+        console.warn(`[NativeAutoMod] PATCH falhou (guild ${guildId}, rule ${ruleId}), recriando:`, err.message);
+        ruleId = null;
+      }
+    }
+
+    // Tenta adotar uma regra existente antes de criar uma nova.
+    try {
+      const existing = await this.listRules(guildId);
+      const match =
+        existing.find(r => r.name === payload.name) ||
+        (singleton ? existing.find(r => r.trigger_type === triggerType) : null);
+
+      if (match) {
+        try {
+          await DiscordRequest(`/guilds/${guildId}/auto-moderation/rules/${match.id}`, {
+            method: 'PATCH',
+            body: payload,
+          });
+          this._invalidateRulesCache(guildId);
+          return { ok: true, ruleId: match.id, adopted: true };
+        } catch (err) {
+          console.error(`[NativeAutoMod] Falha ao adotar/atualizar regra existente "${match.id}" na guild ${guildId}:`, err.message);
+          return { ok: false, ruleId: null, error: this._humanizeError(err) };
+        }
       }
     } catch (err) {
-      // Regra pode ter sido apagada manualmente no Discord — recria do zero.
-      console.warn(`[NativeAutoMod] PATCH falhou (guild ${guildId}, rule ${ruleId}), recriando:`, err.message);
-      ruleId = null;
+      // Falha ao listar (ex: bot sem permissão MANAGE_GUILD) — segue tentando criar direto,
+      // o erro real (mais específico) vai aparecer na tentativa de POST abaixo.
+      console.warn(`[NativeAutoMod] Falha ao listar regras existentes na guild ${guildId}:`, err.message);
     }
 
     try {
@@ -128,19 +197,36 @@ class NativeAutoMod {
         method: 'POST',
         body: payload,
       });
-      return created?.id ?? null;
+      this._invalidateRulesCache(guildId);
+      return { ok: true, ruleId: created?.id ?? null };
     } catch (err) {
       // Causas comuns: falta de permissão MANAGE_GUILD do bot, ou limite de
-      // 6 regras de keyword custom por servidor já atingido.
+      // regras desse trigger_type já atingido no servidor.
       console.error(`[NativeAutoMod] Falha ao criar regra "${payload.name}" na guild ${guildId}:`, err.message);
-      return null;
+      return { ok: false, ruleId: null, error: this._humanizeError(err) };
     }
+  }
+
+  /** Traduz o erro cru da API do Discord numa mensagem curta e acionável. */
+  _humanizeError(err) {
+    const msg = err?.message || '';
+    if (msg.includes('50013') || /missing permission/i.test(msg)) {
+      return 'A Ayami não tem a permissão **Gerenciar Servidor** — ela é obrigatória para criar/editar regras de AutoMod nativo.';
+    }
+    if (/maximum number of/i.test(msg) || /max_.*rules/i.test(msg)) {
+      return 'O servidor já atingiu o limite de regras desse tipo no AutoMod nativo do Discord (ex: só é permitida 1 regra de Anti-Mention/Anti-Spam por servidor). Verifique em Configurações do Servidor → AutoMod se já existe uma regra manual desse tipo.';
+    }
+    if (msg.includes('MODERATE_MEMBERS') || /moderate_members/i.test(msg)) {
+      return 'A ação de Timeout requer que a Ayami tenha a permissão **Cronometrar Membros (Moderate Members)**.';
+    }
+    return msg.slice(0, 300) || 'Erro desconhecido ao falar com a API do Discord.';
   }
 
   async _delete(guildId, ruleId) {
     if (!ruleId) return null;
     try {
       await DiscordRequest(`/guilds/${guildId}/auto-moderation/rules/${ruleId}`, { method: 'DELETE' });
+      this._invalidateRulesCache(guildId);
     } catch (err) {
       // Já pode não existir mais — ignora.
     }
@@ -149,11 +235,11 @@ class NativeAutoMod {
 
   /* ───────────────────────── módulos ───────────────────────── */
 
-  /** Palavras proibidas → trigger KEYWORD */
+  /** Palavras proibidas → trigger KEYWORD (máx. 6 regras KEYWORD por guild) */
   async syncBadwords(guildId, cfg) {
     if (!cfg.enabled || !cfg.list?.length) {
       cfg.nativeRuleId = await this._delete(guildId, cfg.nativeRuleId);
-      return cfg.nativeRuleId;
+      return { ok: true, ruleId: null };
     }
 
     const payload = {
@@ -169,15 +255,16 @@ class NativeAutoMod {
       exempt_channels: (cfg.ignoredChannels || []).slice(0, MAX_EXEMPT_CHANNELS),
     };
 
-    cfg.nativeRuleId = await this._upsert(guildId, cfg.nativeRuleId, payload);
-    return cfg.nativeRuleId;
+    const result = await this._upsert(guildId, cfg.nativeRuleId, payload, { triggerType: TRIGGER.KEYWORD, singleton: false });
+    cfg.nativeRuleId = result.ruleId;
+    return result;
   }
 
-  /** Spam → trigger SPAM (heurística interna do Discord, sem parâmetros configuráveis) */
+  /** Spam → trigger SPAM (heurística interna do Discord, sem parâmetros configuráveis; MÁX. 1 por guild) */
   async syncAntispam(guildId, cfg) {
     if (!cfg.enabled) {
       cfg.nativeRuleId = await this._delete(guildId, cfg.nativeRuleId);
-      return cfg.nativeRuleId;
+      return { ok: true, ruleId: null };
     }
 
     const payload = {
@@ -192,8 +279,9 @@ class NativeAutoMod {
       exempt_channels: (cfg.ignoredChannels || []).slice(0, MAX_EXEMPT_CHANNELS),
     };
 
-    cfg.nativeRuleId = await this._upsert(guildId, cfg.nativeRuleId, payload);
-    return cfg.nativeRuleId;
+    const result = await this._upsert(guildId, cfg.nativeRuleId, payload, { triggerType: TRIGGER.SPAM, singleton: true });
+    cfg.nativeRuleId = result.ruleId;
+    return result;
   }
 
   /** Links → trigger KEYWORD (regex genérico de URL + allow/block list de domínios) */
@@ -201,7 +289,7 @@ class NativeAutoMod {
     const hasContent = cfg.enabled; // "Links" pode ficar ativo mesmo sem listas (bloqueia qualquer link)
     if (!hasContent) {
       cfg.nativeRuleId = await this._delete(guildId, cfg.nativeRuleId);
-      return cfg.nativeRuleId;
+      return { ok: true, ruleId: null };
     }
 
     const payload = {
@@ -220,15 +308,16 @@ class NativeAutoMod {
       exempt_channels: (cfg.ignoredChannels || []).slice(0, MAX_EXEMPT_CHANNELS),
     };
 
-    cfg.nativeRuleId = await this._upsert(guildId, cfg.nativeRuleId, payload);
-    return cfg.nativeRuleId;
+    const result = await this._upsert(guildId, cfg.nativeRuleId, payload, { triggerType: TRIGGER.KEYWORD, singleton: false });
+    cfg.nativeRuleId = result.ruleId;
+    return result;
   }
 
   /** Convites → trigger KEYWORD dedicado (fica ligado/desligado por antilinks.blockInvites) */
   async syncInvites(guildId, cfg) {
     if (!cfg.enabled || !cfg.blockInvites) {
       cfg.invitesRuleId = await this._delete(guildId, cfg.invitesRuleId);
-      return cfg.invitesRuleId;
+      return { ok: true, ruleId: null };
     }
 
     const payload = {
@@ -248,15 +337,16 @@ class NativeAutoMod {
       exempt_channels: (cfg.ignoredChannels || []).slice(0, MAX_EXEMPT_CHANNELS),
     };
 
-    cfg.invitesRuleId = await this._upsert(guildId, cfg.invitesRuleId, payload);
-    return cfg.invitesRuleId;
+    const result = await this._upsert(guildId, cfg.invitesRuleId, payload, { triggerType: TRIGGER.KEYWORD, singleton: false });
+    cfg.invitesRuleId = result.ruleId;
+    return result;
   }
 
-  /** Muitas menções → trigger MENTION_SPAM */
+  /** Muitas menções → trigger MENTION_SPAM (MÁX. 1 por guild — ver nota em _upsert) */
   async syncAntimention(guildId, cfg) {
     if (!cfg.enabled) {
       cfg.nativeRuleId = await this._delete(guildId, cfg.nativeRuleId);
-      return cfg.nativeRuleId;
+      return { ok: true, ruleId: null };
     }
 
     const payload = {
@@ -272,8 +362,9 @@ class NativeAutoMod {
       exempt_channels: (cfg.ignoredChannels || []).slice(0, MAX_EXEMPT_CHANNELS),
     };
 
-    cfg.nativeRuleId = await this._upsert(guildId, cfg.nativeRuleId, payload);
-    return cfg.nativeRuleId;
+    const result = await this._upsert(guildId, cfg.nativeRuleId, payload, { triggerType: TRIGGER.MENTION_SPAM, singleton: true });
+    cfg.nativeRuleId = result.ruleId;
+    return result;
   }
 
   /** Remove todas as regras nativas de um servidor (ex: bot removido / reset de segurança). */

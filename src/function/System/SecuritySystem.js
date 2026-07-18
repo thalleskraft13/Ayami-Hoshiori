@@ -29,27 +29,62 @@ class SecuritySystem {
    * atual salva em `sec.automod.simple[module]`, e persiste o
    * `nativeRuleId` retornado. Chame sempre depois de alterar toggle,
    * ações, listas ou limites de um desses módulos.
+   *
+   * Retorna `{ ok, error }`. Quando `ok === false`, a config LOCAL da
+   * Ayami foi salva normalmente, mas a regra correspondente no AutoMod
+   * nativo do Discord NÃO existe/não foi atualizada — ou seja, ela não
+   * vai executar de verdade. Isso é reportado no canal de logs (se
+   * configurado) e deve ser mostrado ao admin no followUp de quem chamou
+   * essa função, para nunca dar a falsa impressão de "ativado com sucesso".
    */
   async _syncNativeModule(guild, module) {
-    if (!NATIVE_FILTER_MODULES.includes(module)) return;
+    if (!NATIVE_FILTER_MODULES.includes(module)) return { ok: true };
     const sec = this.getSecurity(guild);
     const cfg = sec.automod.simple[module];
-    if (!cfg) return;
+    if (!cfg) return { ok: true };
 
+    const results = [];
     try {
-      if (module === "badwords")    await this.nativeAutoMod.syncBadwords(guild.guildId, cfg);
-      if (module === "antispam")    await this.nativeAutoMod.syncAntispam(guild.guildId, cfg);
-      if (module === "antimention") await this.nativeAutoMod.syncAntimention(guild.guildId, cfg);
+      if (module === "badwords")    results.push(await this.nativeAutoMod.syncBadwords(guild.guildId, cfg));
+      if (module === "antispam")    results.push(await this.nativeAutoMod.syncAntispam(guild.guildId, cfg));
+      if (module === "antimention") results.push(await this.nativeAutoMod.syncAntimention(guild.guildId, cfg));
       if (module === "antilinks") {
-        await this.nativeAutoMod.syncAntilinks(guild.guildId, cfg);
-        await this.nativeAutoMod.syncInvites(guild.guildId, cfg);
+        results.push(await this.nativeAutoMod.syncAntilinks(guild.guildId, cfg));
+        results.push(await this.nativeAutoMod.syncInvites(guild.guildId, cfg));
       }
     } catch (err) {
       console.error(`[Security] Falha ao sincronizar AutoMod nativo (${module}):`, err);
+      results.push({ ok: false, error: err.message });
     }
 
     guild.markModified("security");
     await this.save(guild);
+
+    const failed = results.find(r => r && r.ok === false);
+    if (failed) {
+      await this.sendSecurityAlert(
+        guild.guildId,
+        `⚠️ **Falha ao sincronizar AutoMod nativo — ${module}**\n${failed.error}`
+      );
+      return { ok: false, error: failed.error };
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Envia um followUp ephemeral avisando o admin quando `_syncNativeModule`
+   * retorna falha — para nunca deixar a interface dizer "🟢 Ativo" enquanto
+   * a regra real no Discord não existe.
+   */
+  async _warnIfSyncFailed(interaction, result) {
+    if (result?.ok === false) {
+      await this.followUpEphemeral(interaction, {
+        content:
+          `⚠️ **A configuração foi salva, mas o AutoMod nativo do Discord não foi sincronizado.**\n` +
+          `Isso significa que a regra **não vai executar de verdade** até isso ser corrigido.\n\n` +
+          `**Motivo:** ${result.error}`
+      });
+    }
   }
 
   /* ================= INTERACTIONS ================= */
@@ -659,7 +694,7 @@ class SecuritySystem {
         }
         guild.markModified("security");
         await this.save(guild);
-        await this._syncNativeModule(guild, module);
+        await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, module));
         return this.multiActionMenu(i, guild, user, module, backFn, availableActions);
       }
     );
@@ -703,23 +738,32 @@ class SecuritySystem {
       ],
       "Configurar Palavras Proibidas",
       async (i) => {
-        await this.deferUpdate(i);
         const v = i.data.values[0];
+
+        // ⚠️ "add" precisa abrir um Modal, e um Modal só pode ser a
+        // PRIMEIRA resposta de uma interação — por isso o deferUpdate()
+        // (que já responde a interação com type 6) só acontece para os
+        // demais ramos, DEPOIS de sabermos que não vamos abrir Modal.
+        // Fazer deferUpdate incondicionalmente aqui e só depois chamar
+        // addBadword() era exatamente a causa do erro
+        // "Interaction has already been acknowledged".
+        if (v === "add") return this.addBadword(i, guild, user);
+
+        await this.deferUpdate(i);
         if (v === "toggle") {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "badwords");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "badwords"));
           return this.badwordsMenu(i, guild, user);
         }
-        if (v === "add")        return this.addBadword(i, guild, user);
         if (v === "remove")     return this.removeBadword(i, guild, user);
         if (v === "view")       return this.viewSimpleList(i, guild, user, "badwords", "list", "📋 Palavras Proibidas");
         if (v === "clear") {
           cfg.list = [];
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "badwords");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "badwords"));
           await this.followUpEphemeral(i, { content: "✅ Lista limpa." });
           return this.badwordsMenu(i, guild, user);
         }
@@ -754,31 +798,93 @@ class SecuritySystem {
     });
   }
 
+  /**
+   * Abre o Modal "Adicionar Palavra Proibida".
+   *
+   * IMPORTANTE: esta função deve ser a PRIMEIRA (e única) resposta à
+   * interação `interaction` — nada de reply()/deferReply()/update()/
+   * deferUpdate() antes disso. showModal() é a própria resposta.
+   */
   async addBadword(interaction, guild, user) {
-    await this.followUpEphemeral(interaction, {
-      content: "Envie as palavras proibidas:\n> Separe por vírgula. Ex: `termo1, frase ruim, xingamento`"
-    });
-    let msg;
-    try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
-
-    const sec  = this.getSecurity(guild);
-    const cfg  = this.getSimpleCfg(sec, "badwords");
+    const sec = this.getSecurity(guild);
+    const cfg = this.getSimpleCfg(sec, "badwords");
     if (!cfg.list) cfg.list = [];
 
-    const words = msg.content
-      .split(",")
-      .map(w => w.trim().toLowerCase())
-      .filter(w => w.length > 0 && !cfg.list.includes(w));
+    const modal = this.client.interactions.createModal({
+      user,
+      title: "Adicionar Palavra Proibida",
+      components: [{
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: "words",
+          label: "Palavra(s) — separadas por vírgula",
+          style: 2,
+          required: true,
+          max_length: 1000,
+          placeholder: "termo1, frase ruim, xingamento"
+        }]
+      }],
+      // `mi`  = interação do MODAL_SUBMIT (diferente da interação original
+      //         que abriu o modal — cada uma tem seu próprio id/token).
+      // `fields.words` = valor digitado no campo acima.
+      funcao: async (mi, _client, fields) => {
+        // Confirma a submissão do Modal atualizando a mensagem original
+        // (type 6 = DEFER_UPDATE_MESSAGE). Isso conta como a ÚNICA resposta
+        // a `mi` — chamado sempre via InteractionManager._callback, que já
+        // protege contra callback duplicado (state.replied).
+        await this.client.interactions._callback(mi, { type: 6 });
 
-    cfg.list.push(...words);
-    guild.markModified("security");
-    await this.save(guild);
-    await this._syncNativeModule(guild, "badwords");
+        const raw = (fields.words || "");
+        const candidates = raw
+          .split(",")
+          .map(w => w.trim().toLowerCase())
+          .filter(w => w.length > 0);
 
-    await this.followUpEphemeral(interaction, {
-      content: `✅ ${words.length} palavra(s) adicionada(s): ${words.map(w => `\`${w}\``).join(", ")}`
+        if (!candidates.length) {
+          await this.followUpEphemeral(mi, { content: "⚠️ Nenhuma palavra válida foi informada." });
+          return this.badwordsMenu(mi, guild, user);
+        }
+
+        // Recarrega a config (pode ter mudado entre abrir o modal e o
+        // envio) e evita duplicadas.
+        const sec2 = this.getSecurity(guild);
+        const cfg2 = this.getSimpleCfg(sec2, "badwords");
+        if (!cfg2.list) cfg2.list = [];
+
+        const MAX_WORDS = 100; // mesmo limite da API do AutoMod (keyword_filter)
+        const novas = candidates.filter(w => !cfg2.list.includes(w));
+        const espacoDisponivel = Math.max(0, MAX_WORDS - cfg2.list.length);
+        const aceitas    = novas.slice(0, espacoDisponivel);
+        const descartadas = novas.slice(espacoDisponivel);
+
+        let syncResult = { ok: true };
+        if (aceitas.length) {
+          cfg2.list.push(...aceitas);
+          guild.markModified("security");
+          await this.save(guild);
+          syncResult = await this._syncNativeModule(guild, "badwords");
+
+          if (sec2.logs?.types?.automod) {
+            await this.sendSecurityAlert(
+              guild.guildId,
+              `📝 **Palavras proibidas adicionadas** por <@${user}>: ${aceitas.map(w => `\`${w}\``).join(", ")}`
+            );
+          }
+        }
+
+        const partes = [];
+        if (aceitas.length)     partes.push(`✅ ${aceitas.length} palavra(s) adicionada(s).`);
+        if (descartadas.length) partes.push(`⚠️ ${descartadas.length} descartada(s) — limite de ${MAX_WORDS} palavras atingido.`);
+        if (!aceitas.length && !descartadas.length) partes.push("ℹ️ Todas as palavras informadas já estavam na lista.");
+
+        await this.followUpEphemeral(mi, { content: partes.join(" ") });
+        await this._warnIfSyncFailed(mi, syncResult);
+        return this.badwordsMenu(mi, guild, user);
+      }
     });
-    return this.badwordsMenu(interaction, guild, user);
+
+    return this.client.interactions.showModal(interaction, modal);
   }
 
   async removeBadword(interaction, guild, user) {
@@ -796,7 +902,7 @@ class SecuritySystem {
         cfg.list = cfg.list.filter(w => w !== i.data.values[0]);
         guild.markModified("security");
         await this.save(guild);
-        await this._syncNativeModule(guild, "badwords");
+        await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "badwords"));
         await this.followUpEphemeral(i, { content: `✅ \`${i.data.values[0]}\` removida.` });
         return this.badwordsMenu(i, guild, user);
       }
@@ -843,7 +949,7 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "antispam");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "antispam"));
           return this.antispamMenu(i, guild, user);
         }
         if (v === "set_limit")  return this.setSpamLimit(i, guild, user);
@@ -1205,14 +1311,14 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "antilinks");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "antilinks"));
           return this.antilinksMenu(i, guild, user);
         }
         if (v === "toggle_invites") {
           cfg.blockInvites = !cfg.blockInvites;
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "antilinks");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "antilinks"));
           return this.antilinksMenu(i, guild, user);
         }
         if (v === "allowed")    return this.manageDomainList(i, guild, user, "allowedDomains", "✅ Domínios Permitidos");
@@ -1266,7 +1372,7 @@ class SecuritySystem {
           cfg[listKey] = [];
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "antilinks");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "antilinks"));
           await this.followUpEphemeral(i, { content: "✅ Lista limpa." });
           return this.manageDomainList(i, guild, user, listKey, title);
         }
@@ -1306,7 +1412,7 @@ class SecuritySystem {
     cfg[listKey].push(...domains);
     guild.markModified("security");
     await this.save(guild);
-    await this._syncNativeModule(guild, "antilinks");
+    await this._warnIfSyncFailed(interaction, await this._syncNativeModule(guild, "antilinks"));
     await this.followUpEphemeral(interaction, {
       content: `✅ ${domains.length} domínio(s): ${domains.map(d => `\`${d}\``).join(", ")}`
     });
@@ -1328,7 +1434,7 @@ class SecuritySystem {
         cfg[listKey] = cfg[listKey].filter(d => d !== i.data.values[0]);
         guild.markModified("security");
         await this.save(guild);
-        await this._syncNativeModule(guild, "antilinks");
+        await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "antilinks"));
         await this.followUpEphemeral(i, { content: `✅ \`${i.data.values[0]}\` removido.` });
         return this.manageDomainList(i, guild, user, listKey, title);
       }
@@ -1374,7 +1480,7 @@ class SecuritySystem {
           cfg.enabled = !cfg.enabled;
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, "antimention");
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, "antimention"));
           return this.antimentionMenu(i, guild, user);
         }
         if (v === "set_limit")  return this.setMentionLimit(i, guild, user);
@@ -1415,7 +1521,7 @@ class SecuritySystem {
     cfg.maxMentions = limit;
     guild.markModified("security");
     await this.save(guild);
-    await this._syncNativeModule(guild, "antimention");
+    await this._warnIfSyncFailed(interaction, await this._syncNativeModule(guild, "antimention"));
     await this.followUpEphemeral(interaction, { content: `✅ Limite: ${limit} menções.` });
     return this.antimentionMenu(interaction, guild, user);
   }
@@ -1461,7 +1567,7 @@ class SecuritySystem {
           if (!cfg[listKey].includes(id)) cfg[listKey].push(id);
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, module);
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, module));
           await this.followUpEphemeral(i, { content: `✅ ${type} adicionado!` });
           return this.manageIgnoredList(i, guild, user, module, listKey, type);
         }
@@ -1476,7 +1582,7 @@ class SecuritySystem {
               cfg[listKey] = cfg[listKey].filter(id => id !== i2.data.values[0]);
               guild.markModified("security");
               await this.save(guild);
-              await this._syncNativeModule(guild, module);
+              await this._warnIfSyncFailed(i2, await this._syncNativeModule(guild, module));
               await this.followUpEphemeral(i2, { content: "✅ Removido." });
               return this.manageIgnoredList(i2, guild, user, module, listKey, type);
             }
@@ -1487,7 +1593,7 @@ class SecuritySystem {
           cfg[listKey] = [];
           guild.markModified("security");
           await this.save(guild);
-          await this._syncNativeModule(guild, module);
+          await this._warnIfSyncFailed(i, await this._syncNativeModule(guild, module));
           await this.followUpEphemeral(i, { content: "✅ Lista limpa." });
           return this.manageIgnoredList(i, guild, user, module, listKey, type);
         }
