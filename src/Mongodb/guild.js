@@ -178,21 +178,87 @@ const monitoringSchema = new Schema({
   changeHistory:   { type: [monitoringChangeSchema], default: [] }
 }, { _id: false });
 
-/* ── Raid history entry ── */
-const raidHistorySchema = new Schema({
-  timestamp: { type: Number, required: true },
-  count:     { type: Number, required: true },
-  action:    { type: String, required: true }
+/* ── Raid history entry ──
+   `factors` guarda o detalhamento de QUAIS sinais contribuíram para a
+   detecção (nunca um só) — ex: [{ key: "joinRate", score: 82, detail: "14 joins/min" }, ...] */
+const raidFactorHitSchema = new Schema({
+  key:    { type: String, required: true },
+  score:  { type: Number, required: true },
+  detail: { type: String, default: "" }
 }, { _id: false });
 
-/* ── Raid detection ── */
+const raidHistorySchema = new Schema({
+  timestamp: { type: Number, required: true },
+  score:     { type: Number, required: true },   // risk score final (0-100)
+  factors:   { type: [raidFactorHitSchema], default: [] },
+  action:    { type: String, required: true },
+  restored:  { type: Boolean, default: false },  // true quando o auto-restore já rodou para este evento
+  restoredAt:{ type: Number, default: null }
+}, { _id: false });
+
+/* ── AntiRaid Inteligente — cada fator é independente e configurável.
+   O risco final é uma combinação ponderada de todos os fatores ativos;
+   a Ayami nunca aciona a resposta de raid com base em um único fator
+   isolado (ver RaidIntelligence.js). ── */
+const raidFactorJoinRateSchema = new Schema({
+  enabled:  { type: Boolean, default: true },
+  joinLimit:{ type: Number,  default: 10 }   // joins/min considerados "muitos"
+}, { _id: false });
+
+const raidFactorNewAccountsSchema = new Schema({
+  enabled:      { type: Boolean, default: true },
+  maxAgeHours:  { type: Number,  default: 24 },  // conta é "recém-criada" se mais nova que isso
+  ratioPercent: { type: Number,  default: 50 }   // % dos joins recentes que precisa ser conta nova
+}, { _id: false });
+
+const raidFactorDuplicateMessagesSchema = new Schema({
+  enabled:  { type: Boolean, default: true },
+  minCount: { type: Number,  default: 5 }  // mensagens ~idênticas de usuários diferentes, na janela
+}, { _id: false });
+
+const raidFactorCoordinatedSpamSchema = new Schema({
+  enabled:   { type: Boolean, default: true },
+  minUsers:  { type: Number,  default: 6 },   // usuários distintos mandando mensagens no mesmo burst
+  windowSec: { type: Number,  default: 10 }
+}, { _id: false });
+
+const raidFactorMassMentionsSchema = new Schema({
+  enabled:  { type: Boolean, default: true },
+  minCount: { type: Number,  default: 15 }  // total de menções na janela recente, entre vários usuários
+}, { _id: false });
+
+const raidFactorMassInvitesSchema = new Schema({
+  enabled:  { type: Boolean, default: true },
+  minCount: { type: Number,  default: 4 }   // convites postados na janela, por usuários diferentes
+}, { _id: false });
+
+const raidFactorsSchema = new Schema({
+  joinRate:           { type: raidFactorJoinRateSchema,           default: () => ({}) },
+  newAccounts:        { type: raidFactorNewAccountsSchema,        default: () => ({}) },
+  duplicateMessages:  { type: raidFactorDuplicateMessagesSchema,  default: () => ({}) },
+  coordinatedSpam:    { type: raidFactorCoordinatedSpamSchema,    default: () => ({}) },
+  massMentions:       { type: raidFactorMassMentionsSchema,       default: () => ({}) },
+  massInvites:        { type: raidFactorMassInvitesSchema,        default: () => ({}) }
+}, { _id: false });
+
+/* ── Raid detection (AntiRaid Inteligente) ── */
 const raidSchema = new Schema({
-  enabled:      { type: Boolean, default: false },
-  joinLimit:    { type: Number,  default: 10    },
-  action:       { type: String,  default: "nothing" },
-  autoLockdown: { type: Boolean, default: false },
-  earlyAlerts:  { type: Boolean, default: false },
-  history:      { type: [raidHistorySchema], default: [] }
+  enabled:          { type: Boolean, default: false },
+  riskThreshold:    { type: Number,  default: 60 },     // score 0-100 para acionar a resposta
+  action:           { type: String,  default: "nothing" }, // nothing | timeout | kick | ban | lockdown | quarantine
+  quarantineRoleId: { type: String,  default: null },
+  autoLockdown:     { type: Boolean, default: false },  // ativa Modo Emergência junto com a ação
+  autoRestore:      { type: Boolean, default: true },   // desativa a emergência sozinho quando o ataque acabar
+  restoreAfterMinutes: { type: Number, default: 10 },    // minutos de calmaria exigidos antes de restaurar
+  earlyAlerts:      { type: Boolean, default: false },
+  factors:          { type: raidFactorsSchema, default: () => ({}) },
+  history:          { type: [raidHistorySchema], default: [] },
+  // estado runtime persistido (sobrevive a restart do bot)
+  state: {
+    emergencyActive: { type: Boolean, default: false },
+    lastHighRiskAt:  { type: Number,  default: null },
+    flaggedUserIds:  { type: [String], default: [] } // quem entrou durante o pico de risco (p/ punição em lote)
+  }
 }, { _id: false });
 
 // ⚠️ "Verificação de Atividade" (ranking/history/deadChannels/etc) foi

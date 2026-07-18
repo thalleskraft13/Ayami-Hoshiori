@@ -6,6 +6,7 @@ const PremiumManager = require("../Utils/PremiumManager.js");
 const getPerm = require("../Utils/Permission.js");
 const TTLCache = require("../Utils/TTLCache.js");
 const NativeAutoMod = require("./Security/NativeAutoMod.js");
+const RaidIntelligence = require("./Security/RaidIntelligence.js");
 
 // Módulos de Filtro cuja detecção acontece via Discord AutoMod nativo
 // (ver Security/NativeAutoMod.js) — o restante (anticaps, antiemoji,
@@ -17,10 +18,10 @@ class SecuritySystem {
 
   constructor(client) {
     this.client = client;
-    this._joinTracker   = {};
-    this._spamTracker   = {};
+    this._spamTracker   = {}; // não relacionado ao raid — ver Security/RaidIntelligence.js para o estado de raid
     this._botPermCache  = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
     this.nativeAutoMod  = new NativeAutoMod(client);
+    this.raidIntelligence = new RaidIntelligence(this);
   }
 
   /**
@@ -226,6 +227,20 @@ class SecuritySystem {
     if (!guild.security.emergency.channelSnapshot) guild.security.emergency.channelSnapshot = [];
     if (!guild.security.backups)                   guild.security.backups = [];
     if (!guild.security.automod.advanced.warns)    guild.security.automod.advanced.warns = [];
+    // AntiRaid Inteligente — documentos antigos podem ter só o shape velho
+    // ({ enabled, joinLimit, action, autoLockdown, earlyAlerts, history }).
+    // O Mongoose já aplica os defaults do novo schema em save/load; isso
+    // aqui só garante que o objeto em memória não quebre a UI antes do
+    // primeiro save().
+    if (!guild.security.raid.factors) {
+      guild.security.raid.factors = {
+        joinRate: {}, newAccounts: {}, duplicateMessages: {},
+        coordinatedSpam: {}, massMentions: {}, massInvites: {}
+      };
+    }
+    if (!guild.security.raid.state) {
+      guild.security.raid.state = { emergencyActive: false, lastHighRiskAt: null, flaggedUserIds: [] };
+    }
     return guild.security;
   }
 
@@ -381,7 +396,7 @@ class SecuritySystem {
         { label: "👮 Cargos e Permissões",         value: "roles_permissions" },
         { label: "📜 Logs",                        value: "logs"              },
         { label: "🔍 Verificação de Permissões",   value: "permission_check"  },
-        { label: "🚨 Detecção de Raid",            value: "raid_detection"    },
+        { label: "🚨 AntiRaid Inteligente",        value: "raid_detection"    },
         { label: "🔒 Modo Emergência",             value: "emergency_mode"    },
         { label: "🧬 Monitoramento de Alterações", value: "monitoring"        },
         { label: "🤖 Bots Suspeitos",              value: "bot_analysis"      },
@@ -2431,38 +2446,52 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 6. DETECÇÃO DE RAID ================= */
+  /* ================= 6. ANTIRAID INTELIGENTE ================= */
+  // Motor real de detecção mora em Security/RaidIntelligence.js (multi-fator,
+  // nunca aciona a resposta com base em um único evento isolado). Os métodos
+  // abaixo são só a UI de /configurar por cima daquele motor.
+
+  _raidActionLabels() {
+    return {
+      nothing:     "Apenas alertar",
+      timeout:     "Timeout (1h)",
+      kick:        "Kick",
+      ban:         "Ban",
+      lockdown:    "Lockdown do servidor",
+      quarantine:  "Cargo de quarentena"
+    };
+  }
 
   async raidDetection(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const cfg = sec.raid;
+    const f   = cfg.factors || {};
+    const actionLabels = this._raidActionLabels();
 
-    const actionLabels = {
-      nothing:  "Apenas alertar",
-      timeout:  "Timeout (1h)",
-      kick:     "Kick",
-      ban:      "Ban",
-      lockdown: "Lockdown do servidor"
-    };
+    const activeFactors = Object.entries(f).filter(([, v]) => v?.enabled).length;
 
     const select = this.select(
       user,
       [
-        { label: `${cfg.enabled ? "🟢" : "🔴"} Detecção de Raid`,                      value: "toggle"           },
-        { label: `⚙️ Limite: ${cfg.joinLimit || 10} joins/min`,                          value: "set_join_limit"   },
-        { label: `⚡ Ação: ${actionLabels[cfg.action || "nothing"]}`,                    value: "set_action"       },
-        { label: `🔒 Lockdown Automático: ${cfg.autoLockdown ? "🟢" : "🔴"}`,           value: "auto_lockdown"    },
-        { label: `🚨 Alertas Antecipados: ${cfg.earlyAlerts  ? "🟢" : "🔴"}`,           value: "early_alerts"     },
-        { label: "📊 Ver Histórico de Raids",                                            value: "raid_history"     }
+        { label: `${cfg.enabled ? "🟢" : "🔴"} AntiRaid Inteligente`,                     value: "toggle"          },
+        { label: `🧠 Fatores de Detecção (${activeFactors}/6 ativos)`,                     value: "factors"         },
+        { label: `📈 Limite de Risco: ${cfg.riskThreshold ?? 60}/100`,                     value: "set_threshold"   },
+        { label: `⚡ Ação: ${actionLabels[cfg.action || "nothing"]}`,                      value: "set_action"      },
+        { label: `🔒 Lockdown Automático: ${cfg.autoLockdown ? "🟢" : "🔴"}`,             value: "auto_lockdown"   },
+        { label: `♻️ Auto-Restauração: ${cfg.autoRestore ? "🟢" : "🔴"} (${cfg.restoreAfterMinutes ?? 10}min de calmaria)`, value: "auto_restore" },
+        { label: `🚨 Alertas Antecipados: ${cfg.earlyAlerts  ? "🟢" : "🔴"}`,             value: "early_alerts"    },
+        { label: "📊 Ver Histórico de Detecções",                                          value: "raid_history"    }
       ],
-      "Configurar Raid",
+      "Configurar AntiRaid",
       async (i) => {
         await this.deferUpdate(i);
         const v = i.data.values[0];
         if (v === "toggle")         return this.toggleRaid(i, guild, user);
-        if (v === "set_join_limit") return this.setRaidJoinLimit(i, guild, user);
+        if (v === "factors")        return this.raidFactorsMenu(i, guild, user);
+        if (v === "set_threshold")  return this.setRaidThreshold(i, guild, user);
         if (v === "set_action")     return this.setRaidAction(i, guild, user);
         if (v === "auto_lockdown")  return this.autoLockdown(i, guild, user);
+        if (v === "auto_restore")   return this.raidAutoRestoreMenu(i, guild, user);
         if (v === "early_alerts")   return this.earlyAlerts(i, guild, user);
         if (v === "raid_history")   return this.raidHistory(i, guild, user);
       }
@@ -2470,17 +2499,116 @@ class SecuritySystem {
 
     return this.editOriginal(interaction, {
       embeds: [{
-        title: "🚨 Detecção de Raid",
+        title: "🚨 AntiRaid Inteligente",
         description:
+          `Combina vários sinais ao mesmo tempo (joins em massa, contas novas, mensagens repetidas, spam coordenado, menções e convites em massa) — nunca age com base em um único evento isolado.\n\n` +
           `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Inativo"}\n` +
-          `**Limite:** ${cfg.joinLimit || 10} joins/min\n` +
+          `**Fatores ativos:** ${activeFactors}/6\n` +
+          `**Limite de risco:** ${cfg.riskThreshold ?? 60}/100\n` +
           `**Ação:** ${actionLabels[cfg.action || "nothing"]}\n` +
           `**Lockdown Auto:** ${cfg.autoLockdown ? "🟢" : "🔴"}\n` +
+          `**Auto-Restauração:** ${cfg.autoRestore ? "🟢" : "🔴"}\n` +
           `**Alertas Antecipados:** ${cfg.earlyAlerts ? "🟢" : "🔴"}`
       }],
       components: [
         this.row(select),
         this.row(this.backBtn(user, (i) => this.startSetup(i)))
+      ]
+    });
+  }
+
+  async raidFactorsMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const f   = sec.raid.factors || {};
+
+    const rows = [
+      { key: "joinRate",          icon: "📈", label: "Muitas contas entrando",   detail: `${f.joinRate?.joinLimit ?? 10} joins/min` },
+      { key: "newAccounts",       icon: "🆕", label: "Contas recém-criadas",     detail: `<${f.newAccounts?.maxAgeHours ?? 24}h, ${f.newAccounts?.ratioPercent ?? 50}% dos joins` },
+      { key: "duplicateMessages", icon: "📋", label: "Mensagens repetidas",      detail: `${f.duplicateMessages?.minCount ?? 5} usuários com a mesma msg` },
+      { key: "coordinatedSpam",   icon: "🌀", label: "Spam coordenado",          detail: `${f.coordinatedSpam?.minUsers ?? 6} usuários em ${f.coordinatedSpam?.windowSec ?? 10}s` },
+      { key: "massMentions",      icon: "📣", label: "Menções em massa",         detail: `${f.massMentions?.minCount ?? 15} menções na janela` },
+      { key: "massInvites",       icon: "🔗", label: "Convites em massa",        detail: `${f.massInvites?.minCount ?? 4} usuários postando convites` }
+    ];
+
+    const select = this.select(
+      user,
+      rows.map(r => ({
+        label: `${f[r.key]?.enabled ? "🟢" : "🔴"} ${r.icon} ${r.label} — ${r.detail}`,
+        value: r.key
+      })),
+      "Selecionar fator para configurar",
+      async (i) => {
+        await this.deferUpdate(i);
+        return this.raidFactorDetail(i, guild, user, i.data.values[0]);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "🧠 Fatores de Detecção",
+        description: "Cada fator soma pontos ao score de risco (0-100) com peso próprio. Um ataque real precisa acender pelo menos **2 fatores diferentes** — a Ayami nunca reage a um sinal isolado."
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.raidDetection(i, guild, user)))
+      ]
+    });
+  }
+
+  async raidFactorDetail(interaction, guild, user, key) {
+    const sec = this.getSecurity(guild);
+    const f   = sec.raid.factors[key] ||= {};
+
+    const fieldsByKey = {
+      joinRate:          [{ prop: "joinLimit",     label: "Joins/min",                    min: 1 }],
+      newAccounts:       [{ prop: "maxAgeHours",   label: "Idade máx. da conta (horas)",  min: 1 }, { prop: "ratioPercent", label: "% de contas novas p/ acender", min: 1 }],
+      duplicateMessages: [{ prop: "minCount",      label: "Usuários repetindo a msg",     min: 2 }],
+      coordinatedSpam:   [{ prop: "minUsers",      label: "Usuários no burst",            min: 2 }, { prop: "windowSec",    label: "Janela do burst (segundos)",   min: 2 }],
+      massMentions:      [{ prop: "minCount",      label: "Total de menções na janela",   min: 2 }],
+      massInvites:       [{ prop: "minCount",      label: "Usuários postando convites",   min: 2 }]
+    };
+    const fields = fieldsByKey[key] || [];
+
+    const options = [
+      { label: `${f.enabled ? "🟢 Desativar" : "🔴 Ativar"} este fator`, value: "toggle" },
+      ...fields.map(fl => ({ label: `⚙️ ${fl.label}: ${f[fl.prop] ?? "—"}`, value: `set_${fl.prop}` }))
+    ];
+
+    const select = this.select(
+      user,
+      options,
+      "Editar fator",
+      async (i) => {
+        const v = i.data.values[0];
+        if (v === "toggle") {
+          await this.deferUpdate(i);
+          const sec2 = this.getSecurity(guild);
+          sec2.raid.factors[key].enabled = !sec2.raid.factors[key].enabled;
+          guild.markModified("security");
+          await this.save(guild);
+          return this.raidFactorDetail(i, guild, user, key);
+        }
+        const fieldDef = fields.find(fl => `set_${fl.prop}` === v);
+        if (!fieldDef) return this.deferUpdate(i);
+        await this.followUpEphemeral(i, { content: `Novo valor para **${fieldDef.label}** (número, mín. ${fieldDef.min}):` });
+        let msg;
+        try { msg = await this.client.NextMessageCollector.wait({ channelId: i.channel_id, userId: user }); } catch { return; }
+        const val = parseInt(msg.content);
+        if (isNaN(val) || val < fieldDef.min) return this.followUpEphemeral(i, { content: "❌ Valor inválido." });
+        const sec2 = this.getSecurity(guild);
+        sec2.raid.factors[key][fieldDef.prop] = val;
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: `✅ ${fieldDef.label} definido para ${val}.` });
+        return this.raidFactorDetail(i, guild, user, key);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{ title: `🧠 Fator: ${key}`, description: `Status: ${f.enabled ? "🟢 Ativo" : "🔴 Inativo"}` }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.raidFactorsMenu(i, guild, user)))
       ]
     });
   }
@@ -2491,7 +2619,7 @@ class SecuritySystem {
 
     if (!history.length) {
       return this.editOriginal(interaction, {
-        embeds: [{ title: "📊 Histórico de Raids", description: "Nenhum raid detectado até agora." }],
+        embeds: [{ title: "📊 Histórico de Detecções", description: "Nenhum raid detectado até agora." }],
         components: [this.row(this.backBtn(user, (i) => this.raidDetection(i, guild, user)))]
       });
     }
@@ -2499,27 +2627,32 @@ class SecuritySystem {
     const lines = history
       .slice(-10)
       .reverse()
-      .map(r =>
-        `🚨 **${new Date(r.timestamp).toLocaleString("pt-BR")}**\n` +
-        `└ ${r.count} joins/min | Ação: ${r.action}`
-      )
+      .map(r => {
+        const factorsTxt = (r.factors || []).map(f => `${f.key} (${f.score})`).join(", ") || "—";
+        const restoredTxt = r.restored ? " · ♻️ restaurado" : "";
+        return `🚨 **${new Date(r.timestamp).toLocaleString("pt-BR")}** — score ${r.score}/100${restoredTxt}\n` +
+               `└ Fatores: ${factorsTxt}\n` +
+               `└ Ação: ${r.action}`;
+      })
       .join("\n\n");
 
     return this.editOriginal(interaction, {
-      embeds: [{ title: "📊 Histórico de Raids (últimos 10)", description: lines }],
+      embeds: [{ title: "📊 Histórico de Detecções (últimos 10)", description: lines }],
       components: [this.row(this.backBtn(user, (i) => this.raidDetection(i, guild, user)))]
     });
   }
 
   async setRaidAction(interaction, guild, user) {
+    const labels = this._raidActionLabels();
     const select = this.select(
       user,
       [
-        { label: "🔔 Apenas alertar",       value: "nothing"  },
-        { label: "⏱️ Timeout (1h)",         value: "timeout"  },
-        { label: "👢 Kick",                 value: "kick"     },
-        { label: "🔨 Ban",                  value: "ban"      },
-        { label: "🔒 Lockdown do servidor", value: "lockdown" }
+        { label: `🔔 ${labels.nothing}`,    value: "nothing"    },
+        { label: `⏱️ ${labels.timeout}`,    value: "timeout"    },
+        { label: `👢 ${labels.kick}`,       value: "kick"       },
+        { label: `🔨 ${labels.ban}`,        value: "ban"        },
+        { label: `🔒 ${labels.lockdown}`,   value: "lockdown"   },
+        { label: `🚧 ${labels.quarantine}`, value: "quarantine" }
       ],
       "Selecionar ação",
       async (i) => {
@@ -2534,7 +2667,7 @@ class SecuritySystem {
     );
 
     return this.followUpEphemeral(interaction, {
-      content: "Selecione o que acontece quando um raid for detectado:",
+      content: "Selecione o que acontece com os usuários sinalizados quando um raid for detectado (cargo de quarentena precisa estar configurado em Cargos/Permissões):",
       components: [this.row(select)]
     });
   }
@@ -2547,18 +2680,68 @@ class SecuritySystem {
     return this.raidDetection(interaction, guild, user);
   }
 
-  async setRaidJoinLimit(interaction, guild, user) {
-    await this.followUpEphemeral(interaction, { content: "Limite de joins por minuto (ex: `10`):" });
+  async setRaidThreshold(interaction, guild, user) {
+    await this.followUpEphemeral(interaction, { content: "Score de risco (0-100) para acionar a resposta automática (padrão: `60`):" });
     let msg;
     try { msg = await this.client.NextMessageCollector.wait({ channelId: interaction.channel_id, userId: user }); } catch { return; }
-    const limit = parseInt(msg.content);
-    if (isNaN(limit) || limit < 1) return this.followUpEphemeral(interaction, { content: "❌ Inválido." });
+    const val = parseInt(msg.content);
+    if (isNaN(val) || val < 1 || val > 100) return this.followUpEphemeral(interaction, { content: "❌ Inválido, use um número entre 1 e 100." });
     const sec = this.getSecurity(guild);
-    sec.raid.joinLimit = limit;
+    sec.raid.riskThreshold = val;
     guild.markModified("security");
     await this.save(guild);
-    await this.followUpEphemeral(interaction, { content: `✅ Limite: ${limit}/min.` });
+    await this.followUpEphemeral(interaction, { content: `✅ Limite de risco: ${val}/100.` });
     return this.raidDetection(interaction, guild, user);
+  }
+
+  async raidAutoRestoreMenu(interaction, guild, user) {
+    const sec = this.getSecurity(guild);
+    const cfg = sec.raid;
+
+    const select = this.select(
+      user,
+      [
+        { label: `${cfg.autoRestore ? "🟢" : "🔴"} Auto-Restauração`,                        value: "toggle" },
+        { label: `⏱️ Minutos de calmaria: ${cfg.restoreAfterMinutes ?? 10}`,                 value: "set_minutes" }
+      ],
+      "Auto-Restauração",
+      async (i) => {
+        const v = i.data.values[0];
+        if (v === "toggle") {
+          await this.deferUpdate(i);
+          const sec2 = this.getSecurity(guild);
+          sec2.raid.autoRestore = !sec2.raid.autoRestore;
+          guild.markModified("security");
+          await this.save(guild);
+          return this.raidAutoRestoreMenu(i, guild, user);
+        }
+        await this.followUpEphemeral(i, { content: "Minutos de calmaria exigidos antes de restaurar automaticamente (ex: `10`):" });
+        let msg;
+        try { msg = await this.client.NextMessageCollector.wait({ channelId: i.channel_id, userId: user }); } catch { return; }
+        const val = parseInt(msg.content);
+        if (isNaN(val) || val < 1) return this.followUpEphemeral(i, { content: "❌ Inválido." });
+        const sec2 = this.getSecurity(guild);
+        sec2.raid.restoreAfterMinutes = val;
+        guild.markModified("security");
+        await this.save(guild);
+        await this.followUpEphemeral(i, { content: `✅ Calmaria necessária: ${val}min.` });
+        return this.raidAutoRestoreMenu(i, guild, user);
+      }
+    );
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "♻️ Auto-Restauração",
+        description:
+          "Quando o AntiRaid ativa o Lockdown automático, a Ayami pode desativá-lo sozinha assim que o servidor ficar calmo pelo tempo configurado — sem precisar de um admin online.\n\n" +
+          `**Status:** ${cfg.autoRestore ? "🟢 Ativo" : "🔴 Inativo"}\n` +
+          `**Calmaria exigida:** ${cfg.restoreAfterMinutes ?? 10} minutos`
+      }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.raidDetection(i, guild, user)))
+      ]
+    });
   }
 
   async autoLockdown(interaction, guild, user) {
@@ -3508,84 +3691,15 @@ class SecuritySystem {
     try {
       const guild = await this.getGuild(data.guild_id);
       const sec   = this.getSecurity(guild);
-      if (!sec.raid.enabled) return;
-
-      const gId = data.guild_id;
-      const now = Date.now();
-      if (!this._joinTracker[gId]) this._joinTracker[gId] = [];
-      this._joinTracker[gId] = this._joinTracker[gId].filter(t => now - t < 60000);
-      this._joinTracker[gId].push(now);
-
-      const count = this._joinTracker[gId].length;
-      const limit = sec.raid.joinLimit || 10;
-
-      // Early alert at 70% threshold
-      if (sec.raid.earlyAlerts && count === Math.floor(limit * 0.7)) {
-        await this.sendSecurityAlert(gId,
-          `⚠️ **Alerta Antecipado:** ${count} joins no último minuto (limite: ${limit}).\nVelocidade de entrada suspeita.`
-        );
-      }
-
-      if (count < limit) return;
-
-      // Log to raid history
-      if (!sec.raid.history) sec.raid.history = [];
-      sec.raid.history.push({ timestamp: now, count, action: sec.raid.action || "nothing" });
-      if (sec.raid.history.length > 20) sec.raid.history = sec.raid.history.slice(-20);
-      guild.markModified("security");
-      await this.save(guild);
-
-      await this.sendSecurityAlert(gId,
-        `🚨 **Raid detectado!** ${count} joins no último minuto.\n` +
-        `Ação automática: **${sec.raid.action || "nothing"}**`
-      );
-
-      const action = sec.raid.action || "nothing";
-      if (action === "nothing") return;
+      if (!sec.raid?.enabled) return;
 
       const userId = data.user?.id;
       if (!userId) return;
 
-      if (action === "kick") {
-        if (await this._hasBotPerms(gId, ["KICK_MEMBERS"])) {
-          await DiscordRequest(`/guilds/${gId}/members/${userId}`, { method: "DELETE" }).catch(() => {});
-        } else {
-          await this._ensurePerms(gId, ["KICK_MEMBERS"], null, "expulsar o membro durante o raid");
-        }
-      }
-      if (action === "ban") {
-        if (await this._hasBotPerms(gId, ["BAN_MEMBERS"])) {
-          await DiscordRequest(`/guilds/${gId}/bans/${userId}`, {
-            method: "PUT", body: { delete_message_seconds: 0 }
-          }).catch(() => {});
-        } else {
-          await this._ensurePerms(gId, ["BAN_MEMBERS"], null, "banir o membro durante o raid");
-        }
-      }
-      if (action === "timeout") {
-        if (await this._hasBotPerms(gId, ["MODERATE_MEMBERS"])) {
-          const until = new Date(Date.now() + 3600000).toISOString();
-          await DiscordRequest(`/guilds/${gId}/members/${userId}`, {
-            method: "PATCH", body: { communication_disabled_until: until }
-          }).catch(() => {});
-        } else {
-          await this._ensurePerms(gId, ["MODERATE_MEMBERS"], null, "aplicar timeout durante o raid");
-        }
-      }
-      if (action === "lockdown") {
-        const g = await this.getGuild(gId);
-        const success = await this._emergencyLockdown(g, gId);
-        if (success) {
-          const sec2 = this.getSecurity(g);
-          sec2.emergency.active = true;
-          this._logEmergencyEvent(g, "Lockdown automático por raid");
-          g.markModified("security");
-          await this.save(g);
-          await this.sendSecurityAlert(gId,
-            `🔒 **Lockdown ativado automaticamente** por detecção de raid.\nUse o painel de Emergência para desativar.`
-          );
-        }
-      }
+      // Toda a lógica de multi-fator, cálculo de score e resposta automática
+      // (kick/ban/timeout/quarantine/lockdown + auto-restore) mora em
+      // RaidIntelligence — aqui só alimentamos o motor com o evento.
+      await this.raidIntelligence.registerJoin(guild, data.guild_id, sec, userId);
 
     } catch (err) { console.error("[Security] handleMemberJoin:", err); }
   }
@@ -3648,6 +3762,16 @@ class SecuritySystem {
       const guildId   = data.guild_id;
 
       const memberRoles = data.member?.roles || [];
+
+      // Alimenta o AntiRaid Inteligente (mensagens repetidas, spam coordenado,
+      // menções e convites em massa) — roda em paralelo, nunca bloqueia o
+      // automod abaixo e falhas aqui não devem derrubar o resto do handler.
+      if (sec.raid?.enabled) {
+        const mentionCount = (data.mentions?.length || 0) + (data.mention_roles?.length || 0) + (data.mention_everyone ? 1 : 0);
+        this.raidIntelligence
+          .registerMessage(guild, guildId, sec, { userId, content, mentionCount })
+          .catch(err => console.error("[Security] raidIntelligence.registerMessage:", err));
+      }
 
       // Immune roles bypass automod entirely
       const immuneRoles = sec.roles?.immune || [];
