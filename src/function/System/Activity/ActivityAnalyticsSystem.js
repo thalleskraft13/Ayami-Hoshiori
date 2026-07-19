@@ -33,7 +33,7 @@ const ActivityChannelStat  = require("../../../Mongodb/activityChannelStat.js");
 const ActivityTermStat     = require("../../../Mongodb/activityTermStat.js");
 const { extractTerms }     = require("./TermExtractor.js");
 const {
-  dateKey, dateKeyDaysAgo, dateKeyRange, utcHour, weekdayOfDateKey
+  dateKey, dateKeyDaysAgo, dateKeyRange, utcHour, weekdayOfDateKey, localizeDailyStats
 } = require("./dateKey.js");
 
 const WEEKDAY_LABELS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
@@ -137,6 +137,7 @@ class ActivityAnalyticsSystem {
         ignoredRoles: [],
         ignoredUsers: [],
         ignoreBots: true,
+        timezoneOffset: -3,
       };
     }
     return guild.activityAnalytics;
@@ -508,43 +509,45 @@ class ActivityAnalyticsSystem {
   /* ================= 3. HORÁRIOS DE PICO / DIAS MOVIMENTADOS ================= */
 
   async peakHours(interaction, guild, user) {
+    const cfg = this.getConfig(guild);
+    const offset = cfg.timezoneOffset ?? -3;
     const stats = await this._dailyStatsRange(interaction.guild_id, 30);
-    const totals = Array(24).fill(0);
-    for (const s of stats) {
-      (s.messagesByHour || []).forEach((c, h) => { totals[h] += c; });
-    }
-    const max = Math.max(1, ...totals);
-    const topHours = totals
+    const { hourTotals } = localizeDailyStats(stats, offset);
+
+    const max = Math.max(1, ...hourTotals);
+    const topHours = hourTotals
       .map((c, h) => ({ h, c }))
       .sort((a, b) => b.c - a.c)
       .slice(0, 5)
       .filter(x => x.c > 0);
 
+    const tzLabel = `UTC${offset >= 0 ? "+" : ""}${offset}`;
     const desc = topHours.length
-      ? topHours.map(x => `**${String(x.h).padStart(2, "0")}h–${String((x.h + 1) % 24).padStart(2, "0")}h (UTC)** — ${x.c} mensagem(ns) ${"█".repeat(Math.max(1, Math.round((x.c / max) * 15)))}`).join("\n")
+      ? topHours.map(x => `**${String(x.h).padStart(2, "0")}h–${String((x.h + 1) % 24).padStart(2, "0")}h (${tzLabel})** — ${x.c} mensagem(ns) ${"█".repeat(Math.max(1, Math.round((x.c / max) * 15)))}`).join("\n")
       : "Sem dados suficientes nos últimos 30 dias.";
 
     return this.editOriginal(interaction, {
-      embeds: [{ title: "⏰ Horários de Pico (últimos 30 dias, UTC)", description: desc }],
+      embeds: [{ title: `⏰ Horários de Pico (últimos 30 dias, ${tzLabel})`, description: desc }],
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
 
   async busiestWeekdays(interaction, guild, user) {
+    const cfg = this.getConfig(guild);
+    const offset = cfg.timezoneOffset ?? -3;
     const stats = await this._dailyStatsRange(interaction.guild_id, 30);
-    const totals = Array(7).fill(0);
-    for (const s of stats) {
-      totals[weekdayOfDateKey(s.date)] += s.messageCount || 0;
-    }
-    const max = Math.max(1, ...totals);
-    const desc = totals
+    const { weekdayTotals } = localizeDailyStats(stats, offset);
+
+    const max = Math.max(1, ...weekdayTotals);
+    const desc = weekdayTotals
       .map((c, w) => ({ w, c }))
       .sort((a, b) => b.c - a.c)
       .map(x => `**${WEEKDAY_LABELS[x.w]}** — ${x.c} mensagem(ns) ${"█".repeat(Math.max(1, Math.round((x.c / max) * 15)))}`)
       .join("\n");
 
+    const tzLabel = `UTC${offset >= 0 ? "+" : ""}${offset}`;
     return this.editOriginal(interaction, {
-      embeds: [{ title: "📅 Dias Mais Movimentados (últimos 30 dias)", description: desc || "Sem dados suficientes ainda." }],
+      embeds: [{ title: `📅 Dias Mais Movimentados (últimos 30 dias, ${tzLabel})`, description: desc || "Sem dados suficientes ainda." }],
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
@@ -743,6 +746,7 @@ class ActivityAnalyticsSystem {
         { label: "🚫 Ignorar Canais",  value: "ignore_channels" },
         { label: "🚫 Ignorar Cargos",  value: "ignore_roles"    },
         { label: cfg.ignoreBots === false ? "🤖 Passar a ignorar bots" : "🤖 Passar a contar bots", value: "toggle_bots" },
+        { label: "🌎 Fuso Horário",    value: "timezone"        },
       ],
       "Selecionar ação",
       async (i) => {
@@ -762,6 +766,7 @@ class ActivityAnalyticsSystem {
         }
         if (v === "ignore_channels") return this.pickIgnoredChannels(i, guild, user);
         if (v === "ignore_roles")    return this.pickIgnoredRoles(i, guild, user);
+        if (v === "timezone")        return this.pickTimezone(i, guild, user);
       }
     );
 
@@ -772,9 +777,38 @@ class ActivityAnalyticsSystem {
           `**Status:** ${cfg.enabled ? "🟢 Ativo" : "🔴 Desativado"}\n` +
           `**Contar bots:** ${cfg.ignoreBots === false ? "sim" : "não"}\n` +
           `**Canais ignorados:** ${cfg.ignoredChannels.length}\n` +
-          `**Cargos ignorados:** ${cfg.ignoredRoles.length}`
+          `**Cargos ignorados:** ${cfg.ignoredRoles.length}\n` +
+          `**Fuso horário:** UTC${cfg.timezoneOffset >= 0 ? "+" : ""}${cfg.timezoneOffset ?? -3} (usado em Horários de Pico e Dias Mais Movimentados)`
       }],
       components: [this.row(select), this.row(this.backBtn(user, (i) => this.startSetup(i)))]
+    });
+  }
+
+  /** Fusos comuns pro público do bot — offset fixo (sem DST) por simplicidade e estabilidade. */
+  async pickTimezone(interaction, guild, user) {
+    const ZONES = [
+      { label: "UTC-4 (Amazonas / Manaus)",            value: "-4" },
+      { label: "UTC-3 (Brasília / São Paulo / Rio)",    value: "-3" },
+      { label: "UTC-5 (Acre / Nova York)",              value: "-5" },
+      { label: "UTC-8 (Los Angeles)",                    value: "-8" },
+      { label: "UTC+0 (Londres)",                        value: "0"  },
+      { label: "UTC+1 (Madri / Lisboa)",                 value: "1"  },
+    ];
+    const picker = this.select(user, ZONES, "Selecionar fuso horário", async (i) => {
+      await this.deferUpdate(i);
+      const cfg = this.getConfig(guild);
+      cfg.timezoneOffset = Number(i.data.values[0]);
+      guild.markModified("activityAnalytics");
+      await this.save(guild);
+      return this.settingsMenu(i, guild, user);
+    });
+
+    return this.editOriginal(interaction, {
+      embeds: [{
+        title: "🌎 Fuso Horário",
+        description: "Usado só pra CORRIGIR a exibição de **Horários de Pico** e **Dias Mais Movimentados** — os dados continuam gravados normalmente, isso só ajusta a leitura pro horário real do servidor."
+      }],
+      components: [this.row(picker), this.row(this.backBtn(user, (i) => this.settingsMenu(i, guild, user)))]
     });
   }
 

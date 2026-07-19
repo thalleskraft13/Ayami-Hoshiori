@@ -7,6 +7,7 @@ const AutoRoleManager     = require('./AutoRoleManager.js');
 const SeqQuestionsManager = require('./SeqQuestionsManager.js');
 const TranscriptManager   = require('./TranscriptManager.js');
 const EmbedBuilderUI      = require('./EmbedBuilderUI.js');
+const ComponentsV2Renderer = require('./ComponentsV2Renderer.js');
 const { randomUUID }      = require('crypto');
 const PremiumManager      = require('../../Utils/PremiumManager.js');
 const { getPlan }         = require('../../Utils/PremiumPlans.js');
@@ -477,6 +478,7 @@ class TicketSystem {
         embedStatus:   hasEmbed ? this.t('embed_ready', ctx) : this.t('embed_missing', ctx),
         channelStatus: panel.canalId ? `<#${panel.canalId}>` : this.t('no_channel_chosen', ctx),
         staffStatus:   panel.cargosStaff?.length ? panel.cargosStaff.map(r => `<@&${r}>`).join(', ') : this.t('no_staff_yet', ctx),
+        cv2Active:     !!(panel.useComponentsV2 && panel.painelComponentsV2?.length),
       })),
       cv2Divider(),
       row(navSelect),
@@ -508,19 +510,13 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.danger }));
   }
 
-  async _publicarPainel(interaction, user, panelId) {
-    const doc   = await this._getGuildDoc(interaction.guild_id);
-    const panel = this._findPanel(doc, panelId);
-    const ctx   = this._tctx(interaction);
-
-    if (!panel.canalId) {
-      return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_channel', ctx) });
-    }
-    if (!panel.painelPrincipal) {
-      return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_embed', ctx) });
-    }
-
-    const components = panel.selectMenuConfig?.enabled
+  /**
+   * Monta as linhas de ação (botão único ou select hub) que abrem o
+   * ticket. SEMPRE geradas pelo sistema — nunca vêm de dentro dos
+   * blocos configurados na Dashboard (ver ComponentsV2Renderer.js).
+   */
+  _buildOpenTicketRows(panel, panelId, ctx) {
+    return panel.selectMenuConfig?.enabled
       ? [row({
           type: 3,
           custom_id: JSON.stringify({ t: 'ticket_select_hub', p: panelId }),
@@ -531,13 +527,33 @@ class TicketSystem {
           }))
         })]
       : [row({ type: 2, style: 1, label: this.t('open_ticket_button', ctx), custom_id: JSON.stringify({ t: 'create_ticket_select', p: panelId }) })];
+  }
 
-    const msg = await DiscordRequest(`/channels/${panel.canalId}/messages`, {
-      method: 'POST',
-      body: { embeds: [panel.painelPrincipal], components }
-    });
+  async _publicarPainel(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, panelId);
+    const ctx   = this._tctx(interaction);
 
-    panel.messageId = msg.id;
+    if (!panel.canalId) {
+      return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_channel', ctx) });
+    }
+    // Painel em Components V2 (configurado na Dashboard) não depende de
+    // painelPrincipal — só o modo embed (bot) exige isso.
+    if (!panel.useComponentsV2 && !panel.painelPrincipal) {
+      return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_embed', ctx) });
+    }
+
+    const rows = this._buildOpenTicketRows(panel, panelId, ctx);
+    const { body } = ComponentsV2Renderer.buildPanelBody(panel, rows);
+
+    // Se já existe uma mensagem publicada, EDITA em vez de duplicar.
+    const msg = panel.messageId
+      ? await DiscordRequest(`/channels/${panel.canalId}/messages/${panel.messageId}`, { method: 'PATCH', body }).catch(() => null)
+      : null;
+
+    const finalMsg = msg || await DiscordRequest(`/channels/${panel.canalId}/messages`, { method: 'POST', body });
+
+    panel.messageId = finalMsg.id;
     await doc.save();
 
     return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_success', { ...ctx, channelId: panel.canalId }) });

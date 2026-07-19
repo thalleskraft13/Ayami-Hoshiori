@@ -329,6 +329,12 @@ const activityAnalyticsSchema = new Schema({
   ignoredChannels: { type: [String], default: [] },
   ignoredRoles:    { type: [String], default: [] },
   ignoredUsers:    { type: [String], default: [] },
+  // Deslocamento fixo (em horas, -12 a +14) usado para converter os
+  // buckets de hora/dia (sempre gravados em UTC) para o horário real
+  // vivido pelo servidor na hora de EXIBIR estatísticas — ver
+  // src/function/System/Activity/dateKey.js#localizeDailyStats.
+  // Default -3 = America/Sao_Paulo (público majoritário do bot).
+  timezoneOffset:  { type: Number, default: -3, min: -12, max: 14 },
 }, { _id: false });
 
 /* ── Verificação de Novos Membros ──
@@ -569,6 +575,12 @@ const ticketSchema = new Schema({
   categoriaId:     { type: String, default: null  },
   canalId:         { type: String, default: null  },
   painelPrincipal: { type: Object, default: null  },
+  // ID da mensagem do painel publicado no canal — usado para EDITAR a
+  // mensagem existente (em vez de reenviar/duplicar) quando algo muda
+  // (embed, Components V2, botão/select). Faltava no schema antes,
+  // então `panel.messageId = msg.id; await doc.save()` nunca persistia
+  // de fato — corrigido aqui.
+  messageId:       { type: String, default: null  },
   cargosStaff:     { type: [String], default: []  },
   ticketChatName:  { type: String, default: null  },
   contadorTicket:  { type: Number, default: 0     },
@@ -578,7 +590,17 @@ const ticketSchema = new Schema({
   seqQuestionsConfig:  { type: seqQuestionsConfigSchema, default: () => ({}) },
   transcriptConfig:    { type: transcriptConfigSchema,   default: () => ({}) },
   selectMenuConfig:    { type: selectMenuConfigSchema,   default: () => ({}) },
-  mensagensConfig:     { type: ticketMensagensConfigSchema, default: () => ({}) }
+  mensagensConfig:     { type: ticketMensagensConfigSchema, default: () => ({}) },
+
+  // ─── Mensagem de abertura via Discord Components V2 ───
+  // Exclusivo da Dashboard (o bot NUNCA cria/edita isso, só lê e renderiza).
+  // Quando `useComponentsV2` é true e há blocos em `painelComponentsV2`,
+  // a mensagem de abertura do ticket é enviada em Components V2 (o botão/
+  // select menu de abrir ticket continua sendo injetado automaticamente
+  // pelo sistema — nunca vem de dentro dos blocos). Quando false, cai no
+  // fluxo padrão (embed em `painelPrincipal`, editável pelo bot).
+  useComponentsV2:     { type: Boolean, default: false },
+  painelComponentsV2:  { type: [Schema.Types.Mixed], default: [] }
 }, { _id: false });
 
 /* ─────────────────────────────────────────────

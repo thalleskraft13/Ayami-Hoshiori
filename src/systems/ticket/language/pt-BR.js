@@ -56,7 +56,8 @@ module.exports = [
     (ctx.successMsg ? `${ctx.successMsg}\n\n` : '') +
     `> 🎨 Embed: ${ctx.embedStatus}\n` +
     `> 📌 Canal: ${ctx.channelStatus}\n` +
-    `> 👥 Staff: ${ctx.staffStatus}` },
+    `> 👥 Staff: ${ctx.staffStatus}` +
+    (ctx.cv2Active ? `\n> 🧱 Layout: **Components V2** (configurado pela Dashboard — edite lá)` : '') },
   { id: "embed_updated", render: (ctx) => `${ctx.curtida} Ficou linda!` },
   { id: "embed_removed", render: (ctx) => `${ctx.emduvida} Tirei a embed.` },
   { id: "embed_title_prefix", render: (ctx) => `Embed — ${ctx.panelId}` },
