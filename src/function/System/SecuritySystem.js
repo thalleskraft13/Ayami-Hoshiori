@@ -69,7 +69,8 @@ class SecuritySystem {
     if (failed) {
       await this.sendSecurityAlert(
         guild.guildId,
-        `⚠️ **Falha ao sincronizar AutoMod nativo — ${module}**\n${failed.error}`
+        `⚠️ **Falha ao sincronizar AutoMod nativo — ${module}**\n${failed.error}`,
+        "automod"
       );
       return { ok: false, error: failed.error };
     }
@@ -272,6 +273,15 @@ class SecuritySystem {
     return p.status;
   }
 
+  /** Canal específico por módulo do AutoMod — recurso de assinatura
+   *  (liberado a partir do primeiro plano pago, ver PremiumPlans.js
+   *  #advancedSystems). Sem isso, todos os módulos caem juntos na
+   *  categoria "automod". */
+  async hasAdvancedSystemsAccess(guildId) {
+    const p = await PremiumManager.getGuildPremium(guildId);
+    return !!(p.status && p.plan?.advancedSystems);
+  }
+
   /* ================= PERMISSÕES DO BOT ================= */
 
   // Tradução amigável dos nomes de permissão (PT-BR)
@@ -361,7 +371,8 @@ class SecuritySystem {
       await this.sendSecurityAlert(guildId,
         `⚠️ **Permissão insuficiente** para ${contextLabel}.\n` +
         `Faltando: ${missing.map(p => `\`${this._permLabel(p)}\``).join(", ")}\n` +
-        `> Ajuste o cargo do bot para que o sistema de segurança funcione corretamente.`
+        `> Ajuste o cargo do bot para que o sistema de segurança funcione corretamente.`,
+        "security"
       ).catch(() => {});
       return false;
     }
@@ -916,12 +927,11 @@ class SecuritySystem {
           await this.save(guild);
           syncResult = await this._syncNativeModule(guild, "badwords");
 
-          if (sec2.logs?.types?.automod) {
-            await this.sendSecurityAlert(
-              guild.guildId,
-              `📝 **Palavras proibidas adicionadas** por <@${user}>: ${aceitas.map(w => `\`${w}\``).join(", ")}`
-            );
-          }
+          await this.sendSecurityAlert(
+            guild.guildId,
+            `📝 **Palavras proibidas adicionadas** por <@${user}>: ${aceitas.map(w => `\`${w}\``).join(", ")}`,
+            "automod"
+          );
         }
 
         const partes = [];
@@ -1762,6 +1772,12 @@ class SecuritySystem {
 
     const warnCount = sec.automod.advanced.warns.filter(w => w.userId === targetUserId).length;
 
+    await this.sendSecurityAlert(guildId,
+      `📋 **Warn registrado** — <@${targetUserId}> (${warnCount}º) por <@${moderatorId}>\n` +
+      `> ${reason}`,
+      "warns"
+    );
+
     // Estado de escalonamento já aplicado (evita repetir a mesma punição)
     if (!sec.automod.advanced.escalationState) sec.automod.advanced.escalationState = {};
     if (!sec.automod.advanced.escalationState[targetUserId]) sec.automod.advanced.escalationState[targetUserId] = {};
@@ -1783,7 +1799,8 @@ class SecuritySystem {
         state[moduleName] = tier.warns;
         await this._applyEscalationAction(guildId, targetUserId, tier.action, channelId, guildId);
         await this.sendSecurityAlert(guildId,
-          `⚖️ **Escalonamento (${moduleName})** — <@${targetUserId}> atingiu ${warnCount} warn(s) → ${this._actionLabel(tier.action)}`
+          `⚖️ **Escalonamento (${moduleName})** — <@${targetUserId}> atingiu ${warnCount} warn(s) → ${this._actionLabel(tier.action)}`,
+          "punishments"
         );
       }
     }
@@ -1802,7 +1819,8 @@ class SecuritySystem {
         state.global = tier.warns;
         await this._applyEscalationAction(guildId, targetUserId, tier.action, channelId, guildId);
         await this.sendSecurityAlert(guildId,
-          `⚖️ **Escalonamento Global** — <@${targetUserId}> atingiu ${warnCount} warn(s) (total) → ${this._actionLabel(tier.action)}`
+          `⚖️ **Escalonamento Global** — <@${targetUserId}> atingiu ${warnCount} warn(s) (total) → ${this._actionLabel(tier.action)}`,
+          "punishments"
         );
       }
     }
@@ -2190,34 +2208,59 @@ class SecuritySystem {
   async logsMenu(interaction, guild, user) {
     const sec    = this.getSecurity(guild);
     const logCfg = sec.logs;
+    const CATS = [
+      { key: "main",        label: "📋 Canal Principal (fallback)" },
+      { key: "moderation",  label: "🛠️ Moderação"   },
+      { key: "automod",     label: "🤖 AutoMod"      },
+      { key: "warns",       label: "📋 Warns"        },
+      { key: "punishments", label: "⚖️ Punições"     },
+      { key: "security",    label: "🛡️ Segurança"    },
+    ];
 
     const select = this.select(
       user,
       [
-        { label: `Modo: ${logCfg.mode === "single" ? "Canal Único" : "Múltiplos Canais"}`, value: "toggle_mode"      },
-        { label: "📋 Definir Canal Principal",                                              value: "set_main_channel" },
-        { label: "⚙️ Configurar Tipos de Log",                                             value: "log_types"        },
-        { label: "📅 Histórico de Warns (Discord)",                                        value: "log_history"      },
-        { label: "📤 Exportar Warns (JSON)",                                               value: "export"           }
+        ...CATS.map(c => ({
+          label: `${c.label} → ${logCfg.channels[c.key] ? "canal definido" : "não definido"}`,
+          value: `set_${c.key}`
+        })),
+        ...CATS.filter(c => c.key !== "main" && logCfg.channels[c.key]).map(c => ({
+          label: `↪️ Limpar canal — ${c.label} (volta a usar o Principal)`,
+          value: `clear_${c.key}`
+        })),
+        { label: "⚙️ Ativar/Desativar Categorias", value: "log_types" },
+        { label: "🧩 Canais por Módulo do AutoMod (assinatura)", value: "automod_modules" },
+        { label: "📅 Histórico de Warns (Discord)", value: "log_history" },
+        { label: "📤 Exportar Warns (JSON)",        value: "export"      }
       ],
       "Configurar Logs",
       async (i) => {
         await this.deferUpdate(i);
         const v = i.data.values[0];
-        if (v === "toggle_mode")      return this.toggleLogMode(i, guild, user);
-        if (v === "set_main_channel") return this.setLogChannel(i, guild, user, "main");
-        if (v === "log_types")        return this.logTypesMenu(i, guild, user);
-        if (v === "log_history")      return this.logHistory(i, guild, user);
-        if (v === "export")           return this.exportLogs(i, guild, user);
+        if (v.startsWith("set_"))   return this.setLogChannel(i, guild, user, v.replace("set_", ""));
+        if (v.startsWith("clear_")) {
+          const key = v.replace("clear_", "");
+          delete sec.logs.channels[key];
+          guild.markModified("security");
+          await this.save(guild);
+          return this.logsMenu(i, guild, user);
+        }
+        if (v === "log_types")       return this.logTypesMenu(i, guild, user);
+        if (v === "automod_modules") return this.automodModuleLogsMenu(i, guild, user);
+        if (v === "log_history")     return this.logHistory(i, guild, user);
+        if (v === "export")          return this.exportLogs(i, guild, user);
       }
     );
+
+    const statusLines = CATS.map(c =>
+      `**${c.label}:** ${logCfg.channels[c.key] ? `<#${logCfg.channels[c.key]}>` : (c.key === "main" ? "Não definido" : "usa o Canal Principal")}`
+    ).join("\n");
 
     return this.editOriginal(interaction, {
       embeds: [{
         title: "📜 Sistema de Logs",
         description:
-          `**Modo:** ${logCfg.mode === "single" ? "Canal Único" : "Múltiplos Canais"}\n` +
-          `**Canal Principal:** ${logCfg.channels.main ? `<#${logCfg.channels.main}>` : "Não definido"}`
+          `Cada categoria pode ter seu próprio canal. Categorias sem canal específico caem no **Canal Principal**.\n\n${statusLines}`
       }],
       components: [
         this.row(select),
@@ -2226,12 +2269,71 @@ class SecuritySystem {
     });
   }
 
-  async toggleLogMode(interaction, guild, user) {
+  static AUTOMOD_MODULES = [
+    { key: "badwords",    label: "Badwords"    },
+    { key: "antispam",    label: "Antispam"    },
+    { key: "anticaps",    label: "Anticaps"    },
+    { key: "antilinks",   label: "Antilinks"   },
+    { key: "antimention", label: "Antimention" },
+    { key: "antiemoji",   label: "Antiemoji"   },
+    { key: "antifiles",   label: "Antifiles"   },
+  ];
+
+  /** Canal específico por módulo do AutoMod — recurso de assinatura. */
+  async automodModuleLogsMenu(interaction, guild, user) {
+    const hasAccess = await this.hasAdvancedSystemsAccess(interaction.guild_id);
+
+    if (!hasAccess) {
+      return this.editOriginal(interaction, {
+        embeds: [{
+          title: "🔒 Canais por Módulo do AutoMod",
+          description:
+            "Esse recurso é liberado a partir da primeira assinatura ativa (Nova Estrela).\n\n" +
+            "Sem ele, todos os módulos do AutoMod continuam caindo juntos no canal da categoria **AutoMod**."
+        }],
+        components: [this.row(this.backBtn(user, (i) => this.logsMenu(i, guild, user)))]
+      });
+    }
+
     const sec = this.getSecurity(guild);
-    sec.logs.mode = sec.logs.mode === "single" ? "multi" : "single";
-    guild.markModified("security");
-    await this.save(guild);
-    return this.logsMenu(interaction, guild, user);
+    const mods = SecuritySystem.AUTOMOD_MODULES;
+
+    const select = this.select(
+      user,
+      [
+        ...mods.map(m => ({
+          label: `${m.label} → ${sec.logs.channels[`automod_${m.key}`] ? "canal definido" : "usa a categoria"}`,
+          value: `set_automod_${m.key}`
+        })),
+        ...mods.filter(m => sec.logs.channels[`automod_${m.key}`]).map(m => ({
+          label: `↪️ Limpar — ${m.label}`,
+          value: `clear_automod_${m.key}`
+        })),
+      ],
+      "Selecionar módulo",
+      async (i) => {
+        const v = i.data.values[0];
+        if (v.startsWith("set_")) return this.setLogChannel(i, guild, user, v.replace("set_", ""));
+        await this.deferUpdate(i);
+        const key = v.replace("clear_", "");
+        delete sec.logs.channels[key];
+        guild.markModified("security");
+        await this.save(guild);
+        return this.automodModuleLogsMenu(i, guild, user);
+      }
+    );
+
+    const statusLines = mods.map(m =>
+      `**${m.label}:** ${sec.logs.channels[`automod_${m.key}`] ? `<#${sec.logs.channels[`automod_${m.key}`]}>` : "usa a categoria AutoMod"}`
+    ).join("\n");
+
+    return this.editOriginal(interaction, {
+      embeds: [{ title: "🧩 Canais por Módulo do AutoMod", description: statusLines }],
+      components: [
+        this.row(select),
+        this.row(this.backBtn(user, (i) => this.logsMenu(i, guild, user)))
+      ]
+    });
   }
 
   async setLogChannel(interaction, guild, user, type) {
@@ -2274,12 +2376,15 @@ class SecuritySystem {
 
     const select = this.select(
       user,
-      logTypes.map(t => ({ label: `${types[t.key] ? "🟢" : "🔴"} ${t.label}`, value: t.key })),
+      // undefined/true = ativo (mesmo critério de sendSecurityAlert: só
+      // `=== false` desativa) — antes aqui comparava truthy puro, então
+      // o rótulo mostrava 🔴 mesmo quando o log já estava ativo por padrão.
+      logTypes.map(t => ({ label: `${types[t.key] !== false ? "🟢" : "🔴"} ${t.label}`, value: t.key })),
       "Ativar/Desativar",
       async (i) => {
         await this.deferUpdate(i);
         if (!sec.logs.types) sec.logs.types = {};
-        sec.logs.types[i.data.values[0]] = !sec.logs.types[i.data.values[0]];
+        sec.logs.types[i.data.values[0]] = types[i.data.values[0]] === false; // false→true (ativa) | undefined/true→false (desativa)
         guild.markModified("security");
         await this.save(guild);
         return this.logTypesMenu(i, guild, user);
@@ -2289,7 +2394,7 @@ class SecuritySystem {
     return this.editOriginal(interaction, {
       embeds: [{
         title: "⚙️ Tipos de Log",
-        description: logTypes.map(t => `${types[t.key] ? "🟢" : "🔴"} **${t.label}**`).join("\n")
+        description: logTypes.map(t => `${types[t.key] !== false ? "🟢" : "🔴"} **${t.label}**`).join("\n")
       }],
       components: [
         this.row(select),
@@ -3519,7 +3624,7 @@ class SecuritySystem {
         s.emergency.active = false;
         g.markModified("security");
         await this.save(g);
-        await this.sendSecurityAlert(guild.guildId, `✅ **Modo emergência desativado automaticamente** após ${minutes} minutos.`);
+        await this.sendSecurityAlert(guild.guildId, `✅ **Modo emergência desativado automaticamente** após ${minutes} minutos.`, "security");
       } catch (err) { console.error("[Security] emergencyTimer auto-off:", err); }
     }, minutes * 60000);
 
@@ -4184,7 +4289,8 @@ class SecuritySystem {
       await this.sendSecurityAlert(guildId,
         `♻️ **Backup restaurado!**\n` +
         `ID: \`${backupId}\`\n` +
-        `✅ ${restored} atualizado(s) | 🆕 ${created} recriado(s) | ❌ ${errors} erro(s)`
+        `✅ ${restored} atualizado(s) | 🆕 ${created} recriado(s) | ❌ ${errors} erro(s)`,
+        "security"
       );
 
       return this.editOriginal(interaction, {
@@ -4339,7 +4445,7 @@ class SecuritySystem {
       if (!sec.monitoring.adminRoleCreate) return;
       if ((BigInt(data.role?.permissions || 0) & (1n << 3n)) === (1n << 3n)) {
         await this._logMonitoringEvent(data.guild_id, "Cargo", `Cargo com Admin criado: ${data.role.name}`);
-        await this.sendSecurityAlert(data.guild_id, `⚠️ **Cargo com Admin criado!**\n<@&${data.role.id}> — \`${data.role.name}\``);
+        await this.sendSecurityAlert(data.guild_id, `⚠️ **Cargo com Admin criado!**\n<@&${data.role.id}> — \`${data.role.name}\``, "security");
       }
     } catch (err) { console.error("[Security] handleRoleCreate:", err); }
   }
@@ -4350,7 +4456,7 @@ class SecuritySystem {
       const sec   = this.getSecurity(guild);
       if (!sec.monitoring.channelChanges) return;
       await this._logMonitoringEvent(data.guild_id, "Canal", `Canal criado: #${data.name}`);
-      await this.sendSecurityAlert(data.guild_id, `🧬 **Canal criado:** <#${data.id}> (\`${data.name}\`)`);
+      await this.sendSecurityAlert(data.guild_id, `🧬 **Canal criado:** <#${data.id}> (\`${data.name}\`)`, "security");
     } catch (err) { console.error("[Security] handleChannelCreate:", err); }
   }
 
@@ -4360,7 +4466,7 @@ class SecuritySystem {
       const sec   = this.getSecurity(guild);
       if (!sec.monitoring.botAdded || !data.user?.bot) return;
       await this._logMonitoringEvent(data.guild_id, "Bot", `Bot adicionado: ${data.user.username}`);
-      await this.sendSecurityAlert(data.guild_id, `🤖 **Bot adicionado:** ${data.user.username} (<@${data.user.id}>)`);
+      await this.sendSecurityAlert(data.guild_id, `🤖 **Bot adicionado:** ${data.user.username} (<@${data.user.id}>)`, "security");
     } catch (err) { console.error("[Security] handleMemberUpdate:", err); }
   }
 
@@ -4370,7 +4476,7 @@ class SecuritySystem {
       const sec   = this.getSecurity(guild);
       if (!sec.monitoring.webhookCreated) return;
       await this._logMonitoringEvent(data.guild_id, "Webhook", `Webhook criado em #${data.channel_id}`);
-      await this.sendSecurityAlert(data.guild_id, `🔗 **Webhook criado/alterado** em <#${data.channel_id}>`);
+      await this.sendSecurityAlert(data.guild_id, `🔗 **Webhook criado/alterado** em <#${data.channel_id}>`, "security");
     } catch (err) { console.error("[Security] handleWebhookCreate:", err); }
   }
 
@@ -4480,7 +4586,8 @@ class SecuritySystem {
           `🛡️ **AutoMod — ${module}** — ${reason}\n` +
           `👤 <@${userId}> em <#${channelId}>\n` +
           `⚡ Ações: ${acts.join(", ")}${warnCount ? ` | Warns acumulados: ${warnCount}` : ""}` +
-          (skipped.length ? `\n⚠️ Ação(ões) não executada(s) por falta de permissão: ${skipped.join(", ")}` : "")
+          (skipped.length ? `\n⚠️ Ação(ões) não executada(s) por falta de permissão: ${skipped.join(", ")}` : ""),
+          "automod", module
         );
       };
 
@@ -4585,7 +4692,8 @@ class SecuritySystem {
         `🛡️ **AutoMod Nativo — ${match.label}** — regra do Discord acionada\n` +
         `👤 <@${userId}>${channelId ? ` em <#${channelId}>` : ""}\n` +
         `⚡ Ações extras aplicadas: ${acts.filter(a => ["warn", "kick", "ban"].includes(a)).join(", ") || "nenhuma (bloqueio já feito pelo Discord)"}` +
-        (warnCount ? ` | Warns acumulados: ${warnCount}` : "")
+        (warnCount ? ` | Warns acumulados: ${warnCount}` : ""),
+        "automod", match.key
       );
     } catch (err) {
       console.error("[Security] handleAutoModExecution:", err);
@@ -4646,11 +4754,43 @@ class SecuritySystem {
     } catch (err) { console.error("[Security] _applyEscalationAction:", err); }
   }
 
-  async sendSecurityAlert(guildId, message) {
+  /**
+   * Envia um alerta de log de Segurança.
+   *
+   * ANTES: sempre ia pro `logs.channels.main`, e os toggles em
+   * `logs.types.*` (Moderação/AutoMod/Warns/Punições/Segurança) e o
+   * "Modo: Múltiplos Canais" existiam na tela de configuração mas não
+   * tinham NENHUM efeito real — todo mundo caía no mesmo canal único,
+   * sempre. Agora cada categoria tem seu próprio canal configurável
+   * (com fallback pro canal principal se não tiver um específico), e o
+   * toggle de tipo realmente impede o envio quando desativado.
+   *
+   * @param {string} guildId
+   * @param {string} message
+   * @param {'moderation'|'automod'|'warns'|'punishments'|'security'} category
+   */
+  /**
+   * @param {string} subKey  Chave do módulo específico (ex: "badwords") pra
+   *                         sobrepor o canal da categoria — só é honrado se
+   *                         o servidor tiver a assinatura que libera isso
+   *                         (ver hasAdvancedSystemsAccess). Sem assinatura,
+   *                         cai automaticamente no canal da categoria.
+   */
+  async sendSecurityAlert(guildId, message, category = "security", subKey = null) {
     try {
-      const guild     = await this.getGuild(guildId);
-      const channelId = this.getSecurity(guild).logs.channels.main;
+      const guild = await this.getGuild(guildId);
+      const sec   = this.getSecurity(guild);
+
+      // Toggle de tipo desativado explicitamente → não envia nada.
+      if (sec.logs.types[category] === false) return;
+
+      let channelId = null;
+      if (subKey && await this.hasAdvancedSystemsAccess(guildId)) {
+        channelId = sec.logs.channels[`${category}_${subKey}`] || null;
+      }
+      channelId = channelId || sec.logs.channels[category] || sec.logs.channels.main;
       if (!channelId) return;
+
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: "POST",
         body: { embeds: [{ description: message, color: 0xED4245, timestamp: new Date().toISOString() }] }
