@@ -449,7 +449,7 @@ class Interpreter {
     G.define('Modal', () => this._makeModal());
 
     /* ── Objetos Discord ── */
-    G.define('getUser',        async () => this._buildUserObj(ctx.userId));
+    G.define('getUser',        async (id) => this._buildUserObj(extractId(id) ?? ctx.userId));
     G.define('getChannel',     async (id) => this._buildChannelObj(extractId(id) ?? ctx.channelId));
     G.define('getGuild',       async () => this._buildGuildObj(ctx.guildId));
     G.define('getInteraction', () => this._buildInteractionObj(ctx.interaction));
@@ -897,8 +897,11 @@ class Interpreter {
   async _buildUserObj(userId) {
     userId = extractId(userId);
     if (!userId) return null;
-    const user   = await DiscordRequest(`/users/${userId}`).catch(() => null);
+    // getUser() retorna o usuário do SERVIDOR (guild member), não o usuário
+    // global do Discord. Se a pessoa não estiver no servidor, retorna null.
     const member = await DiscordRequest(`/guilds/${this.discordCtx.guildId}/members/${userId}`).catch(() => null);
+    if (!member) return null;
+    const user   = member.user ?? null;
     const self   = this;
     return {
       id:          userId,

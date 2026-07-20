@@ -22,9 +22,6 @@ module.exports = [
   { id: "body", render: () =>
     `**🎫 Sistema de Tickets**\n` +
     `Configure painéis, categorias, staff, modais e automações.\n\n` +
-    `**✨ Compartilhamento de UID**\n` +
-    `Configure envio automático de UID em canais específicos.\n` +
-    `Suporte a webhook com nome e foto do usuário.\n\n` +
     `**🔍 Sistema de Segurança**\n` +
     `Analise permissões, cargos, bots e segurança do servidor.\n\n` +
     `**⚡ Logic Builder**\n` +
