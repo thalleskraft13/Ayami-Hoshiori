@@ -17,6 +17,13 @@ const { getPlan }         = require('../../Utils/PremiumPlans.js');
 // sim/não são "básicos" e só contam contra o limite total de perguntas.
 const ADVANCED_QUESTION_TYPES = new Set(['select', 'multiple', 'checkbox', 'attachment', 'member', 'role', 'channel']);
 
+/**
+ * Valores do campo TYPE do evento `ticketUpdate` do Logic Script —
+ * números (não strings), conforme documentado em
+ * /docs/reference/enums/ticket-update-type no site.
+ */
+const TICKET_UPDATE_TYPE = { CRIADO: 1, FECHADO: 2 };
+
 /* ─────────────────────────────────────────────
    CORES DA AYAMI (mesma paleta do Logic Builder)
    ───────────────────────────────────────────── */
@@ -240,6 +247,32 @@ class TicketSystem {
   async _getGuildPlan(guildId) {
     const premium = await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }));
     return premium.status ? premium.plan : getPlan(null);
+  }
+
+  /**
+   * O evento `ticketUpdate` e a função `abrirTicket()` do Logic Script
+   * são recursos Premium — liberados a partir do plano 🌟 Nova Estrela
+   * (ver `logicScript.premiumEvents` em Utils/PremiumPlans.js, espelhado
+   * em site/config/premiumPlans.js).
+   */
+  async _isPremiumEventsEnabled(guildId) {
+    const plan = await this._getGuildPlan(guildId);
+    return !!plan?.logicScript?.premiumEvents;
+  }
+
+  /**
+   * Dispara o evento `ticketUpdate` pro Logic Script da guild, se o plano
+   * permitir. `payload.TYPE` é sempre um número (ver TICKET_UPDATE_TYPE).
+   * Nunca lança — é best-effort, igual ao resto dos side-effects deste
+   * sistema (auto-cargo, transcript, etc.).
+   */
+  _emitTicketUpdate(guildId, payload) {
+    const runner = this.client?.logicScriptRunner;
+    if (!runner) return;
+    runner.emitCustomEvent(guildId, 'ticketUpdate', {
+      channelId: payload.channelId,
+      customData: payload,
+    }).catch(err => console.error('[TicketSystem] Erro ao emitir ticketUpdate:', err.message));
   }
 
   /**
@@ -1993,6 +2026,21 @@ class TicketSystem {
       }).catch(err => console.error('[TicketSystem] Erro no form sequencial:', err));
     }
 
+    // Evento Premium (Nova Estrela+) do Logic Script — best-effort, não
+    // bloqueia a criação do ticket se a checagem de plano falhar.
+    if (await this._isPremiumEventsEnabled(guildId).catch(() => false)) {
+      this._emitTicketUpdate(guildId, {
+        TYPE: TICKET_UPDATE_TYPE.CRIADO,
+        id: channel.id,
+        channelId: channel.id,
+        guildId,
+        panelId: fp.panelId,
+        openedBy: userId,
+        closedBy: null,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
     const successMsg = this.t('ticket_created_success', { ...ctx, channelId: channel.id });
 
     if (isModalFlow) {
@@ -2063,9 +2111,114 @@ class TicketSystem {
       }).catch(err => console.error('[TicketSystem] Erro ao processar auto-cargo no fechamento:', err));
     }
 
+    // Evento Premium (Nova Estrela+) do Logic Script — best-effort.
+    if (await this._isPremiumEventsEnabled(interaction.guild_id).catch(() => false)) {
+      this._emitTicketUpdate(interaction.guild_id, {
+        TYPE: TICKET_UPDATE_TYPE.FECHADO,
+        id: data.ch,
+        channelId: data.ch,
+        guildId: interaction.guild_id,
+        panelId,
+        openedBy: ownerId,
+        closedBy,
+        closedAt: new Date().toISOString(),
+      });
+    }
+
     setTimeout(() => {
       DiscordRequest(`/channels/${data.ch}`, { method: 'DELETE' }).catch(() => {});
     }, 10_000);
+  }
+
+  /* ─────────────────────────────────────── */
+
+  /**
+   * Abre um ticket de um painel JÁ CONFIGURADO sem depender de uma
+   * interação de botão/select do Discord — é o que a função global
+   * `abrirTicket(painelId, usuario?)` do Logic Script chama (ver
+   * Interpreter.js). Reaproveita o mesmo formato de canal/permissões/
+   * mensagem de `_createTicketChannel`, mas devolve dados simples em vez
+   * de responder uma interação (que não existe nesse fluxo).
+   *
+   * Recursos que dependem de uma interação real (modal de abertura,
+   * form sequencial pós-criação) não se aplicam aqui — script já decidiu
+   * abrir o ticket, não faz sentido pedir mais informação por modal.
+   *
+   * @param {string} guildId
+   * @param {string} panelId
+   * @param {{ userId: string }} opts — quem vai ser o dono do ticket
+   * @returns {Promise<{ id: string, channelId: string, panelId: string }>}
+   */
+  async createTicketFromScript(guildId, panelId, { userId } = {}) {
+    if (!userId) throw new Error('abrirTicket(): usuário não informado.');
+
+    const doc = await this._getGuildDoc(guildId);
+    if (!doc) throw new Error('abrirTicket(): servidor sem nenhum painel de ticket configurado.');
+
+    const panel = this._findPanel(doc, panelId);
+    if (!panel) throw new Error(`abrirTicket(): painel '${panelId}' não encontrado.`);
+
+    panel.contadorTicket = (panel.contadorTicket || 0) + 1;
+    const count = panel.contadorTicket;
+    await doc.save();
+
+    const nameTemplate = panel.ticketChatName || 'ticket-{count}';
+    const channelName  = nameTemplate.replaceAll('{count}', String(count)).slice(0, 90);
+    const staffRoles   = panel.cargosStaff || [];
+
+    const permissionOverwrites = [
+      { id: guildId, type: 0, deny: '1024' },              // @everyone: VIEW_CHANNEL deny
+      { id: userId,  type: 1, allow: '3072' },              // dono: VIEW_CHANNEL + SEND_MESSAGES
+      ...staffRoles.map(roleId => ({ id: roleId, type: 0, allow: '3072' })),
+    ];
+
+    const channel = await DiscordRequest(`/guilds/${guildId}/channels`, {
+      method: 'POST',
+      body: {
+        name: channelName,
+        type: 0,
+        parent_id: panel.categoriaId || undefined,
+        permission_overwrites: permissionOverwrites,
+        topic: `ticket:${panel.panelId}`,
+      }
+    });
+
+    if (panel.autoRoleConfig?.enabled) {
+      await this.autoRoleManager.applyRoles({
+        guildId, userId, ticketId: channel.id, panel
+      }).catch(err => console.error('[TicketSystem] Erro ao aplicar auto-cargo (abrirTicket):', err));
+    }
+
+    const fecharLabel  = resolveMsg(panel, 'fecharBotaoLabel', 'Fechar Ticket');
+    const tituloCriado = resolveMsg(panel, 'ticketCriadoTitulo', '🎫 Ticket Criado');
+    const descCriado   = resolveMsg(panel, 'ticketCriadoDescricao', 'Ticket aberto por {user}.', { userId });
+
+    await DiscordRequest(`/channels/${channel.id}/messages`, {
+      method: 'POST',
+      body: {
+        content: `<@${userId}>` + (staffRoles.length ? ` ${staffRoles.map(r => `<@&${r}>`).join(' ')}` : ''),
+        embeds: [{ title: tituloCriado, description: descCriado, color: 0x7C8FFF }],
+        components: [{
+          type: 1,
+          components: [{ type: 2, style: 4, label: fecharLabel, custom_id: JSON.stringify({ t: 'close_ticket_v2', ch: channel.id, u: userId }) }]
+        }]
+      }
+    });
+
+    if (await this._isPremiumEventsEnabled(guildId).catch(() => false)) {
+      this._emitTicketUpdate(guildId, {
+        TYPE: TICKET_UPDATE_TYPE.CRIADO,
+        id: channel.id,
+        channelId: channel.id,
+        guildId,
+        panelId: panel.panelId,
+        openedBy: userId,
+        closedBy: null,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return { id: channel.id, channelId: channel.id, panelId: panel.panelId };
   }
 }
 

@@ -318,6 +318,15 @@ class ScriptRunner {
       case 'reactionRemove':
         return [ctx.emoji, { id: ctx.userId }, interp._buildMessageObj(msg)];
 
+      // ── Eventos internos (Premium — Nova Estrela+) ──
+      // Disparados via emitCustomEvent() por TicketSystem/ActivityAnalyticsSystem,
+      // não pelo gateway do Discord. O payload inteiro (incluindo o campo
+      // numérico TYPE) vem em ctx.customData — ver TicketSystem._emitTicketUpdate()
+      // e ActivityAnalyticsSystem._emitActivitySpike().
+      case 'ticketUpdate':
+      case 'activitySpike':
+        return [ctx.customData ?? {}];
+
       default: return [];
     }
   }

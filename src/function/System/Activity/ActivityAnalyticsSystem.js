@@ -25,6 +25,8 @@
 const { GuildDb }         = require("../../../Mongodb/guild.js");
 const DiscordRequest      = require("../../DiscordRequest.js");
 const TTLCache             = require("../../Utils/TTLCache.js");
+const PremiumManager       = require("../../Utils/PremiumManager.js");
+const { getPlan }          = require("../../Utils/PremiumPlans.js");
 const CommandLog           = require("../../../Mongodb/commandLog.js");
 const ActivityDailyStat    = require("../../../Mongodb/activityDailyStat.js");
 const ActivityDailyUser    = require("../../../Mongodb/activityDailyUser.js");
@@ -38,6 +40,22 @@ const {
 
 const WEEKDAY_LABELS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
+/**
+ * "Pico de Atividade" — evento Premium (🌟 Nova Estrela+) do Logic
+ * Script (`on activitySpike(dados) ... end`). Detecta quando um canal
+ * fica subitamente movimentado (INICIANDO) e quando volta a ficar
+ * quieto (ENCERRADO), por canal, usando uma janela deslizante de
+ * mensagens + um timeout de inatividade. Estado só em memória —
+ * reinicia com o processo, o que é aceitável pra um evento "ao vivo".
+ *
+ * Valores de TYPE são números (não strings) — ver
+ * /docs/reference/enums/activity-spike-type no site.
+ */
+const ACTIVITY_SPIKE_TYPE   = { INICIANDO: 1, ENCERRADO: 2 };
+const SPIKE_WINDOW_MS       = 60_000;   // janela deslizante pra contar mensagens/minuto
+const SPIKE_THRESHOLD       = 8;        // nº de mensagens na janela pra considerar "pico"
+const SPIKE_INACTIVITY_MS   = 120_000;  // 2min sem mensagem nova → ENCERRADO
+
 class ActivityAnalyticsSystem {
 
   constructor(client) {
@@ -46,6 +64,15 @@ class ActivityAnalyticsSystem {
     // 1 snapshot de contagem de membros por servidor a cada hora basta
     // pra alimentar o `memberCountEnd` do dia corrente.
     this._memberSnapshotCache = new TTLCache({ ttlMs: 60 * 60_000, sweepIntervalMs: 10 * 60_000 });
+
+    // Cache do plano premium por guild (evita 1 lookup no Mongo por
+    // mensagem — só precisa saber se `logicScript.premiumEvents` está
+    // liberado, e isso muda raramente).
+    this._planCache = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
+
+    // Estado do detector de "Pico de Atividade", por canal:
+    // channelId → { timestamps: number[], active: bool, timer: Timeout|null }
+    this._activeChats = new Map();
   }
 
   /* ================= UI / DB BOILERPLATE =================
@@ -205,6 +232,70 @@ class ActivityAnalyticsSystem {
     } catch { /* best-effort */ }
   }
 
+  /** Plano premium da guild resolve o recurso `logicScript.premiumEvents` — com cache. */
+  async _isPremiumEventsEnabled(guildId) {
+    const cached = this._planCache.get(guildId);
+    if (cached !== undefined) return cached;
+
+    const premium = await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }));
+    const plan    = premium.status ? premium.plan : getPlan(null);
+    const enabled = !!plan?.logicScript?.premiumEvents;
+
+    this._planCache.set(guildId, enabled);
+    return enabled;
+  }
+
+  /** Dispara `activitySpike` pro Logic Script da guild — best-effort, nunca lança. */
+  _emitActivitySpike(guildId, channelId, type, messageCount) {
+    const runner = this.client?.logicScriptRunner;
+    if (!runner) return;
+    runner.emitCustomEvent(guildId, 'activitySpike', {
+      channelId,
+      customData: {
+        TYPE: type,
+        channelId,
+        guildId,
+        messageCount,
+        windowSeconds: SPIKE_WINDOW_MS / 1000,
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(err => console.error('[ActivityAnalytics] Erro ao emitir activitySpike:', err.message));
+  }
+
+  /**
+   * Alimenta o detector de pico com mais uma mensagem do canal. Só roda
+   * pra guilds com o recurso Premium liberado — servidores FREE não
+   * pagam nem o custo de memória/CPU do tracking.
+   */
+  async _trackActivitySpike(guildId, channelId) {
+    if (!(await this._isPremiumEventsEnabled(guildId))) return;
+
+    const now = Date.now();
+    let state = this._activeChats.get(channelId);
+    if (!state) {
+      state = { timestamps: [], active: false, timer: null };
+      this._activeChats.set(channelId, state);
+    }
+
+    state.timestamps.push(now);
+    state.timestamps = state.timestamps.filter(t => now - t <= SPIKE_WINDOW_MS);
+
+    if (!state.active && state.timestamps.length >= SPIKE_THRESHOLD) {
+      state.active = true;
+      this._emitActivitySpike(guildId, channelId, ACTIVITY_SPIKE_TYPE.INICIANDO, state.timestamps.length);
+    }
+
+    if (state.active) {
+      clearTimeout(state.timer);
+      state.timer = setTimeout(() => {
+        state.active = false;
+        state.timestamps = [];
+        this._emitActivitySpike(guildId, channelId, ACTIVITY_SPIKE_TYPE.ENCERRADO, 0);
+      }, SPIKE_INACTIVITY_MS);
+      state.timer.unref?.(); // não segura o processo vivo só por causa disso
+    }
+  }
+
   async handleMessage(data) {
     try {
       if (!data.guild_id || data.author?.bot) return;
@@ -219,6 +310,12 @@ class ActivityAnalyticsSystem {
       const roles     = data.member?.roles || [];
 
       if (this.isIgnored(cfg, { channelId, roles, userId, isBot: false })) return;
+
+      // Pico de Atividade (Premium) — roda em paralelo com o tracking
+      // normal, não bloqueia nem depende dele.
+      this._trackActivitySpike(guildId, channelId).catch(err =>
+        console.error("[ActivityAnalytics] _trackActivitySpike:", err)
+      );
 
       const now  = new Date();
       const date = dateKey(now);

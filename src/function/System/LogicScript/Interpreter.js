@@ -270,12 +270,18 @@ class Interpreter {
     return this._planCache;
   }
 
-  /** Lança um RuntimeError amigável se a guild não tiver o recurso do plano. */
-  async _requireLogicScriptFeature(feature, friendlyName) {
+  /**
+   * Lança um RuntimeError amigável se a guild não tiver o recurso do plano.
+   * `planLabel` é o plano mínimo exibido na mensagem — por padrão 🌙 Lua
+   * Crescente (recursos httpAccess/webhookAccess/canRunFlowById), mas
+   * recursos liberados num patamar mais baixo (ex: premiumEvents, a
+   * partir do 🌟 Nova Estrela) devem passar o próprio label.
+   */
+  async _requireLogicScriptFeature(feature, friendlyName, planLabel = '🌙 Lua Crescente') {
     const plan = await this._getGuildPlan();
     if (!plan.logicScript?.[feature]) {
       throw new RuntimeError(
-        `${friendlyName} é um recurso Premium (a partir do plano 🌙 Lua Crescente). ` +
+        `${friendlyName} é um recurso Premium (a partir do plano ${planLabel}). ` +
         `Plano atual do servidor: ${plan.emoji} ${plan.name}. Veja /premium para assinar.`
       );
     }
@@ -449,7 +455,7 @@ class Interpreter {
     G.define('Modal', () => this._makeModal());
 
     /* ── Objetos Discord ── */
-    G.define('getUser',        async (id) => this._buildUserObj(extractId(id) ?? ctx.userId));
+    G.define('getUser',        async () => this._buildUserObj(ctx.userId));
     G.define('getChannel',     async (id) => this._buildChannelObj(extractId(id) ?? ctx.channelId));
     G.define('getGuild',       async () => this._buildGuildObj(ctx.guildId));
     G.define('getInteraction', () => this._buildInteractionObj(ctx.interaction));
@@ -562,6 +568,35 @@ class Interpreter {
       }
 
       return { ok: true };
+    });
+
+    /* ── abrirTicket ──
+       Premium: bloqueado no 🌑 Gratuito, liberado a partir do 🌟 Nova
+       Estrela — mesmo patamar dos eventos ticketUpdate/activitySpike
+       (flag `logicScript.premiumEvents`). Abre um ticket de um painel
+       já configurado em /painel sem precisar de clique em botão —
+       pensado pra scripts abrirem ticket automaticamente (ex: após um
+       comando, uma condição, ou em resposta a outro evento). */
+    G.define('abrirTicket', async (panelId, userId) => {
+      await this._requireLogicScriptFeature('premiumEvents', 'abrirTicket()', '🌟 Nova Estrela');
+
+      if (!panelId) throw new RuntimeError('abrirTicket() precisa do ID do painel.');
+      if (!this.client?.ticketSystem) {
+        throw new RuntimeError('Sistema de Tickets indisponível no momento.');
+      }
+
+      const targetUserId = extractId(userId) ?? this.discordCtx.userId;
+      if (!targetUserId) {
+        throw new RuntimeError('abrirTicket() precisa de um usuário (não foi possível identificar quem abre o ticket).');
+      }
+
+      this._logAction('OPEN_TICKET', `panel=${panelId} user=${targetUserId}`);
+
+      const result = await this.client.ticketSystem
+        .createTicketFromScript(this.discordCtx.guildId, String(panelId), { userId: targetUserId })
+        .catch(err => { throw new RuntimeError(`abrirTicket(): ${err.message}`); });
+
+      return { id: result.channelId, channelId: result.channelId, panelId: result.panelId };
     });
 
     /* ── Banco de dados ── */
@@ -897,11 +932,8 @@ class Interpreter {
   async _buildUserObj(userId) {
     userId = extractId(userId);
     if (!userId) return null;
-    // getUser() retorna o usuário do SERVIDOR (guild member), não o usuário
-    // global do Discord. Se a pessoa não estiver no servidor, retorna null.
+    const user   = await DiscordRequest(`/users/${userId}`).catch(() => null);
     const member = await DiscordRequest(`/guilds/${this.discordCtx.guildId}/members/${userId}`).catch(() => null);
-    if (!member) return null;
-    const user   = member.user ?? null;
     const self   = this;
     return {
       id:          userId,

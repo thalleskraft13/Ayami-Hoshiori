@@ -81,6 +81,9 @@ const PLANS = {
       httpAccess: false,
       webhookAccess: false,
       canRunFlowById: false,
+      // Eventos ticketUpdate/activitySpike e a função abrirTicket()
+      // — liberados a partir do Nova Estrela (ver seção "Planos" acima).
+      premiumEvents: false,
     },
 
     // Tickets — filosofia "Discloud": todo mundo tem acesso, com limites
@@ -123,6 +126,7 @@ const PLANS = {
       httpAccess: false,   // "HTTP bloqueado" — seção 2
       webhookAccess: false, // "Webhooks bloqueados" — seção 2
       canRunFlowById: false,
+      premiumEvents: true, // primeiro plano pago já libera ticketUpdate/activitySpike/abrirTicket()
     },
 
     // "Até 10 perguntas... recursos avançados possuem limites (ex.: até 2
