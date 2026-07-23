@@ -245,21 +245,35 @@ class ActivityAnalyticsSystem {
     return enabled;
   }
 
-  /** Dispara `activitySpike` pro Logic Script da guild — best-effort, nunca lança. */
+  /** Dispara `activitySpike` pro Logic Script E o trigger "📈 Pico de
+   *  atividade" pro Logic Builder da guild — best-effort, nunca lança. */
   _emitActivitySpike(guildId, channelId, type, messageCount) {
-    const runner = this.client?.logicScriptRunner;
-    if (!runner) return;
-    runner.emitCustomEvent(guildId, 'activitySpike', {
+    const payload = {
+      TYPE: type,
       channelId,
-      customData: {
-        TYPE: type,
+      guildId,
+      messageCount,
+      windowSeconds: SPIKE_WINDOW_MS / 1000,
+      timestamp: new Date().toISOString(),
+    };
+
+    const runner = this.client?.logicScriptRunner;
+    if (runner) {
+      runner.emitCustomEvent(guildId, 'activitySpike', {
         channelId,
+        customData: payload,
+      }).catch(err => console.error('[ActivityAnalytics] Erro ao emitir activitySpike (Logic Script):', err.message));
+    }
+
+    const registry = this.client?.logicEngine?.triggerRegistry;
+    if (registry) {
+      registry.emitExternal('activity', 'activity_spike', {
         guildId,
-        messageCount,
-        windowSeconds: SPIKE_WINDOW_MS / 1000,
-        timestamp: new Date().toISOString(),
-      },
-    }).catch(err => console.error('[ActivityAnalytics] Erro ao emitir activitySpike:', err.message));
+        channelId,
+        userId: null,
+        customData: payload,
+      });
+    }
   }
 
   /**

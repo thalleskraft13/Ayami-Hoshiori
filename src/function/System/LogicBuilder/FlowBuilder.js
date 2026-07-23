@@ -6,6 +6,8 @@ const { FlowModel }  = require('../../../Mongodb/flow.js');
 const { randomUUID } = require('crypto');
 const getPerm        = require('../../Utils/GetPerm.js');
 const holeHighter    = require('../../Utils/RoleHigher.js');
+const PremiumManager = require('../../Utils/PremiumManager.js');
+const { getPlan }    = require('../../Utils/PremiumPlans.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
 /* ─────────────────────────────────────────────
@@ -89,6 +91,8 @@ const TRIGGER_CATALOG = [
   { category: 'thread',    type: 'thread_deleted',           label: '🧵 Tópico fechado',           description: 'Um tópico (thread) foi fechado/arquivado' },
   { category: 'member',    type: 'boost_added',              label: '🚀 Boost adicionado',         description: 'Membro começou a impulsionar o servidor' },
   { category: 'member',    type: 'boost_removed',            label: '💔 Boost removido',           description: 'Membro parou de impulsionar o servidor' },
+  { category: 'ticket',    type: 'ticket_update',            label: '🎫 Ticket atualizado',        description: 'Um ticket foi aberto ou fechado — use o Filtro pra escolher qual', badge: '🌟 Nova Estrela+' },
+  { category: 'activity',  type: 'activity_spike',           label: '📈 Pico de atividade',        description: 'Um canal ficou agitado ou voltou a ficar quieto — use o Filtro pra escolher qual', badge: '🌟 Nova Estrela+' },
   { category: 'internal',  type: 'custom_event',             label: '⚡ Evento customizado',       description: 'Disparado por outro fluxo' }
 ];
 
@@ -202,6 +206,8 @@ const TRIGGER_CATEGORY_META = {
   voice:     { label: '🔊 Voz / Call',          description: 'Entrar, sair, câmera, tela' },
   component: { label: '🖱️ Componentes',        description: 'Botão, select, modal' },
   thread:    { label: '🧵 Tópicos (Threads)',   description: 'Criado ou fechado' },
+  ticket:    { label: '🎫 Tickets',             description: 'Abertos ou fechados — Premium 🌟' },
+  activity:  { label: '📈 Atividade',           description: 'Picos de movimento no chat — Premium 🌟' },
   internal:  { label: '⚡ Internos',            description: 'Eventos disparados por outro fluxo' },
 };
 
@@ -453,8 +459,31 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
+  /**
+   * Alguns triggers (Ticket, Pico de Atividade) são Premium — a partir do
+   * plano 🌟 Nova Estrela (mesma flag `logicScript.premiumEvents` usada
+   * pelos eventos equivalentes do Logic Script). Retorna true se a guild
+   * pode usar; senão avisa de forma amigável e retorna false.
+   */
+  async _requirePremiumTrigger(interaction, ctx) {
+    const premium = await PremiumManager.getGuildPremium(interaction.guild_id).catch(() => ({ status: false }));
+    const plan    = premium.status ? premium.plan : getPlan(null);
+    if (plan?.logicScript?.premiumEvents) return true;
+
+    await this.ui.followUpEphemeral(interaction, {
+      content: this.t('fb_trigger_premium_required', { ...ctx, plan: `${plan.emoji} ${plan.name}` })
+    });
+    return false;
+  }
+
   async _setTrigger(interaction, user, flowId, category, type) {
     const ctx = this._tctx(interaction);
+
+    if (category === 'ticket' || category === 'activity') {
+      const ok = await this._requirePremiumTrigger(interaction, ctx);
+      if (!ok) return this._triggerCategoryMenu(interaction, user, flowId, category);
+    }
+
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, {
       trigger: { category, type, filters: {} }
     });
@@ -465,6 +494,17 @@ class FlowBuilder {
 
   /* ── Filtros do Trigger (mantém embed, são painéis secundários) ── */
   async _triggerFilters(interaction, user, flowId) {
+    // O botão "Filtros" chega aqui com a interação ainda "crua" (sem
+    // callback nenhum dado ainda). Todos os painéis abaixo (mensagem,
+    // reação, membro, voz, componente, tempo) terminam chamando
+    // this.ui.editOriginal(), que faz um PATCH em
+    // /webhooks/.../messages/@original — e isso só funciona depois que
+    // a interação já foi reconhecida (deferUpdate/type 6). Sem isso,
+    // o Discord nunca recebe um ACK dentro dos 3s e o usuário vê
+    // "Interação Falhou". Reconhece aqui uma única vez, antes de
+    // despachar pra qualquer painel.
+    await this.ui.deferUpdate(interaction);
+
     const flow = await this._getFlow(interaction.guild_id, flowId);
     const ctx  = this._tctx(interaction);
     if (!flow?.trigger) {
@@ -487,8 +527,9 @@ class FlowBuilder {
     if (category === 'voice')     return this._filterPanelVoice(interaction, user, flowId, filters, saveFilters);
     if (category === 'component') return this._filterPanelComponent(interaction, user, flowId, type, filters, saveFilters);
     if (category === 'time')      return this._filterPanelTime(interaction, user, flowId, filters, saveFilters);
+    if (category === 'ticket')    return this._filterPanelTicket(interaction, user, flowId, filters, saveFilters);
+    if (category === 'activity')  return this._filterPanelActivity(interaction, user, flowId, filters, saveFilters);
 
-    await this.ui.deferUpdate(interaction);
     return this.triggerMenu(interaction, user, flowId, {
       successMsg: this.t('fb_no_configurable_filters', ctx)
     });
@@ -542,6 +583,80 @@ class FlowBuilder {
       return this.ui.editOriginal(i, {
         embeds: [{ title: this.t('fb_filter_header_message', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_message', ctx)}`, color: COLOR.main }],
         components: [this.ui.row(chSel), this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnPrefix, btnClear, btnSave)]
+      });
+    };
+    return renderPanel(interaction, filters);
+  }
+
+  // ── Filtros: Ticket (Premium 🌟) ──────────────────────────────────────────
+  // "TYPE" do evento é numérico (1 = aberto, 2 = fechado), mas aqui vira um
+  // select com rótulos — quem monta o fluxo não escreve número nem ID nenhum.
+  async _filterPanelTicket(interaction, user, flowId, filters, saveFilters) {
+    const renderPanel = async (i, f) => {
+      const ctx = this._tctx(i);
+      const currentLabel = f.type === '1' ? this.t('fb_filter_ticket_type_open', ctx)
+                          : f.type === '2' ? this.t('fb_filter_ticket_type_closed', ctx)
+                          : this.t('fb_filter_ticket_type_any', ctx);
+      const lines = `${this.t('fb_filter_ticket_type_label', ctx)} ${currentLabel}`;
+
+      const typeSel = this.client.interactions.createSelect({
+        user, data: {
+          placeholder: this.t('fb_filter_ticket_type_placeholder', ctx),
+          options: [
+            { label: this.t('fb_filter_ticket_type_any_option', ctx),    value: 'any', emoji: { name: '🎫' } },
+            { label: this.t('fb_filter_ticket_type_open_option', ctx),   value: '1',   emoji: { name: '🆕' } },
+            { label: this.t('fb_filter_ticket_type_closed_option', ctx), value: '2',   emoji: { name: '✅' } },
+          ]
+        },
+        funcao: async (si) => {
+          await this.ui.deferUpdate(si);
+          f.type = si.data.values[0] === 'any' ? undefined : si.data.values[0];
+          return renderPanel(si, f);
+        }
+      });
+
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+
+      return this.ui.editOriginal(i, {
+        embeds: [{ title: this.t('fb_filter_header_ticket', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_ticket', ctx)}`, color: COLOR.main }],
+        components: [this.ui.row(typeSel), this.ui.row(btnClear, btnSave)]
+      });
+    };
+    return renderPanel(interaction, filters);
+  }
+
+  // ── Filtros: Pico de Atividade (Premium 🌟) ───────────────────────────────
+  async _filterPanelActivity(interaction, user, flowId, filters, saveFilters) {
+    const renderPanel = async (i, f) => {
+      const ctx = this._tctx(i);
+      const currentLabel = f.type === '1' ? this.t('fb_filter_activity_type_starting', ctx)
+                          : f.type === '2' ? this.t('fb_filter_activity_type_ended', ctx)
+                          : this.t('fb_filter_activity_type_any', ctx);
+      const lines = `${this.t('fb_filter_activity_type_label', ctx)} ${currentLabel}`;
+
+      const typeSel = this.client.interactions.createSelect({
+        user, data: {
+          placeholder: this.t('fb_filter_activity_type_placeholder', ctx),
+          options: [
+            { label: this.t('fb_filter_activity_type_any_option', ctx),      value: 'any', emoji: { name: '📊' } },
+            { label: this.t('fb_filter_activity_type_starting_option', ctx), value: '1',   emoji: { name: '📈' } },
+            { label: this.t('fb_filter_activity_type_ended_option', ctx),    value: '2',   emoji: { name: '📉' } },
+          ]
+        },
+        funcao: async (si) => {
+          await this.ui.deferUpdate(si);
+          f.type = si.data.values[0] === 'any' ? undefined : si.data.values[0];
+          return renderPanel(si, f);
+        }
+      });
+
+      const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
+      const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
+
+      return this.ui.editOriginal(i, {
+        embeds: [{ title: this.t('fb_filter_header_activity', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_activity', ctx)}`, color: COLOR.main }],
+        components: [this.ui.row(typeSel), this.ui.row(btnClear, btnSave)]
       });
     };
     return renderPanel(interaction, filters);

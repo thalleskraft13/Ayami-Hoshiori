@@ -162,7 +162,8 @@ class LogicEngine {
       return;
     }
 
-    const flows = await this._findFlows(guildId, triggerCategory, triggerType);
+    const flows = (await this._findFlows(guildId, triggerCategory, triggerType))
+      .filter(flow => this._flowMatchesFilters(flow, discordCtx));
     if (!flows.length) return;
 
     this._concurrentMap.set(guildId, current + flows.length);
@@ -326,6 +327,27 @@ class LogicEngine {
   /* ═══════════════════════════════════════════
      LOOKUP DE FLUXOS COM CACHE
      ═══════════════════════════════════════════ */
+
+  /**
+   * Checa o filtro `trigger.filters.type` das categorias `ticket` e
+   * `activity` contra o `TYPE` numérico que veio no evento (1/2 — ver
+   * TicketSystem/ActivityAnalyticsSystem no bot). Sem filtro definido
+   * (`any`, ou nunca configurado), sempre passa.
+   *
+   * Demais categorias (message/reaction/member/...) não são checadas
+   * aqui — seguem o comportamento já existente antes desta mudança.
+   */
+  _flowMatchesFilters(flow, discordCtx) {
+    const category = flow.trigger?.category;
+    const filters  = flow.trigger?.filters || {};
+
+    if ((category === 'ticket' || category === 'activity') && filters.type) {
+      const actualType = discordCtx.customData?.TYPE;
+      if (String(filters.type) !== String(actualType)) return false;
+    }
+
+    return true;
+  }
 
   async _findFlows(guildId, triggerCategory, triggerType) {
     const key    = `${guildId}:${triggerCategory}:${triggerType}`;

@@ -440,6 +440,22 @@ _tryParseJson(str) {
     super.emit(category, ctx);
   }
 
+  /**
+   * Ponto de entrada usado por sistemas fora do gateway (TicketSystem,
+   * ActivityAnalyticsSystem) pra disparar um trigger do Logic Builder.
+   * Diferente de `emit('internal', ...)` acima (que é o "Evento
+   * customizado" dos próprios fluxos), este mantém a `triggerCategory`
+   * que o chamador pedir — assim "Ticket atualizado" e "Pico de
+   * Atividade" aparecem como categorias próprias no builder, não dentro
+   * de "Internos".
+   * @param {string} triggerCategory — ex.: 'ticket', 'activity'
+   * @param {string} triggerType     — ex.: 'ticket_update', 'activity_spike'
+   * @param {object} discordCtx      — { guildId, channelId, userId, customData }
+   */
+  emitExternal(triggerCategory, triggerType, discordCtx) {
+    this._emit(triggerCategory, triggerType, discordCtx);
+  }
+
   /* ═══════════════════════════════════════════
      HELPERS
      ═══════════════════════════════════════════ */

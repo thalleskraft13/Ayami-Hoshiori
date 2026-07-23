@@ -261,18 +261,31 @@ class TicketSystem {
   }
 
   /**
-   * Dispara o evento `ticketUpdate` pro Logic Script da guild, se o plano
-   * permitir. `payload.TYPE` é sempre um número (ver TICKET_UPDATE_TYPE).
-   * Nunca lança — é best-effort, igual ao resto dos side-effects deste
-   * sistema (auto-cargo, transcript, etc.).
+   * Dispara o evento `ticketUpdate` pro Logic Script E o trigger
+   * "🎫 Ticket atualizado" pro Logic Builder da guild, se o plano
+   * permitir. `payload.TYPE` é sempre um número (ver TICKET_UPDATE_TYPE) —
+   * no Logic Builder isso vira o filtro por select (aberto/fechado), não
+   * um campo pra digitar. Nunca lança — é best-effort, igual ao resto dos
+   * side-effects deste sistema (auto-cargo, transcript, etc.).
    */
   _emitTicketUpdate(guildId, payload) {
     const runner = this.client?.logicScriptRunner;
-    if (!runner) return;
-    runner.emitCustomEvent(guildId, 'ticketUpdate', {
-      channelId: payload.channelId,
-      customData: payload,
-    }).catch(err => console.error('[TicketSystem] Erro ao emitir ticketUpdate:', err.message));
+    if (runner) {
+      runner.emitCustomEvent(guildId, 'ticketUpdate', {
+        channelId: payload.channelId,
+        customData: payload,
+      }).catch(err => console.error('[TicketSystem] Erro ao emitir ticketUpdate (Logic Script):', err.message));
+    }
+
+    const registry = this.client?.logicEngine?.triggerRegistry;
+    if (registry) {
+      registry.emitExternal('ticket', 'ticket_update', {
+        guildId,
+        channelId: payload.channelId,
+        userId: payload.openedBy || payload.closedBy || null,
+        customData: payload,
+      });
+    }
   }
 
   /**
