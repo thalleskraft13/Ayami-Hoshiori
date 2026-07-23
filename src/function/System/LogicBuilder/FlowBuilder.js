@@ -580,10 +580,10 @@ class FlowBuilder {
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
 
-      return this.ui.editOriginal(i, {
-        embeds: [{ title: this.t('fb_filter_header_message', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_message', ctx)}`, color: COLOR.main }],
-        components: [this.ui.row(chSel), this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnPrefix, btnClear, btnSave)]
-      });
+      return this.ui.editOriginal(i, this._cv2([
+        this.ui.cv2Text(`# ${this.t('fb_filter_header_message', ctx)}\n${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_message', ctx)}`),
+        this.ui.row(chSel), this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnPrefix, btnClear, btnSave)
+      ], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -618,10 +618,10 @@ class FlowBuilder {
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
 
-      return this.ui.editOriginal(i, {
-        embeds: [{ title: this.t('fb_filter_header_ticket', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_ticket', ctx)}`, color: COLOR.main }],
-        components: [this.ui.row(typeSel), this.ui.row(btnClear, btnSave)]
-      });
+      return this.ui.editOriginal(i, this._cv2([
+        this.ui.cv2Text(`# ${this.t('fb_filter_header_ticket', ctx)}\n${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_ticket', ctx)}`),
+        this.ui.row(typeSel), this.ui.row(btnClear, btnSave)
+      ], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -654,10 +654,10 @@ class FlowBuilder {
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
 
-      return this.ui.editOriginal(i, {
-        embeds: [{ title: this.t('fb_filter_header_activity', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_activity', ctx)}`, color: COLOR.main }],
-        components: [this.ui.row(typeSel), this.ui.row(btnClear, btnSave)]
-      });
+      return this.ui.editOriginal(i, this._cv2([
+        this.ui.cv2Text(`# ${this.t('fb_filter_header_activity', ctx)}\n${this.t('fb_filter_desc', ctx)}\n\n${lines}\n\n${this.t('fb_filter_empty_hint_activity', ctx)}`),
+        this.ui.row(typeSel), this.ui.row(btnClear, btnSave)
+      ], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -678,7 +678,7 @@ class FlowBuilder {
       }});
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_reaction', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(btnEmoji, btnClear, btnSave)] });
+      return this.ui.editOriginal(i, this._cv2([this.ui.cv2Text(`# ${this.t('fb_filter_header_reaction', ctx)}\n${this.t('fb_filter_desc', ctx)}\n\n${lines}`), this.ui.row(chSel), this.ui.row(btnEmoji, btnClear, btnSave)], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -695,7 +695,7 @@ class FlowBuilder {
       const botsSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_filter_ignore_bots_placeholder', { ...ctx, status: f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx).replace(' ✅','') : this.t('fb_filter_no_check', ctx).replace(' ❌','') }), options: [{ label: this.t('fb_filter_yes_real_people_option', ctx), value: 'true', emoji: { name: '✅' } }, { label: this.t('fb_filter_no_bots_option', ctx), value: 'false', emoji: { name: '❌' } }]}, funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); } });
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_member', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)] });
+      return this.ui.editOriginal(i, this._cv2([this.ui.cv2Text(`# ${this.t('fb_filter_header_member', ctx)}\n${this.t('fb_filter_desc', ctx)}\n\n${lines}`), this.ui.row(roleSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -709,7 +709,7 @@ class FlowBuilder {
       const botsSel = this.client.interactions.createSelect({ user, data: { placeholder: this.t('fb_filter_ignore_bots_placeholder', { ...ctx, status: f.ignoreBots === 'true' ? this.t('fb_filter_yes_check', ctx).replace(' ✅','') : this.t('fb_filter_no_check', ctx).replace(' ❌','') }), options: [{ label: this.t('fb_filter_yes_real_people_option', ctx), value: 'true', emoji: { name: '✅' } }, { label: this.t('fb_filter_no_bots_option', ctx), value: 'false', emoji: { name: '❌' } }]}, funcao: async (si) => { await this.ui.deferUpdate(si); f.ignoreBots = si.data.values[0]; return renderPanel(si, f); } });
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_voice', ctx), description: `${this.t('fb_filter_desc', ctx)}\n\n${lines}`, color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)] });
+      return this.ui.editOriginal(i, this._cv2([this.ui.cv2Text(`# ${this.t('fb_filter_header_voice', ctx)}\n${this.t('fb_filter_desc', ctx)}\n\n${lines}`), this.ui.row(chSel), this.ui.row(botsSel), this.ui.row(btnClear, btnSave)], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -728,7 +728,7 @@ class FlowBuilder {
       }});
       const btnClear = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_clear', ctx), style: 4 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return renderPanel(bi, {}); } });
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => { await this.ui.deferUpdate(bi); return saveFilters(bi, f); } });
-      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_component', { ...ctx, typeLabel }), description: this.t('fb_filter_component_desc', { ...ctx, typeLabel, lines }), color: COLOR.main }], components: [this.ui.row(chSel), this.ui.row(btnId, btnClear, btnSave)] });
+      return this.ui.editOriginal(i, this._cv2([this.ui.cv2Text(`# ${this.t('fb_filter_header_component', { ...ctx, typeLabel })}\n${this.t('fb_filter_component_desc', { ...ctx, typeLabel, lines })}`), this.ui.row(chSel), this.ui.row(btnId, btnClear, btnSave)], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
@@ -753,10 +753,10 @@ class FlowBuilder {
       const btnSave  = this.client.interactions.createButton({ user, data: { label: this.t('fb_btn_save', ctx), style: 3 }, funcao: async (bi) => {
         await this.ui.deferUpdate(bi);
         const biCtx = this._tctx(bi);
-        if (f.hour === undefined) return this.ui.editOriginal(bi, { embeds: [{ title: this.t('fb_time_hour_required_title', biCtx), description: this.t('fb_time_hour_required_desc', biCtx), color: COLOR.danger }], components: [] });
+        if (f.hour === undefined) return this.ui.editOriginal(bi, this._cv2([this.ui.cv2Text(`# ${this.t('fb_time_hour_required_title', biCtx)}\n${this.t('fb_time_hour_required_desc', biCtx)}`)], { accentColor: COLOR.danger }));
         return saveFilters(bi, f);
       }});
-      return this.ui.editOriginal(i, { embeds: [{ title: this.t('fb_filter_header_time', ctx), description: this.t('fb_filter_time_desc', { ...ctx, lines }), color: COLOR.main }], components: [this.ui.row(hourSel1), this.ui.row(hourSel2), this.ui.row(minuteSel), this.ui.row(daysSel), this.ui.row(btnClear, btnSave)] });
+      return this.ui.editOriginal(i, this._cv2([this.ui.cv2Text(`# ${this.t('fb_filter_header_time', ctx)}\n${this.t('fb_filter_time_desc', { ...ctx, lines })}`), this.ui.row(hourSel1), this.ui.row(hourSel2), this.ui.row(minuteSel), this.ui.row(daysSel), this.ui.row(btnClear, btnSave)], { accentColor: COLOR.main }));
     };
     return renderPanel(interaction, filters);
   }
