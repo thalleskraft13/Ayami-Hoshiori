@@ -3,13 +3,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-/**
- * Análise de Atividade — contador acumulado por (guildId, userId).
- * Atualizado via $inc a cada mensagem/reação, sem TTL — alimenta o
- * "Ranking de Mensagens" e "Usuários Mais Ativos" (all-time), além de
- * servir de fallback para janelas maiores que a retenção do
- * ActivityEvent bruto.
- */
 const activityUserStatSchema = new Schema({
   guildId: { type: String, required: true },
   userId:  { type: String, required: true },
@@ -25,7 +18,6 @@ const activityUserStatSchema = new Schema({
 });
 
 activityUserStatSchema.index({ guildId: 1, userId: 1 }, { unique: true });
-// Usado pelo ranking (top N por mensagens dentro do servidor)
 activityUserStatSchema.index({ guildId: 1, totalMessages: -1 });
 
 module.exports = mongoose.models.ActivityUserStat

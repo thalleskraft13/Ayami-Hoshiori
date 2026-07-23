@@ -6,11 +6,7 @@ const AdventureGroupModel  = require('../../Mongodb/AdventureGroup.js');
 const GuildMissionModel    = require('../../Mongodb/GuildMission.js');
 const DiscordRequest       = require('../DiscordRequest.js');
 
-/* ═══════════════════════════════════════════════════════════
-   POOLS DE MISSÕES
-   ═══════════════════════════════════════════════════════════ */
 
-// ── Pessoais ─────────────────────────────────────────────
 
 const DAILY_POOL = [
   { id: 'send_10',       label: 'Envie 10 mensagens',          type: 'send_message',  goal: 10,  reward: 60  },
@@ -38,7 +34,6 @@ const WEEKLY_POOL = [
   { id: 'w_voice_5',     label: 'Entre em call 5 vezes',        type: 'join_voice',    goal: 5,   reward: 480 },
 ];
 
-// ── Grupo (meta = pool_base × membros, reward = base × membros) ──
 
 const GROUP_DAILY_POOL = [
   { id: 'g_send',     label: 'Enviem {goal} mensagens juntos',   type: 'send_message',  baseGoal: 40,  baseReward: 80  },
@@ -56,10 +51,8 @@ const GROUP_WEEKLY_POOL = [
   { id: 'gw_daily',   label: 'Façam o /daily {goal} vezes juntos',type: 'do_daily',       baseGoal: 5,   baseReward: 500  },
 ];
 
-// ── Guilda ────────────────────────────────────────────────
 
 const GUILD_WEEKLY_POOL = [
-  // Atividade do servidor
   { id: 'guild_msgs_500',    label: 'Membros enviem 500 mensagens no servidor',     type: 'send_message',  goal: 500,  reward: 1200 },
   { id: 'guild_msgs_1000',   label: 'Membros enviem 1000 mensagens no servidor',    type: 'send_message',  goal: 1000, reward: 2400 },
   { id: 'guild_xp_1000',     label: 'Membros ganhem 1000 XP de aventureiro',        type: 'earn_xp',       goal: 1000, reward: 1600 },
@@ -67,17 +60,13 @@ const GUILD_WEEKLY_POOL = [
   { id: 'guild_explore_20',  label: 'Membros façam 20 explorações',                 type: 'explore',       goal: 20,   reward: 1600 },
   { id: 'guild_voice_200',   label: 'Membros fiquem 200 min em calls',              type: 'voice_minutes', goal: 200,  reward: 1600 },
   { id: 'guild_react_100',   label: 'Membros façam 100 reações',                    type: 'add_reaction',  goal: 100,  reward: 1200 },
-  // Eventos especiais (sorteados para o slot de evento)
   { id: 'guild_event_daily', label: 'Todos os membros ativos fazem o /daily hoje',  type: 'guild_all_daily', goal: 1, reward: 2000, isEvent: true },
   { id: 'guild_event_voice', label: 'Boss de Voz — fiquem 30 min em call juntos',   type: 'voice_minutes', goal: 30,   reward: 2400, isEvent: true },
   { id: 'guild_event_msgs',  label: 'Chuva de Mora — enviem 200 msgs em 24h',       type: 'send_message',  goal: 200,  reward: 3200, isEvent: true },
 ];
 
-const GUILD_WEEKLY_COUNT = 4; // 3 de atividade + 1 de evento
+const GUILD_WEEKLY_COUNT = 4; 
 
-/* ═══════════════════════════════════════════════════════════
-   MISSION MANAGER
-   ═══════════════════════════════════════════════════════════ */
 
 class MissionManager {
 
@@ -85,19 +74,7 @@ class MissionManager {
     this.client = client;
   }
 
-  /* ══════════════════════════════════════════════════════
-     TRACK EVENT — ponto central chamado pelo bot
-     ══════════════════════════════════════════════════════ */
 
-  /**
-   * Registra um evento para um usuário.
-   * Atualiza missões pessoais, do grupo e da guilda simultaneamente.
-   *
-   * @param {string} userId
-   * @param {string} eventType
-   * @param {number} [amount=1]
-   * @param {string} [guildId]   — necessário para missões de guilda
-   */
   async trackEvent(userId, eventType, amount = 1, guildId = null) {
     await Promise.all([
       this._trackPersonal(userId, eventType, amount),
@@ -106,9 +83,6 @@ class MissionManager {
     ]);
   }
 
-  /* ══════════════════════════════════════════════════════
-     PESSOAIS
-     ══════════════════════════════════════════════════════ */
 
   async _trackPersonal(userId, eventType, amount) {
     try {
@@ -170,9 +144,6 @@ class MissionManager {
     }
   }
 
-  /* ══════════════════════════════════════════════════════
-     GRUPO DE AVENTUREIROS
-     ══════════════════════════════════════════════════════ */
 
   async _trackGroup(userId, eventType, amount) {
     try {
@@ -191,13 +162,11 @@ class MissionManager {
 
           m.progress = Math.min(m.progress + amount, m.goal);
 
-          // Registra contribuição individual
           if (!m.contributors) m.contributors = {};
           m.contributors[userId] = (m.contributors[userId] || 0) + amount;
 
           if (m.progress >= m.goal) {
             m.done = true;
-            // Recompensa todos os membros (base × nº membros cada um recebe a base)
             await this._rewardGroupMembers(group, m.baseReward, m.label, `mission_group_${period}`);
           }
 
@@ -245,7 +214,6 @@ class MissionManager {
 
   async _rewardGroupMembers(group, baseReward, label, type) {
     const memberCount = group.members.length;
-    // Cada membro recebe baseReward × memberCount
     const rewardEach  = baseReward * memberCount;
 
     for (const memberId of group.members) {
@@ -257,9 +225,6 @@ class MissionManager {
     }
   }
 
-  /* ══════════════════════════════════════════════════════
-     MISSÕES DE GUILDA
-     ══════════════════════════════════════════════════════ */
 
   async _trackGuild(guildId, userId, eventType, amount) {
     try {
@@ -270,7 +235,6 @@ class MissionManager {
 
       let changed = false;
 
-      // Missões semanais
       for (const m of doc.missions.weekly.list) {
         if (m.done || m.type !== eventType) continue;
         m.progress = Math.min(m.progress + amount, m.goal);
@@ -279,13 +243,11 @@ class MissionManager {
 
         if (m.progress >= m.goal) {
           m.done = true;
-          // Divide a recompensa igualmente entre todos os contribuidores
           await this._distributeGuildReward(doc, m.reward, m.label);
         }
         changed = true;
       }
 
-      // Missão de evento ativo
       const ev = doc.missions.event;
       if (ev?.active && ev.mission && !ev.mission.done) {
         const em = ev.mission;
@@ -327,7 +289,6 @@ class MissionManager {
         list:        picked.map(m => ({ ...m, progress: 0, done: false, contributors: {} }))
       };
 
-      // Evento especial com duração de 48h
       doc.missions.event = {
         active:      true,
         generatedAt: now,
@@ -338,8 +299,6 @@ class MissionManager {
   }
 
   async _distributeGuildReward(doc, totalReward, label) {
-    // Recompensa todos que contribuíram para a missão
-    // Cada contribuidor recebe a recompensa total (é generoso para incentivar participação)
     const allUserIds = new Set();
 
     for (const m of doc.missions.weekly.list) {
@@ -359,14 +318,7 @@ class MissionManager {
     }
   }
 
-  /* ══════════════════════════════════════════════════════
-     COLETAR RECOMPENSAS DE GUILDA
-     ══════════════════════════════════════════════════════ */
 
-  /**
-   * Coleta todas as recompensas pendentes de guilda para um usuário.
-   * Chamado por /guilda missoes → botão "Coletar".
-   */
   async collectGuildRewards(guildId, userId) {
     const doc = await GuildMissionModel.findOne({ guildId });
     if (!doc) return 0;
@@ -380,16 +332,12 @@ class MissionManager {
     await this._rewardUser(user, total, 'Missões de Guilda coletadas', 'guild_collect');
     await user.save();
 
-    // Remove as recompensas coletadas
     doc.pendingRewards = doc.pendingRewards.filter(r => r.userId !== userId);
     await doc.save();
 
     return total;
   }
 
-  /* ══════════════════════════════════════════════════════
-     CRUD — GRUPO DE AVENTUREIROS
-     ══════════════════════════════════════════════════════ */
 
   async createGroup(leaderId) {
     const existing = await AdventureGroupModel.findOne({ members: leaderId });
@@ -410,14 +358,13 @@ class MissionManager {
     const alreadyIn = await AdventureGroupModel.findOne({ members: targetId });
     if (alreadyIn) throw new Error('Este usuário já está em um grupo.');
 
-    // Remove convite expirado se existir
     group.pendingInvites = group.pendingInvites.filter(
       i => i.userId !== targetId && i.expiresAt > Date.now()
     );
 
     group.pendingInvites.push({
       userId:    targetId,
-      expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutos
+      expiresAt: Date.now() + 10 * 60 * 1000 
     });
 
     await group.save();
@@ -437,7 +384,6 @@ class MissionManager {
     group.members.push(userId);
     group.pendingInvites = group.pendingInvites.filter(i => i.userId !== userId);
 
-    // Regenera missões com nova contagem de membros
     group.missions.daily  = {};
     group.missions.weekly = {};
 
@@ -451,7 +397,6 @@ class MissionManager {
     if (!group) throw new Error('Você não está em nenhum grupo.');
 
     if (group.leaderId === userId) {
-      // Líder sai — dissolve o grupo
       await AdventureGroupModel.deleteOne({ _id: group._id });
       return { dissolved: true, group };
     }
@@ -465,9 +410,6 @@ class MissionManager {
     return AdventureGroupModel.findOne({ members: userId });
   }
 
-  /* ══════════════════════════════════════════════════════
-     GETTERS PÚBLICOS
-     ══════════════════════════════════════════════════════ */
 
   async getPersonalMissions(userId) {
     const user = await this._getOrCreateUser(userId);
@@ -495,9 +437,6 @@ class MissionManager {
     return doc;
   }
 
-  /* ══════════════════════════════════════════════════════
-     HELPERS INTERNOS
-     ══════════════════════════════════════════════════════ */
 
   async _getOrCreateUser(userId) {
     let user = await UserGlobalDb.findOne({ userId });
@@ -539,7 +478,6 @@ class MissionManager {
     } catch {}
   }
 
-  /** Sorteia N itens únicos do pool */
   _pickPool(pool, count) {
     return [...pool]
       .sort(() => Math.random() - 0.5)
@@ -547,7 +485,6 @@ class MissionManager {
       .map(m => ({ ...m, progress: 0, done: false, contributors: {} }));
   }
 
-  /** Sorteia missões de grupo escalando meta e reward pelo nº de membros */
   _pickGroupPool(pool, count, memberCount) {
     return [...pool]
       .sort(() => Math.random() - 0.5)

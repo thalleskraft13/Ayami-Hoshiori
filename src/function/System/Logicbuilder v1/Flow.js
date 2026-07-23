@@ -5,9 +5,6 @@ const DiscordRequest  = require('../../DiscordRequest.js');
 const FlowBuilder     = require('./FlowBuilder.js');
 const CommandBuilder  = require('./CommandBuilder.js');
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,
   gold:    0xFFD966,
@@ -19,12 +16,6 @@ const COLOR = {
 
 const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
 
-/**
- * FlowUI
- *
- * Painel de configuração do Logic Builder no Discord.
- * Ponto de entrada: client.logicUI.open(interaction)
- */
 class FlowUI {
 
   constructor(client) {
@@ -34,19 +25,14 @@ class FlowUI {
     this._listCache   = {};
   }
 
-  /* ── helper de emoji da Ayami ── */
   _e(name) {
     return this.client?.emoji?.[name] ?? '';
   }
 
-  /* ── botão de link para o guia ── */
   _guideButton() {
     return { type: 2, style: 5, label: '📖 Guia Logic Builder', url: GUIDE_URL };
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE INTERACTION
-     ═══════════════════════════════════════════ */
 
   async reply(interaction, data) {
     return DiscordRequest(
@@ -77,15 +63,9 @@ class FlowUI {
   }
 
   async followUpEphemeral(interaction, data) {
-    // OR em vez de sobrescrever — preserva flags já presentes em `data`
-    // (ex: IS_COMPONENTS_V2 = 32768, montada por cv2Payload) e garante
-    // o bit de ephemeral (64) por cima.
     return this.followUp(interaction, { ...data, flags: (data.flags ?? 0) | 64 });
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE COMPONENTES
-     ═══════════════════════════════════════════ */
 
   btn(user, label, style, func, opts = {}) {
     return this.client.interactions.createButton({
@@ -109,24 +89,14 @@ class FlowUI {
 
 
 
-  /** Texto em markdown (Text Display, type 10). */
   cv2Text(content) {
     return { type: 10, content };
   }
 
-  /** Linha divisória entre blocos (Separator, type 14). */
   cv2Divider(spacing = 1) {
     return { type: 14, divider: true, spacing };
   }
 
-  /**
-   * Bloco de texto com um botão ao lado (Section + Accessory, type 9).
-   * Use para cada seção do painel (Trigger, Condições, Ações, etc.)
-   * que precisa de um atalho de edição contextual.
-   *
-   * @param {string} content    Markdown do texto principal
-   * @param {object} button     Componente de botão já criado (this.btn(...) ou this.client.interactions.createButton(...))
-   */
   cv2Section(content, button) {
     return {
       type: 9,
@@ -135,11 +105,6 @@ class FlowUI {
     };
   }
 
-  /**
-   * Galeria de mídia (type 12) — usada para a imagem decorativa da Ayami
-   * no rodapé do painel, por exemplo.
-   * @param {string|string[]} urls
-   */
   cv2Gallery(urls) {
     const list = Array.isArray(urls) ? urls : [urls];
     return {
@@ -148,14 +113,6 @@ class FlowUI {
     };
   }
 
-  /**
-   * Monta o Container raiz (type 17) a partir de uma lista de blocos
-   * já construídos com os helpers acima (cv2Text, cv2Divider, cv2Section, row).
-   *
-   * @param {object[]} blocks
-   * @param {{ accentColor?: number, spoiler?: boolean }} opts
-   * @returns {object} payload pronto para `components: [container]`
-   */
   cv2Container(blocks, opts = {}) {
     return {
       type:          17,
@@ -165,23 +122,10 @@ class FlowUI {
     };
   }
 
-  /**
-   * Flags corretas para uma resposta CV2.
-   * IS_COMPONENTS_V2 = 1 << 15 = 32768
-   * EPHEMERAL        = 1 << 6  = 64
-   */
   cv2Flags(ephemeral = true) {
     return ephemeral ? 32768 | 64 : 32768;
   }
 
-  /**
-   * Monta o payload completo { flags, components: [container] } pronto
-   * para passar em editOriginal/followUpEphemeral/createButton callback.
-   * Açúcar sintático para não repetir cv2Flags + cv2Container em toda tela.
-   *
-   * @param {object[]} blocks    Blocos construídos com cv2Text/cv2Divider/cv2Section/row
-   * @param {{ accentColor?: number, ephemeral?: boolean }} opts
-   */
   cv2Payload(blocks, opts = {}) {
     return {
       flags:      this.cv2Flags(opts.ephemeral ?? true),
@@ -189,15 +133,6 @@ class FlowUI {
     };
   }
 
-  /**
-   * Componente de Select Menu dentro de um Modal (formato novo, type 18 = Label).
-   * Use isso no lugar de pedir "sim/não" por texto em modais.
-   *
-   * @param {string} customId
-   * @param {string} label        Texto exibido acima do select
-   * @param {{label,value,description?,emoji?,default?}[]} options
-   * @param {{description?, required?, placeholder?}} opts
-   */
   modalSelect(customId, label, options, opts = {}) {
     return {
       type:        18,
@@ -214,12 +149,6 @@ class FlowUI {
     };
   }
 
-  /**
-   * Atalho para um select de Sim/Não dentro de modal.
-   * @param {string} customId
-   * @param {string} label
-   * @param {{ yesLabel?, noLabel?, defaultValue?: 'true'|'false' }} opts
-   */
   modalYesNo(customId, label, opts = {}) {
     return this.modalSelect(customId, label, [
       { label: opts.yesLabel || '✅ Sim', value: 'true',  default: opts.defaultValue === 'true' },
@@ -227,10 +156,6 @@ class FlowUI {
     ], { placeholder: opts.placeholder || 'Sim ou não?' });
   }
 
-  /**
-   * Componente de Text Input dentro de um Modal (formato novo, type 18 = Label).
-   * Equivalente ao Action Row antigo, mas no padrão atual do Discord.
-   */
   modalText(customId, label, opts = {}) {
     return {
       type:        18,
@@ -253,9 +178,6 @@ class FlowUI {
     return text?.match(/\d{17,19}/)?.[0];
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE PAGINAÇÃO
-     ═══════════════════════════════════════════ */
 
   _clampPage(page, total) {
     const maxPage  = Math.max(0, Math.ceil(total / 25) - 1);
@@ -281,9 +203,6 @@ class FlowUI {
     return this.row(btnPrev, btnNext);
   }
 
-  /* ═══════════════════════════════════════════
-     CACHE DE LISTAS
-     ═══════════════════════════════════════════ */
 
   static CACHE_TTL = 60_000;
 
@@ -307,9 +226,6 @@ class FlowUI {
     delete this._listCache[guildId];
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: HOME
-     ═══════════════════════════════════════════ */
 
   async open(interaction) {
     const user    = interaction.member?.user?.id || interaction.user?.id;
@@ -377,9 +293,6 @@ class FlowUI {
     };
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: LISTA DE FLUXOS (com paginação)
-     ═══════════════════════════════════════════ */
 
   async flowList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
@@ -454,9 +367,6 @@ class FlowUI {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: MENU DO FLUXO
-     ═══════════════════════════════════════════ */
 
   async flowMenu(interaction, user, flowId) {
     const guildId = interaction.guild_id;
@@ -552,9 +462,6 @@ class FlowUI {
     };
   }
 
-  /* ═══════════════════════════════════════════
-     CONFIRMAR EXCLUSÃO
-     ═══════════════════════════════════════════ */
 
   async _confirmDelete(interaction, user, flowId, flowName) {
     const ayami = this._e('assustada');
@@ -587,9 +494,6 @@ class FlowUI {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: LISTA DE COMANDOS (com paginação)
-     ═══════════════════════════════════════════ */
 
   async commandList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
@@ -666,9 +570,6 @@ class FlowUI {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════ */
 
   _triggerLabel(trigger) {
     if (!trigger) return 'Não configurado';

@@ -1,7 +1,6 @@
 "use strict";
 
 module.exports = [
-  /* ── Action/condition labels (used in the install wizard) ── */
   { id: "action_send_message", render: () => "💬 Send message" },
   { id: "action_send_dm", render: () => "📩 Send DM" },
   { id: "action_reply_message", render: () => "↩️ Reply to message" },
@@ -20,7 +19,6 @@ module.exports = [
   { id: "action_is_channel", render: () => "📌 Specific channel" },
   { id: "action_not_channel", render: () => "📌 Not this channel" },
 
-  /* ── Wizard config fields ── */
   { id: "field_channel", render: () => "📌 Channel" },
   { id: "field_role", render: () => "🏷️ Role" },
 
@@ -48,7 +46,6 @@ module.exports = [
   { id: "action_suffix", render: (ctx) => `${ctx.label} (${ctx.flowName})` },
   { id: "unnamed_flow", render: (ctx) => `Flow ${ctx.n}` },
 
-  /* ── Install wizard ── */
   { id: "no_permission_install", render: (ctx) =>
     `# ${ctx.eBrava} No permission\nYou need the **Manage Server** permission to install systems.` },
 
@@ -75,7 +72,6 @@ module.exports = [
   { id: "install_no_config", render: () => "_No configuration needed_" },
   { id: "install_not_set", render: () => "_not set_" },
   { id: "install_error", render: (ctx) => `# ${ctx.eAssustada} Install error\n${ctx.message}` },
-  /* ── General command / errors ── */
   { id: "unknown_subcommand", render: (ctx) => `# ${ctx.eAssustada} Unknown subcommand\nI didn't recognize that command. Try again!` },
   { id: "generic_error", render: (ctx) => `# ${ctx.eAssustada} Something went wrong...\n${ctx.message}` },
   { id: "generic_error_fallback", render: () => "An unexpected error occurred. Sorry about that!" },
@@ -87,7 +83,6 @@ module.exports = [
   { id: "no_ratings", render: () => "☆☆☆☆☆ _no ratings_" },
   { id: "not_configured", render: () => "Not configured" },
 
-  /* ── /biblioteca pesquisar ── */
   { id: "no_results_title", render: (ctx) => `# ${ctx.eEmduvida} No results found` },
   { id: "no_results_desc", render: () => "I couldn't find any flow with those filters.\nTry different terms or remove a few filters~" },
 
@@ -106,7 +101,6 @@ module.exports = [
   { id: "search_next", render: () => "Next ▶" },
   { id: "search_footer", render: (ctx) => `-# ${ctx.total} result${ctx.total !== 1 ? 's' : ''} • Page ${ctx.page} of ${ctx.pages}` },
 
-  /* ── /biblioteca ver (detail) ── */
   { id: "detail_no_desc", render: () => "_No description_" },
   { id: "detail_author", render: () => "👤 **Author:**" },
   { id: "detail_category", render: () => "📂 **Category:**" },
@@ -123,7 +117,6 @@ module.exports = [
   { id: "btn_rate", render: () => "⭐ Rate" },
   { id: "btn_view_author", render: () => "👤 View Author" },
 
-  /* ── /biblioteca publicar ── */
   { id: "no_flows_title", render: (ctx) => `# ${ctx.eEmburrada} No flows` },
   { id: "no_flows_publish_desc", render: () => "Create at least one flow before publishing to the library~" },
   { id: "no_flows_update_desc", render: () => "Create at least one flow before updating~" },
@@ -156,7 +149,6 @@ module.exports = [
   { id: "publish_error", render: (ctx) => `# ${ctx.eAssustada} Publish error\n${ctx.message}` },
 
   { id: "announce_title", render: (ctx) => `# ${ctx.emoji} New library publication!\n**${ctx.entryName}** was published by **${ctx.authorName}**.\n\n${ctx.shortDesc}` },
-  /* ── /biblioteca atualizar ── */
   { id: "update_panel_title", render: (ctx) =>
     `# ${ctx.ePensando} Update — ${ctx.entryName}\nCurrent version: \`${ctx.version}\`\n\nSelect the flows for the new version, then hit **Confirm update**~` },
   { id: "btn_confirm_update", render: () => "🔄 Confirm update" },
@@ -169,7 +161,6 @@ module.exports = [
     `# ${ctx.eFesta} Updated to v${ctx.version}!\n**${ctx.entryName}** was updated with **${ctx.flowCount}** flow(s).\nInstallers will be notified via DM~` },
   { id: "update_error", render: (ctx) => `# ${ctx.eAssustada} Update error\n${ctx.message}` },
 
-  /* ── /biblioteca editar ── */
   { id: "modal_edit_title", render: (ctx) => `Edit — ${ctx.name}` },
   { id: "modal_field_name", render: () => "Name" },
   { id: "modal_field_short_desc_edit", render: () => "Short description" },
@@ -179,7 +170,6 @@ module.exports = [
   { id: "edit_success", render: (ctx) => `# ${ctx.eFeliz} Entry updated!\nThe info was saved successfully~` },
   { id: "edit_error", render: (ctx) => `# ${ctx.eAssustada} Edit error\n${ctx.message}` },
 
-  /* ── /biblioteca apagar ── */
   { id: "delete_confirm_title", render: (ctx) =>
     `# ${ctx.eAssustada} Confirm deletion\nAre you sure you want to remove **${ctx.entryName}** from the library?\n\n` +
     `**This can't be undone.**\nExisting installs on servers won't be affected.` },
@@ -189,7 +179,6 @@ module.exports = [
   { id: "delete_error", render: (ctx) => `# ${ctx.eAssustada} Delete error\n${ctx.message}` },
   { id: "delete_cancelled", render: (ctx) => `# ${ctx.eFeliz} Cancelled!\nThe entry stays in the library~` },
 
-  /* ── /biblioteca minhas ── */
   { id: "my_pubs_empty", render: (ctx) => `# ${ctx.ePensando} My Publications\nYou haven't published anything to the library yet.\nUse \`/biblioteca publicar\` to get started~!` },
   { id: "my_pubs_title", render: (ctx) => `# ${ctx.eCurtida} My Publications (${ctx.count})\n${ctx.lines}` },
   { id: "my_pubs_installs", render: (ctx) => `📥 ${ctx.count} installs` },
@@ -206,7 +195,6 @@ module.exports = [
   { id: "btn_delete", render: () => "🗑️ Delete" },
   { id: "btn_back", render: () => "⬅️ Back" },
 
-  /* ── /biblioteca perfil ── */
   { id: "profile_no_bio", render: () => "_No bio_" },
   { id: "profile_publications", render: () => "📦 **Publications:**" },
   { id: "profile_installs", render: () => "📥 **Installs:**" },
@@ -218,7 +206,6 @@ module.exports = [
   { id: "btn_follow", render: () => "➕ Follow" },
   { id: "btn_unfollow", render: () => "➖ Unfollow" },
 
-  /* ── /biblioteca destaques ── */
   { id: "highlights_title", render: () => "Weekly Highlights" },
   { id: "highlights_trending", render: (ctx) => `**📈 Trending**\n${ctx.list}` },
   { id: "highlights_installs", render: (ctx) => `**📥 Most installed**\n${ctx.list}` },
@@ -227,14 +214,12 @@ module.exports = [
   { id: "highlights_none", render: () => "_None_" },
   { id: "highlights_by", render: () => "by" },
 
-  /* ── /biblioteca ver → rate (modal) ── */
   { id: "modal_rate_title", render: () => "Rate flow" },
   { id: "modal_field_rating", render: () => "Rating (1 to 5)" },
   { id: "invalid_rating", render: (ctx) => `# ${ctx.eEmduvida} Invalid rating\nEnter a number between 1 and 5~` },
   { id: "rate_success", render: (ctx) =>
     `# ${ctx.eCorao} Rating saved!\nYou gave **${ctx.rating} ⭐** to this flow.\nNew average: **${ctx.avg} ⭐** (${ctx.count} ratings)` },
 
-  /* ── triggers ── */
   { id: "trigger_message_created", render: () => "💬 Message created" },
   { id: "trigger_member_joined", render: () => "👋 Member joined" },
   { id: "trigger_button_clicked", render: () => "🖱️ Button clicked" },

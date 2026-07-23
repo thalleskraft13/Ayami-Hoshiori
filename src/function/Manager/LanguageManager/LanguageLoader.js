@@ -1,4 +1,3 @@
-// src/functions/Managers/LanguageManager/LanguageLoader.js
 
 const fs   = require("node:fs");
 const path = require("node:path");
@@ -8,15 +7,7 @@ class LanguageLoader {
     this.basePath = systemsBasePath;
   }
 
-  // ── Manifest ───────────────────────────────────────
 
-  /**
-   * Lê o manifest.json do system
-   * Retorna null se não existir (systems legados sem manifest)
-   *
-   * @param {string} systemId
-   * @returns {{ id, version, locales, ... } | null}
-   */
   loadManifest(systemId) {
     const manifestPath = path.join(
       this._resolveSystemDir(systemId),
@@ -43,15 +34,7 @@ class LanguageLoader {
     }
   }
 
-  // ── Carregamento ───────────────────────────────────
 
-  /**
-   * Carrega todos os arquivos de idioma de um system.
-   * Retorna { manifest, localeMap }
-   *
-   * @param {string} systemId
-   * @returns {{ manifest: object, localeMap: Map<string, Map<string, Function>> }}
-   */
   loadSystem(systemId) {
     const manifest  = this.loadManifest(systemId);
     const langDir   = this._resolveLangDir(systemId);
@@ -79,16 +62,7 @@ class LanguageLoader {
     return { manifest, localeMap };
   }
 
-  // ── Reload Controlado ──────────────────────────────
 
-  /**
-   * Recarrega apenas um locale específico de um system.
-   * Mais seguro que recarregar tudo — mínimo impacto em produção.
-   *
-   * @param {string} systemId
-   * @param {string} locale
-   * @returns {Map<string, Function> | null}
-   */
   reloadLocale(systemId, locale) {
     const filePath = path.join(
       this._resolveLangDir(systemId),
@@ -100,13 +74,11 @@ class LanguageLoader {
     return this._loadFile(filePath, `${locale}.js`);
   }
 
-  // ── Internos ───────────────────────────────────────
 
   _loadFile(filePath, label) {
     const entryMap = new Map();
 
     try {
-      // Limpa cache do require para reload funcionar
       delete require.cache[require.resolve(filePath)];
 
       const raw     = require(filePath);

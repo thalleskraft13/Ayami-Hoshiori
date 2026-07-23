@@ -7,9 +7,6 @@ const getPerm        = require('../../Utils/GetPerm.js');
 const holeHighter    = require('../../Utils/RoleHigher.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
-/* ─────────────────────────────────────────────
-   EMOJIS DA AYAMI — fallback
-   ───────────────────────────────────────────── */
 const AYAMI_FALLBACK = {
   default:    '<:ayami:1513904360407695370>',
   animada:    '<:ayamianimada:1513895694824378408>',
@@ -31,9 +28,6 @@ const AYAMI_FALLBACK = {
   sria:       '<:ayamisria:1513904083969380372>'
 };
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,
   gold:    0xFFD966,
@@ -47,9 +41,6 @@ const COLOR = {
 
 const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
 
-/* ─────────────────────────────────────────────
-   CATÁLOGOS
-   ───────────────────────────────────────────── */
 
 const TRIGGER_CATALOG = [
   { category: 'time',      type: 'scheduled_trigger',       label: '🕐 Horário agendado',       description: 'Dispara em um horário específico todo dia' },
@@ -187,12 +178,6 @@ const ACTION_CATALOG = [
   { category: 'webhook',  type: 'http_request',             label: '🌐 Requisição HTTP',                    params: ['url', 'method'] }
 ];
 
-/* ─────────────────────────────────────────────
-   METADADOS DE CATEGORIA — usados para organizar
-   Trigger / Condições / Ações em 2 passos:
-   1) escolher a CATEGORIA   2) escolher o ITEM dela
-   Isso evita a "parede de selects" com 25+ opções soltas.
-   ───────────────────────────────────────────── */
 const TRIGGER_CATEGORY_META = {
   time:      { label: '🕐 Tempo / Horário',     description: 'Disparos agendados' },
   command:   { label: '🔧 Comandos',            description: 'Comando personalizado executado' },
@@ -231,7 +216,6 @@ const ACTION_CATEGORY_META = {
   webhook: { label: '🔗 Webhook / HTTP',  description: 'Enviar dados externos' },
 };
 
-/** Agrupa um catálogo plano em { categoria: [itens...] } preservando ordem de primeira aparição. */
 function groupByCategory(catalog) {
   const groups = new Map();
   for (const item of catalog) {
@@ -264,9 +248,6 @@ const BOOLEAN_PARAMS = {
 };
 
 
-/* ─────────────────────────────────────────────
-   FLOW BUILDER — Components V2
-   ───────────────────────────────────────────── */
 
 class FlowBuilder {
 
@@ -283,14 +264,10 @@ class FlowBuilder {
     return { type: 2, style: 5, label: '📖 Guia', url: GUIDE_URL };
   }
 
-  /* ── helper: painel CV2 sem ephemeral (mensagem original visível ao servidor) ── */
   _cv2(blocks, opts = {}) {
     return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
   }
 
-  /* ══════════════════════════════════════════════
-     CRIAR FLUXO — modal (inalterado, não tem CV2)
-     ══════════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
     const modal = this.client.interactions.createModal({
@@ -324,9 +301,6 @@ class FlowBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ══════════════════════════════════════════════
-     MENU: TRIGGER  ─ CV2
-     ══════════════════════════════════════════════ */
 
   async triggerMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -336,7 +310,6 @@ class FlowBuilder {
 
     const current = this.ui._triggerLabel(flow.trigger);
 
-    /* ── Passo 1: escolher CATEGORIA do trigger (lista curta e organizada) ── */
     const categorySel = this.ui.select(
       user,
       [...TRIGGER_GROUPS.keys()].map(cat => ({
@@ -378,7 +351,6 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
-  /** Passo 2: dentro da categoria escolhida, lista só os triggers daquele grupo. */
   async _triggerCategoryMenu(interaction, user, flowId, category) {
     const items = TRIGGER_GROUPS.get(category) || [];
     const meta  = TRIGGER_CATEGORY_META[category];
@@ -419,7 +391,6 @@ class FlowBuilder {
     });
   }
 
-  /* ── Filtros do Trigger (mantém embed, são painéis secundários) ── */
   async _triggerFilters(interaction, user, flowId) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
     if (!flow?.trigger) {
@@ -449,7 +420,6 @@ class FlowBuilder {
     });
   }
 
-  // ── Filtros: Mensagem ─────────────────────────────────────────────────────
   async _filterPanelMessage(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -500,7 +470,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Reação ───────────────────────────────────────────────────────
   async _filterPanelReaction(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -519,7 +488,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Membro ───────────────────────────────────────────────────────
   async _filterPanelMember(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -535,7 +503,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Voz ──────────────────────────────────────────────────────────
   async _filterPanelVoice(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [`> 🔊 **Canal de voz:** ${f.channelId ? `<#${f.channelId}>` : '_qualquer canal de voz_'}`, `> 👤 **Só humanos:** ${f.ignoreBots === 'true' ? 'Sim ✅' : 'Não ❌'}`].join('\n');
@@ -548,7 +515,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Componente ───────────────────────────────────────────────────
   async _filterPanelComponent(interaction, user, flowId, type, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const typeLabel = type === 'button_clicked' ? 'Botão' : type === 'select_used' ? 'Select Menu' : 'Modal';
@@ -565,7 +531,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Horário ──────────────────────────────────────────────────────
   async _filterPanelTime(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -592,9 +557,6 @@ class FlowBuilder {
   }
 
 
-  /* ══════════════════════════════════════════════
-     MENU: CONDIÇÕES  ─ CV2
-     ══════════════════════════════════════════════ */
 
   async conditionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow  = await this._getFlow(interaction.guild_id, flowId);
@@ -610,7 +572,6 @@ class FlowBuilder {
         }).join('\n')
       : `_Nenhuma condição — fluxo sempre executa ${this._e('feliz')}_`;
 
-    /* ── Passo 1: escolher categoria da NOVA condição ── */
     const categorySel = this.ui.select(
       user,
       [...CONDITION_GROUPS.keys()].map(cat => ({
@@ -677,7 +638,6 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
-  /** Passo 2: dentro da categoria escolhida, lista só as condições daquele grupo. */
   async _conditionCategoryMenu(interaction, user, flowId, category) {
     const items = CONDITION_GROUPS.get(category) || [];
     const meta  = CONDITION_CATEGORY_META[category];
@@ -834,9 +794,6 @@ class FlowBuilder {
   }
 
 
-  /* ══════════════════════════════════════════════
-     MENU: AÇÕES  ─ CV2
-     ══════════════════════════════════════════════ */
 
   async actionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
@@ -852,7 +809,6 @@ class FlowBuilder {
           .join('\n')
       : `_Nenhuma ação configurada ${this._e('emburrada')}_`;
 
-    /* ── Passo 1: escolher categoria da NOVA ação ── */
     const categorySel = this.ui.select(
       user,
       [...ACTION_GROUPS.keys()].map(cat => ({
@@ -921,7 +877,6 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
-  /** Passo 2: dentro da categoria escolhida, lista só as ações daquele grupo. */
   async _actionCategoryMenu(interaction, user, flowId, category) {
     const items = ACTION_GROUPS.get(category) || [];
     const meta  = ACTION_CATEGORY_META[category];
@@ -1111,26 +1066,6 @@ class FlowBuilder {
     return this.actionsMenu(interaction, user, flowId, { successMsg: msg });
   }
 
-  /* ══════════════════════════════════════════════
-     EMBED BUILDER  — followUp + edita msg original
-     ══════════════════════════════════════════════
-
-     Fluxo:
-       1. _askEmbedOrSave   → pergunta se quer embed (na msg original/raiz)
-       2. _openFlowEmbedBuilder → CAPTURA channelId + messageId REAIS da
-          msg raiz (via interaction.message, que ainda é a msg raiz neste
-          ponto), faz followUp com o painel builder (embed real + controles)
-       3. renderBuilder     → loop de edição (edita o followUp, preview ao vivo)
-       4. btnConfirm/btnRemove → apaga o followUp e edita a MSG RAIZ via
-          editMessageById(channelId, messageId, ...) — usa REST puro por
-          channel+messageId, então funciona mesmo vindo de um token de
-          followUp diferente (que é o caso aqui).
-
-     IMPORTANTE: `@original` só é válido dentro da MESMA cadeia de token
-     que originou a resposta. Um followUp cria uma mensagem nova com seu
-     próprio ciclo — por isso NUNCA usamos editOriginal() depois de abrir
-     o followUp; sempre editMessageById() com o ID real salvo no passo 2.
-     ══════════════════════════════════════════════ */
 
   async _askEmbedOrSave(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existingEmbed = params.embedObj ?? existingAction?.params?.embedObj ?? null;
@@ -1140,9 +1075,6 @@ class FlowBuilder {
       user,
       data: { label: hasEmbed ? '✏️ Editar embed' : '✨ Criar embed', style: 1 },
       funcao: async (i) => {
-        // NÃO faz deferUpdate aqui — precisamos de `i` intacto (com
-        // channel_id e message) para capturar a msg raiz antes de
-        // qualquer followUp ser criado.
         return this._openFlowEmbedBuilder(i, user, flowId, meta, params, isEdit, existingAction, needsSelect, existingEmbed);
       }
     });
@@ -1182,21 +1114,10 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
-  /**
-   * Abre o painel criador de embed como FOLLOWUP, com preview real
-   * (mensagem clássica com `embeds: [...]`, já que CV2 não permite
-   * combinar embeds tradicionais).
-   *
-   * Captura channelId + messageId da mensagem RAIZ logo de cara —
-   * isso é o que permite voltar e editá-la depois, vinda de qualquer
-   * token (followUp, modal, etc).
-   */
   async _openFlowEmbedBuilder(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect, existingEmbed) {
-    // ── Captura definitiva da msg raiz (canal + id) ──
     const rootChannelId = interaction.channel_id || interaction.channel?.id;
     const rootMessageId = interaction.message?.id;
 
-    // defer agora que já lemos o necessário de `interaction`
     await this.ui.deferUpdate(interaction);
 
     const embed = existingEmbed
@@ -1232,8 +1153,6 @@ class FlowBuilder {
       return out;
     }
 
-    /** Embed "ao vivo" pronta pro Discord renderizar de verdade, com
-     *  fallbacks pra nunca mandar uma embed 100% vazia (Discord rejeita). */
     function buildLiveEmbed() {
       const e = cleanEmbed(embed);
       if (!e.title && !e.description && !e.fields?.length && !e.image && !e.thumbnail && !e.author) {
@@ -1243,7 +1162,6 @@ class FlowBuilder {
       return e;
     }
 
-    /* ── renderBuilder: edita o followUp a cada mudança, com preview real ── */
     const renderBuilder = async (i, followUpMsgId) => {
 
       const editSel = this.client.interactions.createSelect({
@@ -1347,24 +1265,18 @@ class FlowBuilder {
         }
       });
 
-      /* ── Confirmar: salva embed, apaga followUp, edita a MSG RAIZ de verdade ── */
       const btnConfirm = this.client.interactions.createButton({
         user, data: { label: '✅ Confirmar embed', style: 3 },
         funcao: async (i2) => {
           await this.ui.deferUpdate(i2);
           params.embedObj = cleanEmbed(embed);
 
-          // Apaga o painel builder (followUp) — usa o token desta MESMA interação,
-          // que é o token que efetivamente criou/possui este followUp.
           await this.ui.deleteFollowUp(i2, followUpMsgId).catch(() => {});
 
-          // Edita a mensagem RAIZ de verdade via REST puro (channel+id),
-          // independente do token atual, e continua o fluxo de configuração.
           return this._continueFlowOnRoot(i2, rootChannelId, rootMessageId, user, flowId, meta, params, isEdit, existingAction, needsSelect, '_afterEmbedDecision');
         }
       });
 
-      /* ── Remover embed: mesma lógica, sem salvar embedObj ── */
       const btnRemove = this.client.interactions.createButton({
         user, data: { label: '🗑️ Remover embed', style: 4 },
         funcao: async (i2) => {
@@ -1384,7 +1296,6 @@ class FlowBuilder {
         }
       });
 
-      /* ── Painel: embed REAL (preview ao vivo) + controles em ActionRows ── */
       const builderPayload = {
         content:    `🎨 **Editor de Embed** ${this._e('animada')} — o preview abaixo é exatamente como a embed vai ficar!`,
         embeds:     [buildLiveEmbed()],
@@ -1397,16 +1308,12 @@ class FlowBuilder {
         flags: 64, // ephemeral — SEM flag CV2, pois embed real não roda junto com Components V2
       };
 
-      /* Edita o followUp (a partir do token de QUALQUER interação que
-         ocorreu dentro dele — modal submit, select, etc — todos
-         compartilham o token raiz do followUp original via `i`). */
       return DiscordRequest(
         `/webhooks/${this.client.clientId}/${i.token}/messages/${followUpMsgId}`,
         { method: 'PATCH', body: builderPayload }
       );
     };
 
-    /* ── Envia o followUp pela primeira vez (já com preview real) e captura o messageId ── */
     const initialPayload = {
       content:    `🎨 **Editor de Embed** ${this._e('animada')} — o preview abaixo é exatamente como a embed vai ficar!`,
       embeds:     [buildLiveEmbed()],
@@ -1417,18 +1324,9 @@ class FlowBuilder {
     const followUpResponse = await this.ui.followUp(interaction, initialPayload);
     const followUpMsgId = followUpResponse?.id;
 
-    /* Renderiza de fato (com os componentes) com o followUpMsgId em mãos */
     return renderBuilder(interaction, followUpMsgId);
   }
 
-  /**
-   * Prossegue o wizard a partir do passo indicado, mas marcando a
-   * interação com um "override de destino": qualquer chamada a
-   * `this.ui.editOriginal(interaction, data)` daqui pra frente nesta
-   * cadeia vai, na verdade, editar a mensagem RAIZ (channelId+messageId
-   * reais, capturados antes do followUp) via REST puro — em vez de
-   * tentar `@original` do token atual, que pertenceria ao followUp.
-   */
   async _continueFlowOnRoot(interaction, rootChannelId, rootMessageId, user, flowId, meta, params, isEdit, existingAction, needsSelect, nextStep) {
     interaction.__rootOverride = { channelId: rootChannelId, messageId: rootMessageId };
 
@@ -1452,9 +1350,6 @@ class FlowBuilder {
   }
 
 
-  /* ══════════════════════════════════════════════
-     INTERAÇÃO (Botão / Select vinculado a fluxo)
-     ══════════════════════════════════════════════ */
 
   async _askInteractionOrFinish(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existing    = params.interactionObj ?? existingAction?.params?.interactionObj ?? null;
@@ -1536,13 +1431,6 @@ class FlowBuilder {
     return renderPanel(interaction, options);
   }
 
-  /**
-   * Picker genérico de fluxo (paginado). NÃO faz deferUpdate aqui —
-   * os callers de `onPick` quase sempre abrem um modal em seguida
-   * (showModal precisa de uma interação ainda não confirmada; um
-   * deferUpdate prévio causa erro 40060 "already acknowledged").
-   * Cabe a cada `onPick` decidir se faz deferUpdate ou showModal.
-   */
   async _showFlowPicker(interaction, user, flows, page, onPick) {
     const { page: safePage, maxPage } = this.ui._clampPage(page, flows.length);
     const pageItems = this.ui._pageSlice(flows, safePage);
@@ -1556,9 +1444,6 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
-  /* ══════════════════════════════════════════════
-     RESOLVER CANAL / CARGO / ARG / PERM VIA SELECT
-     ══════════════════════════════════════════════ */
 
   async _resolveSelectParams(interaction, user, flowId, meta, params, mode) {
     const needsChannel = meta.params.some(p => NEEDS_CHANNEL_SELECT.includes(p)) && params.channelId === undefined;
@@ -1652,7 +1537,6 @@ class FlowBuilder {
   }
 
 
-  /* ─── validação de IDs ─── */
 
   async _validateIds(guildId, params) {
     const warnings = [];
@@ -1684,9 +1568,6 @@ class FlowBuilder {
     return warnings;
   }
 
-  /* ══════════════════════════════════════════════
-     MENU: VARIÁVEIS  ─ CV2
-     ══════════════════════════════════════════════ */
 
   async variablesMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -1778,7 +1659,6 @@ class FlowBuilder {
       ],
       '📦 Qual o tipo de valor?',
       async (i) => {
-        // NÃO dar deferUpdate — _varStep3_Name abre modal
         return this._varStep3_Name(i, user, flowId, scope, i.data.values[0]);
       }
     );
@@ -1879,7 +1759,6 @@ class FlowBuilder {
       return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
     }
 
-    // string / number — usa modal
     const modal = this.client.interactions.createModal({
       user,
       title: `📦 Valor Padrão — ${varData.name}`,
@@ -1968,9 +1847,6 @@ class FlowBuilder {
   }
 
 
-  /* ══════════════════════════════════════════════
-     MENU: CONFIGURAÇÕES  ─ CV2
-     ══════════════════════════════════════════════ */
 
   async settingsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -2105,9 +1981,6 @@ class FlowBuilder {
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
 
-  /* ══════════════════════════════════════════════
-     HELPERS
-     ══════════════════════════════════════════════ */
 
   async _getFlow(guildId, flowId) {
     return FlowModel.findOne({ flowId, guildId }).lean();

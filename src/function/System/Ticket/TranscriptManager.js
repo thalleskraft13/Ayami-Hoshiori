@@ -1,20 +1,11 @@
 'use strict';
 
-/**
- * TranscriptManager
- *
- * Responsável por:
- *  - Coletar mensagens de um canal/thread antes de deletá-lo
- *  - Gerar transcript em HTML ou TXT
- *  - Enviar para canal configurado
- *  - Opcionalmente enviar DM para o usuário
- */
 
 const DiscordRequest = require('../../DiscordRequest.js');
 const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 const MAX_MESSAGES_PER_FETCH = 100;
-const MAX_TOTAL_MESSAGES     = 2000; // limite de segurança
+const MAX_TOTAL_MESSAGES     = 2000; 
 
 class TranscriptManager {
 
@@ -23,29 +14,11 @@ class TranscriptManager {
     this._ctx = {};
   }
 
-  /** Atalho pra tradução de uma chave do sistema "ticket". */
   _t(key, extra = {}) {
     return this.client.t(`ticket.${key}`, { ...this._ctx, ...extra });
   }
 
-  /* ═══════════════════════════════════════════
-     ENTRY POINT
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Gera e envia o transcript do ticket.
-   * Deve ser chamado ANTES de deletar o canal.
-   * Não bloqueia o fluxo de fechamento (retorna Promise separada).
-   *
-   * @param {object} opts
-   * @param {object} opts.interaction
-   * @param {object} opts.panel
-   * @param {string} opts.closedBy
-   * @param {object} [opts.messages] Mensagens personalizadas:
-   *        { canalTitulo, dmTitulo, dmDescricao } — fallback para o
-   *        texto padrão da Ayami quando ausentes.
-   * @returns {Promise<void>}
-   */
   async generate({ interaction, panel, closedBy, messages = {} }) {
     this._ctx = localeCtx(interaction);
     const cfg = panel.transcriptConfig;
@@ -65,7 +38,6 @@ class TranscriptManager {
 
       const fileBuffer = Buffer.from(content, 'utf-8');
 
-      // Envia para o canal de transcript
       await DiscordRequest(`/channels/${cfg.channelId}/messages`, {
         method: 'POST',
         body: {
@@ -79,7 +51,6 @@ class TranscriptManager {
         files: [{ name: filename, data: fileBuffer, contentType }]
       });
 
-      // Envia DM para o usuário que abriu o ticket (se configurado)
       if (cfg.sendToUser) {
         const openerMention = this._findTicketOpener(msgs);
         if (openerMention) {
@@ -92,9 +63,6 @@ class TranscriptManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     COLETA DE MENSAGENS
-     ═══════════════════════════════════════════ */
 
   async _fetchAllMessages(channelId) {
     const messages = [];
@@ -116,13 +84,9 @@ class TranscriptManager {
       before = batch[batch.length - 1].id;
     }
 
-    // ordena do mais antigo para o mais novo
     return messages.reverse();
   }
 
-  /* ═══════════════════════════════════════════
-     GERAÇÃO HTML
-     ═══════════════════════════════════════════ */
 
   _buildHtml(messages, channel, closedBy) {
     const rows = messages.map(m => this._messageToHtmlRow(m)).join('\n');
@@ -242,9 +206,6 @@ ${rows}
     </div>`;
   }
 
-  /* ═══════════════════════════════════════════
-     GERAÇÃO TXT
-     ═══════════════════════════════════════════ */
 
   _buildTxt(messages, channel, closedBy) {
     const header = [
@@ -280,12 +241,8 @@ ${rows}
     return header + body;
   }
 
-  /* ═══════════════════════════════════════════
-     DM AO USUÁRIO
-     ═══════════════════════════════════════════ */
 
   async _sendDmTranscript(userId, filename, buffer, contentType, channelName, messages = {}) {
-    // Abre DM channel
     const dm = await DiscordRequest('/users/@me/channels', {
       method: 'POST',
       body:   { recipient_id: userId }
@@ -304,12 +261,8 @@ ${rows}
     });
   }
 
-  /* ═══════════════════════════════════════════
-     UTILITÁRIOS
-     ═══════════════════════════════════════════ */
 
   _findTicketOpener(messages) {
-    // o abridor geralmente é o autor da primeira mensagem que não é o bot
     const botId = process.env.CLIENT_ID;
     const first = messages.find(m => m.author?.id !== botId && !m.author?.bot);
     return first?.author?.id || null;

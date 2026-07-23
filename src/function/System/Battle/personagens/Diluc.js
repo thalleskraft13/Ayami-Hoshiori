@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Diluc
- * Elemento: Pyro | Raridade: 5 estrelas
- * Role: DPS principal
- *
- * Mecânicas únicas:
- * - Habilidade Elemental pode ser usada 3 vezes em sequência
- * - Infunde Pyro no ataque normal após usar o Supremo
- */
 module.exports = {
     nome:     'Diluc',
     raridade: '5',

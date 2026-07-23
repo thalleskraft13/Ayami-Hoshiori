@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * SeqQuestionsManager
- *
- * Conduz um formulário sequencial diretamente no chat do ticket.
- * Coexiste com o sistema de modal existente — não o substitui.
- *
- * Tipos de pergunta suportados: text, short, long, number, yesno,
- * select, multiple, checkbox, member, role, channel, attachment.
- */
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
@@ -21,29 +12,11 @@ class SeqQuestionsManager {
     this._ctx = {};
   }
 
-  /** Atalho pra tradução de uma chave do sistema "ticket". */
   _t(key, extra = {}) {
     return this.client.t(`ticket.${key}`, { ...this._ctx, ...extra });
   }
 
-  /* ═══════════════════════════════════════════
-     ENTRY POINT
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Inicia o formulário sequencial no canal do ticket.
-   * Deve ser chamado depois que o canal/thread já foi criado.
-   *
-   * @param {object} opts
-   * @param {object} opts.panel      Painel (ou opção do select) com seqQuestionsConfig
-   * @param {string} opts.channelId
-   * @param {string} opts.userId
-   * @param {object} [opts.ctx]      Contexto de locale (de localeCtx), pro usuário que abriu o ticket
-   * @param {object} [opts.messages] Mensagens personalizadas (vindas de
-   *        ticketMensagensConfig, já resolvidas com fallback no chamador):
-   *          { inicioTitulo, inicioDescricao, canceladoMensagem, resumoTitulo }
-   * @returns {Promise<object|null>} Mapa de respostas ou null se cancelado/timeout
-   */
   async run({ panel, channelId, userId, ctx = {}, messages = {} }) {
     this._ctx = ctx;
     const cfg = panel.seqQuestionsConfig;
@@ -53,7 +26,6 @@ class SeqQuestionsManager {
     const timeoutMs   = cfg.timeout || 120_000;
     const timeoutSec  = Math.floor(timeoutMs / 1000);
 
-    // Mensagem de início — personalizável
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body:   {
@@ -78,7 +50,6 @@ class SeqQuestionsManager {
       });
 
       if (result === null) {
-        // timeout ou cancelamento — mensagem personalizável
         await DiscordRequest(`/channels/${channelId}/messages`, {
           method: 'POST',
           body:   {
@@ -92,15 +63,11 @@ class SeqQuestionsManager {
       answers[question.id] = result;
     }
 
-    // Envia resumo das respostas
     await this._sendAnswersSummary({ cfg, panel, channelId, userId, answers, resumoTitulo: messages.resumoTitulo });
 
     return answers;
   }
 
-  /* ═══════════════════════════════════════════
-     PERGUNTAR UMA QUESTÃO
-     ═══════════════════════════════════════════ */
 
   async _askQuestion({ channelId, userId, question, index, total, timeout }) {
 
@@ -113,12 +80,10 @@ class SeqQuestionsManager {
     return this._askTextQuestion({ channelId, userId, question, index, total, timeout });
   }
 
-  /* ── Perguntas de texto/número/sim-não (via mensagem) ── */
   async _askTextQuestion({ channelId, userId, question, index, total, timeout }) {
 
     const hint = this._getHint(question);
 
-    // Envia a pergunta no canal
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body:   {
@@ -131,7 +96,6 @@ class SeqQuestionsManager {
       }
     });
 
-    // Aguarda resposta do usuário (coleta limitada ao userId)
     let msg;
     try {
       msg = await this.client.NextMessageCollector.wait({
@@ -140,16 +104,13 @@ class SeqQuestionsManager {
         time: timeout
       });
     } catch {
-      return null; // timeout
+      return null; 
     }
 
-    // Verifica cancelamento
     if (msg.content?.toLowerCase() === 'cancelar') return null;
 
-    // Valida a resposta conforme o tipo
     const validated = this._validate(question, msg.content);
     if (validated === false) {
-      // resposta inválida — notifica e tenta de novo recursivamente
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: 'POST',
         body:   { content: this._t('sq_answer_invalid', { userId }) }
@@ -160,7 +121,6 @@ class SeqQuestionsManager {
     return validated;
   }
 
-  /* ── Perguntas de anexo (aguarda mensagem com arquivo) ── */
   async _askAttachmentQuestion({ channelId, userId, question, index, total, timeout }) {
 
     await DiscordRequest(`/channels/${channelId}/messages`, {
@@ -178,7 +138,7 @@ class SeqQuestionsManager {
     try {
       msg = await this.client.NextMessageCollector.wait({ channelId, userId, time: timeout });
     } catch {
-      return null; // timeout
+      return null; 
     }
 
     if (msg.content?.toLowerCase() === 'cancelar') return null;
@@ -195,7 +155,6 @@ class SeqQuestionsManager {
     return msg.attachments.map(a => a.url);
   }
 
-  /* ── Perguntas via componente (seleção/múltipla/checkbox/membro/cargo/canal) ── */
   async _askComponentQuestion({ channelId, userId, question, index, total, timeout }) {
     const kind = question.tipo;
     const isMulti = kind === 'multiple' || kind === 'checkbox';
@@ -249,9 +208,6 @@ class SeqQuestionsManager {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     ENVIO DO RESUMO
-     ═══════════════════════════════════════════ */
 
   async _sendAnswersSummary({ cfg, panel, channelId, userId, answers, resumoTitulo }) {
 
@@ -284,9 +240,6 @@ class SeqQuestionsManager {
       timestamp: new Date().toISOString()
     };
 
-    // Aviso curto SEMPRE no ticket — mesmo quando o resumo completo
-    // vai pro canal de log, quem abriu o ticket precisa saber que
-    // terminou e a equipe já foi notificada.
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body:   {
@@ -299,7 +252,6 @@ class SeqQuestionsManager {
       }
     }).catch(err => console.error('[SeqQuestions] Erro ao enviar aviso de conclusão:', err));
 
-    // Resumo completo das respostas — no ticket OU no canal de log
     if (cfg.sendMode === 0) {
       await DiscordRequest(`/channels/${channelId}/messages`, {
         method: 'POST',
@@ -318,9 +270,6 @@ class SeqQuestionsManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     VALIDAÇÃO POR TIPO
-     ═══════════════════════════════════════════ */
 
   _validate(question, value) {
     if (!value && question.required) return false;

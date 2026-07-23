@@ -9,7 +9,6 @@ class TicketSystem {
     this.client = client;
   }
 
-  /* ================= INTERACTIONS ================= */
 
   async reply(interaction, data) {
     return DiscordRequest(
@@ -43,7 +42,6 @@ class TicketSystem {
     return this.followUp(interaction, { ...data, flags: 64 });
   }
 
-  /* ================= DATABASE ================= */
 
   async getGuild(guildId) {
     let g = await GuildDb.findOne({ guildId });
@@ -68,7 +66,6 @@ class TicketSystem {
     return p.status;
   }
 
-  /* ================= UI ================= */
 
   btn(user, label, style, func) {
     return this.client.interactions.createButton({
@@ -90,7 +87,6 @@ class TicketSystem {
     return { type: 1, components: c };
   }
 
-  /* ================= EMBEDS ================= */
 
   buildEmbeds(panel) {
 
@@ -119,7 +115,6 @@ class TicketSystem {
     return [config, preview];
   }
 
-  /* ================= MENU ================= */
 
   async startSetup(interaction) {
 
@@ -158,7 +153,6 @@ class TicketSystem {
     });
   }
 
-  /* ================= PANEL ================= */
 
   async createPanel(interaction, guild, user) {
 
@@ -224,7 +218,6 @@ class TicketSystem {
     });
   }
 
-  /* ================= TICKET CREATE ================= */
   
   async create(interaction) {
   try {
@@ -253,7 +246,6 @@ if (!permCheck.ok) {
       });
     }
 
-    // ================= MODAL =================
     if (panel.modalConfig?.enabled && panel.modalConfig.fields?.length > 0) {
 
       const modal = this.client.interactions.createModal({
@@ -294,7 +286,6 @@ if (!permCheck.ok) {
       );
     }
 
-    // RESPONDE IMEDIATO (ANTI-10062)
     await this.reply(interaction, {
       content: "⏳ Criando ticket...",
       flags: 64
@@ -302,7 +293,6 @@ if (!permCheck.ok) {
 
     const channel = await this.createTicketNormally(interaction, guild, panel);
 
-    // ✅ FOLLOW UP (webhook)
     return this.followUpEphemeral(interaction, {
       content: `✅ Ticket criado em <#${channel.id}>`
     });
@@ -437,7 +427,6 @@ async createTicketNormally(interaction, guild, panel) {
 
   let channel;
 
-  // ================= CANAL NORMAL =================
   if (panel.tipoDeCriacao === 0) {
 
     const body = {
@@ -498,14 +487,12 @@ async createTicketNormally(interaction, guild, panel) {
       }
     );
 
-    // adiciona o user manualmente
     await DiscordRequest(
       `/channels/${channel.id}/thread-members/${user.id}`,
       { method: "PUT" }
     );
   }
 
-  // segurança extra
   if (!channel || !channel.id) {
     throw new Error("Falha ao criar canal/thread");
   }
@@ -550,19 +537,16 @@ async createTicketNormally(interaction, guild, panel) {
 }
 
 
-  /* ================= CLOSE ================= */
 
 
 
   async close(interaction) {
   try {
 
-    // ACK imediato (evita erro de interação)
     await this.reply(interaction, {
       content: "⛔ Ticket será fechado em 10 segundos...",
     });
 
-    // delay de 10s
     setTimeout(async () => {
       try {
         await DiscordRequest(`/channels/${interaction.channel_id}`, {
@@ -578,7 +562,6 @@ async createTicketNormally(interaction, guild, panel) {
   }
 }
 
-  /* ================= CONFIG ================= */
 
   async setJson(interaction, guild, panelId, user) {
 
@@ -628,13 +611,11 @@ async createTicketNormally(interaction, guild, panel) {
           );
         }
 
-        // verifica se realmente é embed
         const embed =
           parsed.embeds?.[0] ||
           parsed.embed ||
           parsed;
 
-        // validação mínima
         const hasEmbedData =
           embed.title ||
           embed.description ||
@@ -667,7 +648,6 @@ async createTicketNormally(interaction, guild, panel) {
 
         await this.save(guild);
 
-        // ACK
         await DiscordRequest(
           `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
           {
@@ -903,7 +883,7 @@ async createTicketNormally(interaction, guild, panel) {
 
   const panel = this.getPanel(guild, panelId);
 
-  panel.ticketChatName = msg.content.slice(0, 90); // limite de segurança
+  panel.ticketChatName = msg.content.slice(0, 90); 
 
   await this.save(guild);
   
@@ -1201,7 +1181,7 @@ async setModalTitle(interaction, guild, panelId, user) {
         `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
         {
           method: "POST",
-          body: { type: 6 } // DEFER UPDATE
+          body: { type: 6 } 
         }
       );
 

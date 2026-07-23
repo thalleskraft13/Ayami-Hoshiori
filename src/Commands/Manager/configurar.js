@@ -4,20 +4,12 @@ const getPerm         = require("../../function/Utils/GetPerm.js");
 const DiscordRequest  = require("../../function/DiscordRequest.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
-// URL principal do site — usada para o botão de acesso ao Dashboard.
 const SITE_URL = "https://ayami-hoshiori.discloud.app";
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI
-   ───────────────────────────────────────────── */
 const COLOR = {
   main: 0x7C8FFF,
 };
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS COMPONENTS V2
-   (mesmo padrão usado em todo o resto do bot)
-   ═══════════════════════════════════════════════════════════ */
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -27,7 +19,6 @@ function cv2Divider(spacing = 1) {
   return { type: 14, divider: true, spacing };
 }
 
-/** Section (type 9) com accessory de Thumbnail (type 11) — ícone do servidor. */
 function cv2SectionThumb(content, thumbUrl) {
   return {
     type: 9,
@@ -154,8 +145,6 @@ module.exports = {
         switch (value) {
 
           case "tickets":
-            // O sistema de tickets (index.js) gerencia seu próprio
-            // editOriginal/deferUpdate internamente — basta chamar open().
             await client.ticketSystem.deferUpdate(i);
             return client.ticketSystem.open(i);
 

@@ -3,22 +3,15 @@ const EconomyLog = require("../../Mongodb/economyLog.js");
 const DiscordRequest = require("../DiscordRequest.js");
 const MessageEmbed = require("../Messages/EmbedBuild.js");
 
-// Seção 8: teto do array `primogemas.transacoes`. Antes crescia pra sempre
-// (nenhum `$slice`), então documentos de usuários antigos/ativos incham
-// indefinidamente. Mantém só as últimas N transações — histórico completo
-// de verdade fica no EconomyLog (persistido, sem teto).
 const MAX_TRANSACOES = 100;
 
 class Economy {
 
   constructor(userId) {
     this.userId = userId;
-    // Seção 8: canal de log de economia (mesmo padrão hardcoded das
-    // seções 4/5 — dá pra sobrescrever via env var em outro ambiente/teste).
     this.logChannel = process.env.ECONOMY_LOG_CHANNEL_ID || "1522177412400676924";
   }
 
-  // Ensure user exists
   async _getOrCreate() {
     let user = await UserGlobalSchema.findOne({ userId: this.userId });
 
@@ -31,10 +24,7 @@ class Economy {
     return user;
   }
 
-  // Send log to Discord (Portuguese) + persiste no banco
   async _sendLog(logData) {
-    // Seção 8: nunca persiste/loga ação "get" (consulta de saldo) — só
-    // gera ruído no canal de log e no banco sem nenhuma mudança de estado.
     if (logData.action === "get") return;
 
     await EconomyLog.create({
@@ -79,7 +69,6 @@ class Economy {
     }).catch(err => console.error("[Economy] Falha ao enviar log ao canal:", err));
   }
 
-  // Color based on action
   _getColor(action) {
     switch (action) {
       case "add":
@@ -95,7 +84,6 @@ class Economy {
     }
   }
 
-  // Translate action name
   _formatAction(action) {
     switch (action) {
       case "add": return "Adição";
@@ -110,7 +98,6 @@ class Economy {
     }
   }
 
-  // Build log object
   _buildLog({ action, previous, amount, current, characters, bannerId }) {
     return {
       userId: this.userId,
@@ -125,7 +112,6 @@ class Economy {
     };
   }
 
-  // Get total balance — seção 8: NÃO loga mais (era ruído a cada consulta de saldo).
   async getTotal() {
     const user = await this._getOrCreate();
 
@@ -137,7 +123,6 @@ class Economy {
     });
   }
 
-  // Add balance (atomic)
   async add(amount) {
     if (amount <= 0)
       throw new Error("Quantidade deve ser maior que 0.");
@@ -174,7 +159,6 @@ class Economy {
     return log;
   }
 
-  // Remove balance (atomic + safe)
   async remove(amount) {
     if (amount <= 0)
       throw new Error("Quantidade deve ser maior que 0.");
@@ -217,7 +201,6 @@ class Economy {
     return log;
   }
 
-  // Reset balance
   async reset() {
     const userBefore = await this._getOrCreate();
     const previous = userBefore.primogemas.atm;
@@ -249,21 +232,6 @@ class Economy {
     return true;
   }
 
-  /**
-   * Seção 8 — helper estático pra quando o saldo já foi alterado via
-   * `$inc`/`$push` direto no Mongo (Banner.js, Primogemas.js: daily,
-   * transferências), em vez de passar por `add()`/`remove()`. Só cuida do
-   * log (webhook + persistência), sem mexer no saldo de novo.
-   *
-   * @param {object} opts
-   * @param {string} opts.userId
-   * @param {string} opts.action        add | remove | banner_pull | daily | transfer_send | transfer_receive
-   * @param {number} opts.previous
-   * @param {number} opts.amount
-   * @param {number} opts.current
-   * @param {Array}  [opts.characters]  Personagens obtidos (gacha).
-   * @param {*}      [opts.bannerId]
-   */
   static async log({ userId, action, previous, amount, current, characters, bannerId }) {
     const instance = new Economy(userId);
     const logData = instance._buildLog({ action, previous, amount, current, characters, bannerId });

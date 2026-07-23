@@ -1,5 +1,5 @@
 const DiscordRequest = require("../DiscordRequest.js");
-const GuildConfig = require("../../Mongodb/guild.js"); // ajuste se necessário
+const GuildConfig = require("../../Mongodb/guild.js"); 
 const GuildUser = require("../../Mongodb/guilduser.js")
 class StarBoard {
 
@@ -8,9 +8,6 @@ class StarBoard {
     this.minStars = 1;
   }
 
-  /* ========================= */
-  /* CONFIG PADRÃO             */
-  /* ========================= */
 
   async getConfig(guildId) {
 
@@ -41,9 +38,6 @@ class StarBoard {
 
   }
 
-  /* ========================= */
-  /* PAINEL SETUP              */
-  /* ========================= */
 
   async startSetup(interaction) {
 
@@ -149,9 +143,6 @@ class StarBoard {
 
   }
 
-  /* ========================= */
-  /* REACTION ADD              */
-  /* ========================= */
 
   async onReactionAdd(data) {
 
@@ -162,7 +153,6 @@ class StarBoard {
   const config = await this.getConfig(guild_id);
   if (!config.enabled) return;
 
-  // Verifica emoji (padrão ou custom)
   const emojiMatch =
     emoji.name === config.emoji ||
     emoji.id === config.emoji ||
@@ -170,7 +160,6 @@ class StarBoard {
 
   if (!emojiMatch) return;
 
-  // Busca mensagem
   const message = await DiscordRequest(
     `/channels/${channel_id}/messages/${message_id}`,
     { method: "GET" }
@@ -180,9 +169,6 @@ class StarBoard {
   if (message.author.bot) return;
   if (message.author.id === user_id) return;
 
-  // ================================
-  // 🔥 SALVAR PONTOS NO DB
-  // ================================
   if (config.savePoints) {
 
     await GuildUser.updateOne(
@@ -200,9 +186,6 @@ class StarBoard {
 
   }
 
-  // ================================
-  // ENVIA PARA STARBOARD
-  // ================================
 
   if (!config.channelId) return;
 
@@ -260,7 +243,6 @@ async onReactionRemove(data) {
 
   if (!emojiMatch) return;
 
-  // Busca mensagem original
   const message = await DiscordRequest(
     `/channels/${channel_id}/messages/${message_id}`,
     { method: "GET" }
@@ -268,17 +250,14 @@ async onReactionRemove(data) {
 
   if (!message) return;
 
-  // Pega contagem real da reação
   const reaction = message.reactions?.find(r =>
     r.emoji.name === emoji.name || r.emoji.id === emoji.id
   );
 
   const count = reaction ? reaction.count : 0;
 
-  // Se ainda tem estrelas, não faz nada
   if (count > 0) return;
 
-  // Busca registro no banco
   const starData = await StarboardMessage.findOne({
     guildId: guild_id,
     messageId: message_id
@@ -286,13 +265,11 @@ async onReactionRemove(data) {
 
   if (!starData) return;
 
-  // Deleta mensagem do canal starboard
   await DiscordRequest(
     `/channels/${config.channelId}/messages/${starData.starboardMessageId}`,
     { method: "DELETE" }
   );
 
-  // Remove do banco
   await StarboardMessage.deleteOne({
     guildId: guild_id,
     messageId: message_id

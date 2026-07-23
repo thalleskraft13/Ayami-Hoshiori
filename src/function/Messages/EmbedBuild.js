@@ -84,7 +84,6 @@ class CustomEmbed {
 
     if (typeof color === "string") {
 
-      // HEX support
       if (color.startsWith("#")) {
         this.data.color = parseInt(color.replace("#", ""), 16);
         return this;

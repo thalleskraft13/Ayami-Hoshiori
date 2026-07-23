@@ -1,26 +1,5 @@
 'use strict';
 
-/**
- * ============================================================
- *  ANÁLISE DE ATIVIDADE
- * ============================================================
- * Módulo independente (não faz mais parte de Segurança — a antiga
- * "Verificação de Atividade" do SecuritySystem foi removida de lá e
- * reescrita aqui do zero, com armazenamento próprio e mais métricas).
- *
- * Responsabilidade única: gerar estatísticas e insights sobre a
- * atividade do servidor. Não aplica punições nem modera nada — isso
- * continua em Segurança.
- *
- * Arquitetura pensada para crescer sem refatoração grande:
- *   - Tracking (handleMessage/handleReactionAdd/handleMemberAdd/
- *     handleMemberRemove) só grava contadores agregados (ver
- *     Mongodb/activity*.js) — nunca guarda conteúdo bruto de mensagem.
- *   - Cada métrica nova = um novo método de leitura em cima dessas
- *     mesmas coleções (ou, na pior hipótese, uma coleção nova seguindo
- *     o mesmo padrão). O menu (startSetup) só precisa ganhar mais uma
- *     opção no select.
- */
 
 const { GuildDb }         = require("../../../Mongodb/guild.js");
 const DiscordRequest      = require("../../DiscordRequest.js");
@@ -40,45 +19,22 @@ const {
 
 const WEEKDAY_LABELS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
-/**
- * "Pico de Atividade" — evento Premium (🌟 Nova Estrela+) do Logic
- * Script (`on activitySpike(dados) ... end`). Detecta quando um canal
- * fica subitamente movimentado (INICIANDO) e quando volta a ficar
- * quieto (ENCERRADO), por canal, usando uma janela deslizante de
- * mensagens + um timeout de inatividade. Estado só em memória —
- * reinicia com o processo, o que é aceitável pra um evento "ao vivo".
- *
- * Valores de TYPE são números (não strings) — ver
- * /docs/reference/enums/activity-spike-type no site.
- */
 const ACTIVITY_SPIKE_TYPE   = { INICIANDO: 1, ENCERRADO: 2 };
-const SPIKE_WINDOW_MS       = 60_000;   // janela deslizante pra contar mensagens/minuto
-const SPIKE_THRESHOLD       = 8;        // nº de mensagens na janela pra considerar "pico"
-const SPIKE_INACTIVITY_MS   = 120_000;  // 2min sem mensagem nova → ENCERRADO
+const SPIKE_WINDOW_MS       = 60_000;   
+const SPIKE_THRESHOLD       = 8;        
+const SPIKE_INACTIVITY_MS   = 120_000;  
 
 class ActivityAnalyticsSystem {
 
   constructor(client) {
     this.client = client;
-    // Evita bater na API do Discord (with_counts) a cada mensagem —
-    // 1 snapshot de contagem de membros por servidor a cada hora basta
-    // pra alimentar o `memberCountEnd` do dia corrente.
     this._memberSnapshotCache = new TTLCache({ ttlMs: 60 * 60_000, sweepIntervalMs: 10 * 60_000 });
 
-    // Cache do plano premium por guild (evita 1 lookup no Mongo por
-    // mensagem — só precisa saber se `logicScript.premiumEvents` está
-    // liberado, e isso muda raramente).
     this._planCache = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
 
-    // Estado do detector de "Pico de Atividade", por canal:
-    // channelId → { timestamps: number[], active: bool, timer: Timeout|null }
     this._activeChats = new Map();
   }
 
-  /* ================= UI / DB BOILERPLATE =================
-     (mesmo padrão usado em SecuritySystem.js e no resto do bot —
-     cada módulo carrega sua própria cópia, não há classe-base
-     compartilhada nessa base de código.) */
 
   _toV2(data) {
     if (!data || !data.embeds) return data;
@@ -155,7 +111,6 @@ class ActivityAnalyticsSystem {
     await guild.save();
   }
 
-  /** Config do módulo (habilitado/desabilitado + exceções), com defaults seguros. */
   getConfig(guild) {
     if (!guild.activityAnalytics) {
       guild.activityAnalytics = {
@@ -201,7 +156,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= TRACKING HOOKS (chamados pelo gateway) ================= */
 
   isIgnored(cfg, { channelId, roles, userId, isBot }) {
     if (isBot && cfg.ignoreBots !== false) return true;
@@ -211,11 +165,6 @@ class ActivityAnalyticsSystem {
     return false;
   }
 
-  /**
-   * Snapshot preguiçoso (no máx. 1x/hora por servidor) da contagem de
-   * membros, gravado no bucket diário atual. Não bloqueia o tracking
-   * principal — é "melhor esforço", falhas são ignoradas.
-   */
   async _maybeSnapshotMemberCount(guildId) {
     if (this._memberSnapshotCache.get(guildId)) return;
     this._memberSnapshotCache.set(guildId, true);
@@ -232,7 +181,6 @@ class ActivityAnalyticsSystem {
     } catch { /* best-effort */ }
   }
 
-  /** Plano premium da guild resolve o recurso `logicScript.premiumEvents` — com cache. */
   async _isPremiumEventsEnabled(guildId) {
     const cached = this._planCache.get(guildId);
     if (cached !== undefined) return cached;
@@ -245,8 +193,6 @@ class ActivityAnalyticsSystem {
     return enabled;
   }
 
-  /** Dispara `activitySpike` pro Logic Script E o trigger "📈 Pico de
-   *  atividade" pro Logic Builder da guild — best-effort, nunca lança. */
   _emitActivitySpike(guildId, channelId, type, messageCount) {
     const payload = {
       TYPE: type,
@@ -276,11 +222,6 @@ class ActivityAnalyticsSystem {
     }
   }
 
-  /**
-   * Alimenta o detector de pico com mais uma mensagem do canal. Só roda
-   * pra guilds com o recurso Premium liberado — servidores FREE não
-   * pagam nem o custo de memória/CPU do tracking.
-   */
   async _trackActivitySpike(guildId, channelId) {
     if (!(await this._isPremiumEventsEnabled(guildId))) return;
 
@@ -306,7 +247,7 @@ class ActivityAnalyticsSystem {
         state.timestamps = [];
         this._emitActivitySpike(guildId, channelId, ACTIVITY_SPIKE_TYPE.ENCERRADO, 0);
       }, SPIKE_INACTIVITY_MS);
-      state.timer.unref?.(); // não segura o processo vivo só por causa disso
+      state.timer.unref?.(); 
     }
   }
 
@@ -325,8 +266,6 @@ class ActivityAnalyticsSystem {
 
       if (this.isIgnored(cfg, { channelId, roles, userId, isBot: false })) return;
 
-      // Pico de Atividade (Premium) — roda em paralelo com o tracking
-      // normal, não bloqueia nem depende dele.
       this._trackActivitySpike(guildId, channelId).catch(err =>
         console.error("[ActivityAnalytics] _trackActivitySpike:", err)
       );
@@ -367,8 +306,6 @@ class ActivityAnalyticsSystem {
         this._maybeSnapshotMemberCount(guildId),
       ]);
 
-      // Termos (palavras/emojis) — não guarda o texto bruto, só os
-      // contadores agregados por dia.
       const { words, emojis } = extractTerms(data.content || "");
       const termOps = [];
       for (const w of words)   termOps.push({ kind: "word",  term: w });
@@ -441,7 +378,6 @@ class ActivityAnalyticsSystem {
     } catch (err) { console.error("[ActivityAnalytics] handleMemberRemove:", err); }
   }
 
-  /* ================= AGREGAÇÕES (reaproveitadas pelas telas) ================= */
 
   async _dailyStatsRange(guildId, days) {
     const startKey = dateKeyDaysAgo(days - 1);
@@ -464,7 +400,6 @@ class ActivityAnalyticsSystem {
     return rows.map(r => ({ term: r._id, count: r.total }));
   }
 
-  /** Compara janela recente vs janela anterior de mesmo tamanho — "tendência" real, não só volume. */
   async _trendingTerms(guildId, kind, windowDays = 3, limit = 10) {
     const recentStart   = dateKeyDaysAgo(windowDays - 1);
     const baselineStart = dateKeyDaysAgo(windowDays * 2 - 1);
@@ -483,7 +418,7 @@ class ActivityAnalyticsSystem {
 
     const baselineMap = new Map(baselineRows.map(r => [r._id, r.total]));
     const scored = recentRows
-      .filter(r => r.total >= 3) // ignora ruído de 1-2 ocorrências
+      .filter(r => r.total >= 3) 
       .map(r => {
         const before = baselineMap.get(r._id) || 0;
         const growth = before === 0 ? r.total : (r.total - before) / before;
@@ -495,7 +430,6 @@ class ActivityAnalyticsSystem {
     return scored;
   }
 
-  /* ================= MENU PRINCIPAL ================= */
 
   async startSetup(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -557,9 +491,7 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 1. USUÁRIOS MAIS ATIVOS / RANKING DE MENSAGENS ================= */
 
-  // "Mais ativos" = maior volume nos últimos 7 dias (recência importa).
   async topActiveUsers(interaction, guild, user) {
     const startKey = dateKeyDaysAgo(6);
     const rows = await ActivityDailyUser.aggregate([
@@ -579,7 +511,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  // "Ranking de mensagens" = total acumulado (all-time), sem decaimento por recência.
   async messageRanking(interaction, guild, user) {
     const rows = await ActivityUserStat
       .find({ guildId: interaction.guild_id })
@@ -597,7 +528,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 2. CANAIS MAIS / MENOS UTILIZADOS ================= */
 
   async channelRanking(interaction, guild, user, top) {
     const rows = await ActivityChannelStat
@@ -617,7 +547,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 3. HORÁRIOS DE PICO / DIAS MOVIMENTADOS ================= */
 
   async peakHours(interaction, guild, user) {
     const cfg = this.getConfig(guild);
@@ -663,7 +592,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 4. MÉDIA DE MENSAGENS ================= */
 
   async averageMessages(interaction, guild, user) {
     const stats = await this._dailyStatsRange(interaction.guild_id, 30);
@@ -693,7 +621,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 5. CRESCIMENTO (diário/semanal/mensal) ================= */
 
   async growthMenu(interaction, guild, user) {
     const select = this.select(
@@ -721,7 +648,6 @@ class ActivityAnalyticsSystem {
   async growthReport(interaction, guild, user, totalDays, unitLabel, bucketDays) {
     const stats = await this._dailyStatsRange(interaction.guild_id, totalDays);
 
-    // Agrupa em buckets de `bucketDays` dias (1=diário, 7=semanal, 30=mensal aproximado)
     const buckets = [];
     for (let i = 0; i < stats.length; i += bucketDays) {
       const slice = stats.slice(i, i + bucketDays);
@@ -746,7 +672,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 6. TÓPICOS / TENDÊNCIAS / EMOJIS / REAÇÕES ================= */
 
   async discussedTopics(interaction, guild, user) {
     const top = await this._topTermsInWindow(interaction.guild_id, "word", 7, 10);
@@ -795,8 +720,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 7. COMANDOS MAIS UTILIZADOS ================= */
-  // Reaproveita o CommandLog já existente (não duplica tracking).
 
   async topCommands(interaction, guild, user) {
     const since = new Date(Date.now() - 30 * 86400000);
@@ -815,7 +738,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 8. RESUMO GERAL ================= */
 
   async generalSummary(interaction, guild, user) {
     const guildId = interaction.guild_id;
@@ -845,7 +767,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /* ================= 9. CONFIGURAÇÕES ================= */
 
   async settingsMenu(interaction, guild, user) {
     const cfg = this.getConfig(guild);
@@ -895,7 +816,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-  /** Fusos comuns pro público do bot — offset fixo (sem DST) por simplicidade e estabilidade. */
   async pickTimezone(interaction, guild, user) {
     const ZONES = [
       { label: "UTC-4 (Amazonas / Manaus)",            value: "-4" },

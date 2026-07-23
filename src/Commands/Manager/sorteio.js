@@ -139,7 +139,6 @@ module.exports = {
     const guildId    = interaction.guild_id;
     const ctx        = localeCtx(interaction);
 
-    /* ── Subcommands admin ─────────────────────────────── */
 
     const adminOnly = ['criar', 'gerenciar', 'encerrar', 'reroll'];
 
@@ -168,19 +167,11 @@ module.exports = {
       }
     }
 
-    /* ══════════════════════════════════════════════
-       /sorteio criar
-       Abre 1 modal (interação virgem = válido).
-       O restante do fluxo é 100% por chat.
-    ══════════════════════════════════════════════ */
 
     if (subcommand === "criar") {
       return client.giveaway.criar(interaction);
     }
 
-    /* ══════════════════════════════════════════════
-       /sorteio gerenciar
-    ══════════════════════════════════════════════ */
 
     if (subcommand === "gerenciar") {
 
@@ -217,9 +208,6 @@ module.exports = {
       return client.giveaway.startMenu(interaction);
     }
 
-    /* ══════════════════════════════════════════════
-       /sorteio lista  (qualquer usuário)
-    ══════════════════════════════════════════════ */
 
     if (subcommand === "lista") {
 
@@ -283,9 +271,6 @@ module.exports = {
       );
     }
 
-    /* ══════════════════════════════════════════════
-       /sorteio encerrar <id>
-    ══════════════════════════════════════════════ */
 
     if (subcommand === "encerrar") {
 
@@ -312,7 +297,6 @@ module.exports = {
         );
       }
 
-      // ACK antes de sortear (pode demorar)
       await DiscordRequest(
         `/interactions/${interaction.id}/${interaction.token}/callback`,
         {
@@ -324,9 +308,6 @@ module.exports = {
       return client.giveaway.endGiveaway(interaction, doc);
     }
 
-    /* ══════════════════════════════════════════════
-       /sorteio reroll <id>
-    ══════════════════════════════════════════════ */
 
     if (subcommand === "reroll") {
 
@@ -364,9 +345,6 @@ module.exports = {
       return client.giveaway.reroll(interaction, doc, user);
     }
 
-    /* ══════════════════════════════════════════════
-       /sorteio info <id>  (qualquer usuário)
-    ══════════════════════════════════════════════ */
 
     if (subcommand === "info") {
 

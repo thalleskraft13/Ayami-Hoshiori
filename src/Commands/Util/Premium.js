@@ -4,14 +4,8 @@ const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
-// URL principal do site — usada para redirecionar comandos que agora
-// são feitos por lá em vez de dentro do Discord.
 const SITE_URL = "https://ayami-hoshiori.discloud.app";
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS COMPONENTS V2
-   (mesmo padrão usado no Logic Builder / Biblioteca / Missões)
-   ═══════════════════════════════════════════════════════════ */
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -21,12 +15,6 @@ function cv2Divider(spacing = 1) {
   return { type: 14, divider: true, spacing };
 }
 
-/**
- * Section (type 9) com accessory de Thumbnail (type 11).
- * Substitui o antigo `.setThumbnail(avatar)` do embed clássico —
- * em CV2 a miniatura fica ao lado do texto via Section, não
- * "flutuando" no canto do embed.
- */
 function cv2SectionThumb(content, thumbUrl) {
   return {
     type: 9,
@@ -59,7 +47,6 @@ function row(...components) {
   return { type: 1, components };
 }
 
-/** Paleta aleatória "estilo Constellation" — mantém a ideia do antigo .randomColor(). */
 const RANDOM_COLORS = [0x7C8FFF, 0xA9D6FF, 0xFFD966, 0xFFB6C8, 0x243B7A, 0xC6CDD8];
 function randomColor() {
   return RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)];
@@ -169,9 +156,6 @@ module.exports = {
   }
 };
 
-// ──────────────────────────────────────────
-//  COMPRAR
-// ──────────────────────────────────────────
 
 async function renderBuy(interaction, client, emoji) {
 
@@ -193,7 +177,7 @@ async function renderBuy(interaction, client, emoji) {
       type: 2,
       style: 5,
       label: client.t("premium.buy_button", ctx),
-      url: `${SITE_URL}/premium` // Planos, comparativo e assinatura agora ficam no site
+      url: `${SITE_URL}/premium` 
     }),
   ];
 
@@ -209,9 +193,6 @@ async function renderBuy(interaction, client, emoji) {
   );
 }
 
-// ──────────────────────────────────────────
-//  PAINEL
-// ──────────────────────────────────────────
 
 async function renderPanel(interaction, client, userId, edit = false) {
 
@@ -248,7 +229,6 @@ async function renderPanel(interaction, client, userId, edit = false) {
     eCurtida: emoji.curtida,
   });
 
-  // ── Sem premium ──
   if (!userPremium.status) {
 
     const blocks = [
@@ -270,7 +250,6 @@ async function renderPanel(interaction, client, userId, edit = false) {
     );
   }
 
-  // ── Buscar nomes dos servidores vinculados ──
   const guildNames = await Promise.all(
     guilds.map(async (g) => {
       try {
@@ -284,7 +263,6 @@ async function renderPanel(interaction, client, userId, edit = false) {
     })
   );
 
-  // ── Montar bloco principal (substitui a "desc" do embed clássico) ──
   const mainText = client.t("premium.panel_header", {
     ...ctx,
     userId,
@@ -318,7 +296,6 @@ async function renderPanel(interaction, client, userId, edit = false) {
 
   const components = [];
 
-  // Botão: Ativar
   if (userPremium.status && !guildPremium.status) {
 
     const btnAdd = client.interactions.createButton({
@@ -336,7 +313,6 @@ async function renderPanel(interaction, client, userId, edit = false) {
     components.push(btnAdd);
   }
 
-  // Botão: Remover
   if (guildPremium.status && guildPremium.userId === userId) {
 
     const btnRemove = client.interactions.createButton({
@@ -354,7 +330,6 @@ async function renderPanel(interaction, client, userId, edit = false) {
     components.push(btnRemove);
   }
 
-  // Botão: Comprar (link) — planos agora ficam no site
   components.push({
     type: 2,
     style: 5,

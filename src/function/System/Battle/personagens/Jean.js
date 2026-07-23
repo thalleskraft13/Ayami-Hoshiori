@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Jean
- * Elemento: Anemo | Raridade: 5 estrelas
- * Role: Healer, suporte, shielder
- *
- * Mecânicas únicas:
- * - Cura massiva baseada em ATK
- * - Redução de resistência elemental via Anemo (swirl)
- * - C4: Cura o time inteiro ao usar o Supremo
- */
 module.exports = {
     nome:     'Jean',
     raridade: '5',

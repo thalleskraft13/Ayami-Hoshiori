@@ -6,7 +6,7 @@ const path = require('path');
 const DEFAULT_SHARDS_PER_CLUSTER = 2;
 const RESTART_DELAY_MS           = 5_000;
 const IPC_TIMEOUT_MS             = 5_000;
-const CLUSTER_READY_TIMEOUT_MS   = 60_000; // 60s para o cluster ficar pronto
+const CLUSTER_READY_TIMEOUT_MS   = 60_000; 
 
 class ClusterManager {
 
@@ -19,16 +19,10 @@ class ClusterManager {
         this.workerFile       = opts.workerFile       ?? path.join(process.cwd(), 'src', 'Core', 'ClusterWorker.js');
         this.clientOptions    = opts.clientOptions    ?? {};
 
-        /** @type {Map<number, { worker: Worker, shards: number[] }>} */
         this._clusters = new Map();
 
-        /** Pending stat requests: requestId → { resolve, reject, timeout } */
         this._pendingStats = new Map();
 
-        /**
-         * Pending CLUSTER_READY resolvers.
-         * clusterId → { resolve, reject, timeout }
-         */
         this._pendingReady = new Map();
     }
 
@@ -50,10 +44,6 @@ class ClusterManager {
         console.log('[ClusterManager] All clusters spawned and ready.');
     }
 
-    /**
-     * Solicita stats de todos os clusters e retorna agregado.
-     * @returns {Promise<object[]>}
-     */
     async getAllStats() {
         const requests = [];
 
@@ -70,29 +60,18 @@ class ClusterManager {
         );
     }
 
-    /**
-     * broadcast de presence pra TODOS os clusters (não só os shards
-     * de um cluster — isso já existia via setPresence(shardId, opts)/"all").
-     * Réplica do mesmo padrão de IPC já usado por GET_STATS/STATS_RESPONSE.
-     */
     setPresenceAll(opts) {
         for (const [, { worker }] of this._clusters) {
             worker.postMessage({ type: 'SET_PRESENCE', opts });
         }
     }
 
-    /**
-     * Sistema de Atualização Programada — replica o novo estado (ativo/
-     * inativo + mensagem) pra TODOS os clusters imediatamente. Mesmo
-     * padrão de IPC do setPresenceAll(), acima.
-     */
     setMaintenanceAll(state) {
         for (const [, { worker }] of this._clusters) {
             worker.postMessage({ type: 'SET_MAINTENANCE', state });
         }
     }
 
-    // ─── Private ──────────────────────────────────────────────────────────────
 
     _requestStats(clusterId, worker) {
         return new Promise((resolve, reject) => {
@@ -110,7 +89,6 @@ class ClusterManager {
     }
 
     _handleWorkerMessage(clusterId, msg) {
-        // CLUSTER_READY: shard(s) conectaram ao Discord com sucesso
         if (msg?.type === 'CLUSTER_READY') {
             const pending = this._pendingReady.get(clusterId);
             if (!pending) return;
@@ -121,7 +99,6 @@ class ClusterManager {
             return;
         }
 
-        // Stats response para getAllStats()
         if (msg?.type === 'STATS_RESPONSE') {
             const pending = this._pendingStats.get(msg.requestId);
             if (!pending) return;
@@ -132,7 +109,6 @@ class ClusterManager {
             return;
         }
         if (msg?.type === 'GET_ALL_STATS') {
-    // Coleta stats de todos os clusters e devolve para quem pediu
     this.getAllStats().then((data) => {
         const { worker } = this._clusters.get(clusterId) ?? {};
         if (!worker) return;
@@ -146,16 +122,11 @@ class ClusterManager {
 }
 
         if (msg?.type === 'REQUEST_SET_PRESENCE') {
-            // Um worker (onde o comando rodou) pede pro ClusterManager (thread
-            // principal) replicar a presence pra TODOS os clusters.
             this.setPresenceAll(msg.opts);
             return;
         }
 
         if (msg?.type === 'REQUEST_SET_MAINTENANCE') {
-            // Um worker (onde o comando de Staff rodou) pede pro
-            // ClusterManager replicar o estado da Atualização Programada
-            // pra TODOS os clusters imediatamente.
             this.setMaintenanceAll(msg.state);
             return;
         }
@@ -165,11 +136,6 @@ class ClusterManager {
         }
     }
 
-    /**
-     * Spawna o cluster e aguarda o sinal CLUSTER_READY antes de resolver.
-     * Isso garante que o próximo cluster só sobe quando as shards do atual
-     * estiverem conectadas ao Discord.
-     */
     _spawnCluster(clusterId, shards, totalShards) {
         return new Promise((resolve, reject) => {
             const worker = new Worker(this.workerFile, {
@@ -183,7 +149,6 @@ class ClusterManager {
 
             this._clusters.set(clusterId, { worker, shards });
 
-            // Timeout de segurança: se o cluster não ficar pronto a tempo, continua mesmo assim
             const readyTimeout = setTimeout(() => {
                 if (this._pendingReady.has(clusterId)) {
                     console.warn(
@@ -210,7 +175,6 @@ class ClusterManager {
             worker.on('error', (err) => {
                 console.error(`[Cluster ${clusterId}] Error:`, err);
 
-                // Se ainda aguardando ready, rejeita para não travar o launch()
                 const pending = this._pendingReady.get(clusterId);
                 if (pending) {
                     clearTimeout(pending.timeout);

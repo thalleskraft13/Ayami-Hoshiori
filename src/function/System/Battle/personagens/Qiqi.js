@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Qiqi
- * Elemento: Cryo | Raridade: 5 estrelas
- * Role: Healer principal
- *
- * Mecânicas únicas:
- * - Talismã de Cura: marca inimigos para curar aliados ao atacá-los
- * - Cura baseada em ATK tanto no ataque quanto na habilidade
- */
 module.exports = {
     nome:     'Qiqi',
     raridade: '5',

@@ -10,17 +10,13 @@ const RaidIntelligence = require("./Security/RaidIntelligence.js");
 const MemberVerification = require("./Security/MemberVerification.js");
 const TrapChannel = require("./Security/TrapChannel.js");
 
-// Módulos de Filtro cuja detecção acontece via Discord AutoMod nativo
-// (ver Security/NativeAutoMod.js) — o restante (anticaps, antiemoji,
-// antifiles) não tem equivalente na API do Discord e continua sendo
-// detecção própria da Ayami em handleMessage().
 const NATIVE_FILTER_MODULES = ["badwords", "antispam", "antilinks", "antimention"];
 
 class SecuritySystem {
 
   constructor(client) {
     this.client = client;
-    this._spamTracker   = {}; // não relacionado ao raid — ver Security/RaidIntelligence.js para o estado de raid
+    this._spamTracker   = {}; 
     this._botPermCache  = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
     this.nativeAutoMod  = new NativeAutoMod(client);
     this.raidIntelligence = new RaidIntelligence(this);
@@ -28,20 +24,6 @@ class SecuritySystem {
     this.trapChannel = new TrapChannel(this);
   }
 
-  /**
-   * Sincroniza a regra nativa de AutoMod do Discord para um módulo de
-   * Filtro (badwords/antispam/antilinks/antimention), a partir da config
-   * atual salva em `sec.automod.simple[module]`, e persiste o
-   * `nativeRuleId` retornado. Chame sempre depois de alterar toggle,
-   * ações, listas ou limites de um desses módulos.
-   *
-   * Retorna `{ ok, error }`. Quando `ok === false`, a config LOCAL da
-   * Ayami foi salva normalmente, mas a regra correspondente no AutoMod
-   * nativo do Discord NÃO existe/não foi atualizada — ou seja, ela não
-   * vai executar de verdade. Isso é reportado no canal de logs (se
-   * configurado) e deve ser mostrado ao admin no followUp de quem chamou
-   * essa função, para nunca dar a falsa impressão de "ativado com sucesso".
-   */
   async _syncNativeModule(guild, module) {
     if (!NATIVE_FILTER_MODULES.includes(module)) return { ok: true };
     const sec = this.getSecurity(guild);
@@ -77,11 +59,6 @@ class SecuritySystem {
     return { ok: true };
   }
 
-  /**
-   * Envia um followUp ephemeral avisando o admin quando `_syncNativeModule`
-   * retorna falha — para nunca deixar a interface dizer "🟢 Ativo" enquanto
-   * a regra real no Discord não existe.
-   */
   async _warnIfSyncFailed(interaction, result) {
     if (result?.ok === false) {
       await this.followUpEphemeral(interaction, {
@@ -93,39 +70,7 @@ class SecuritySystem {
     }
   }
 
-  /* ================= INTERACTIONS ================= */
 
-  /**
-   * Converte um payload legado ({embeds, components}) para o formato
-   * Components V2 ({flags: 32768, components: [Container]}).
-   *
-   * ⚠️ Bug raiz do "menu de segurança não abre": a mensagem inicial do
-   * /configurar já é enviada com a flag IS_COMPONENTS_V2 (32768) — e essa
-   * flag, uma vez definida, NUNCA pode ser removida da mensagem (é
-   * permanente, por design da API do Discord). Todo o resto do bot
-   * (Tickets, UID, Logic Builder) já usa Components V2 consistentemente;
-   * só o SecuritySystem.js ainda montava `embeds:` — e a API rejeita
-   * silenciosamente qualquer PATCH com `embeds` numa mensagem já
-   * flagada como V2, então o `editOriginal` falhava e o menu nunca
-   * era atualizado (parecia "não abrir").
-   *
-   * Em vez de reescrever as ~60 telas deste arquivo uma por uma, a
-   * conversão acontece aqui, uma única vez, no ponto de saída — todas
-   * as telas continuam definindo `embeds`/`components` normalmente.
-   *
-   * ⚠️ Bug relacionado, corrigido depois: quando `data` NÃO tinha
-   * `embeds` (ex: um followUpEphemeral simples do tipo `{ content: "..." }`),
-   * essa função forçava a flag IS_COMPONENTS_V2 em cima de um payload que
-   * usa `content` — e a API do Discord PROÍBE o campo `content` em
-   * qualquer mensagem com essa flag (erro 50035,
-   * MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2). Isso quebrava
-   * TODO followUp/reply de texto simples do módulo (ex: ao adicionar
-   * palavra proibida pelo Modal). A flag permanente só é uma exigência
-   * real para `editOriginal` (que edita a MESMA mensagem original, já
-   * nascida V2) — `reply()`/`followUp()` criam mensagens NOVAS, que não
-   * têm essa restrição e devem continuar podendo usar `content` livremente
-   * quando não há `embeds` para converter.
-   */
   _toV2(data) {
     if (!data || !data.embeds) return data;
 
@@ -176,14 +121,6 @@ class SecuritySystem {
 
   async editOriginal(interaction, data) {
     let payload = this._toV2(data);
-    // A mensagem original do /configurar nasce com a flag IS_COMPONENTS_V2,
-    // que é PERMANENTE — todo PATCH nela precisa preservar essa flag. Isso
-    // só se aplica aqui (a mesma mensagem sendo editada repetidamente);
-    // reply()/followUp() criam mensagens novas e não têm essa exigência.
-    // A checagem de `content === undefined` é defensiva: telas de menu
-    // deste arquivo nunca usam `content` (só embeds/components), então
-    // isso nunca deveria conflitar — mas se algum dia usarem, a flag V2
-    // não é aplicada para não quebrar o envio.
     if (payload && payload.content === undefined) {
       payload = { ...payload, flags: (payload.flags ?? 0) | 32768 };
     }
@@ -204,7 +141,6 @@ class SecuritySystem {
     return this.followUp(interaction, { ...data, flags: 64 });
   }
 
-  /* ================= DATABASE ================= */
 
   async getGuild(guildId) {
     let g = await GuildDb.findOne({ guildId });
@@ -232,11 +168,6 @@ class SecuritySystem {
     if (!guild.security.emergency.channelSnapshot) guild.security.emergency.channelSnapshot = [];
     if (!guild.security.backups)                   guild.security.backups = [];
     if (!guild.security.automod.advanced.warns)    guild.security.automod.advanced.warns = [];
-    // AntiRaid Inteligente — documentos antigos podem ter só o shape velho
-    // ({ enabled, joinLimit, action, autoLockdown, earlyAlerts, history }).
-    // O Mongoose já aplica os defaults do novo schema em save/load; isso
-    // aqui só garante que o objeto em memória não quebre a UI antes do
-    // primeiro save().
     if (!guild.security.raid.factors) {
       guild.security.raid.factors = {
         joinRate: {}, newAccounts: {}, duplicateMessages: {},
@@ -273,18 +204,12 @@ class SecuritySystem {
     return p.status;
   }
 
-  /** Canal específico por módulo do AutoMod — recurso de assinatura
-   *  (liberado a partir do primeiro plano pago, ver PremiumPlans.js
-   *  #advancedSystems). Sem isso, todos os módulos caem juntos na
-   *  categoria "automod". */
   async hasAdvancedSystemsAccess(guildId) {
     const p = await PremiumManager.getGuildPremium(guildId);
     return !!(p.status && p.plan?.advancedSystems);
   }
 
-  /* ================= PERMISSÕES DO BOT ================= */
 
-  // Tradução amigável dos nomes de permissão (PT-BR)
   _permLabel(perm) {
     const labels = {
       ADMINISTRATOR:        "Administrador",
@@ -305,7 +230,6 @@ class SecuritySystem {
     return labels[perm] || perm;
   }
 
-  // Busca (com cache de 60s) as permissões do bot no servidor ou em um canal específico
   async _getBotPermissions(guildId, channelId = null) {
     const key = channelId ? `${guildId}:${channelId}` : guildId;
 
@@ -320,7 +244,7 @@ class SecuritySystem {
         bot:     true,
         client:  this.client
       });
-      this._botPermCache.set(key, perms); // TTL padrão de 60s
+      this._botPermCache.set(key, perms); 
       return perms;
     } catch (err) {
       console.error("[Security] _getBotPermissions:", err);
@@ -328,27 +252,22 @@ class SecuritySystem {
     }
   }
 
-  // Limpa o cache de permissões (útil após criar canais/cargos via backup, por ex.)
   _clearBotPermCache(guildId) {
     this._botPermCache.deleteWhere(key => key === guildId || key.startsWith(`${guildId}:`));
   }
 
-  // Retorna true se o bot tem TODAS as permissões necessárias
   async _hasBotPerms(guildId, required, channelId = null) {
     const perms = await this._getBotPermissions(guildId, channelId);
     if (perms.includes("ADMINISTRATOR")) return true;
     return required.every(p => perms.includes(p));
   }
 
-  // Retorna a lista de permissões faltando
   async _missingBotPerms(guildId, required, channelId = null) {
     const perms = await this._getBotPermissions(guildId, channelId);
     if (perms.includes("ADMINISTRATOR")) return [];
     return required.filter(p => !perms.includes(p));
   }
 
-  // Para fluxos de UI: verifica permissão e, se faltar, avisa o usuário e volta ao menu.
-  // Retorna true se OK, false se faltou (e já tratou a resposta).
   async _requirePerms(interaction, guild, user, required, channelId, backFn, actionLabel = "executar esta ação") {
     const missing = await this._missingBotPerms(interaction.guild_id, required, channelId);
     if (missing.length) {
@@ -364,7 +283,6 @@ class SecuritySystem {
     return true;
   }
 
-  // Para fluxos automáticos (gateway/automod): se faltar permissão, envia alerta no log e retorna false.
   async _ensurePerms(guildId, required, channelId, contextLabel) {
     const missing = await this._missingBotPerms(guildId, required, channelId);
     if (missing.length) {
@@ -406,7 +324,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= MAIN PANEL ================= */
 
   async startSetup(interaction) {
     const guild   = await this.getGuild(interaction.guild_id);
@@ -462,7 +379,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 1. AUTOMOD SIMPLES ================= */
 
   async automodSimpleMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -515,9 +431,7 @@ class SecuritySystem {
     });
   }
 
-  /* ─── HELPER: WARN ESCALATION CONFIG ─── */
 
-  // Returns default escalation ladder
   _defaultEscalation() {
     return [
       { warns: 1, action: "warn_message" },
@@ -528,7 +442,6 @@ class SecuritySystem {
     ];
   }
 
-  // Shows and lets user configure the warn escalation table for a module
   async warnEscalationMenu(interaction, guild, user, module, backFn) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, module);
@@ -628,7 +541,6 @@ class SecuritySystem {
         const sec = this.getSecurity(guild);
         const cfg = this.getSimpleCfg(sec, module);
         if (!cfg.escalation) cfg.escalation = [];
-        // Replace if level already exists
         cfg.escalation = cfg.escalation.filter(e => e.warns !== warns);
         cfg.escalation.push({ warns, action: i.data.values[0] });
         guild.markModified("security");
@@ -716,9 +628,7 @@ class SecuritySystem {
     });
   }
 
-  /* ─── HELPER: MULTI-ACTION CONFIG ─── */
 
-  // Shows current actions and lets user pick multiple
   async multiActionMenu(interaction, guild, user, module, backFn, availableActions = null) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, module);
@@ -776,7 +686,6 @@ class SecuritySystem {
     });
   }
 
-  /* ─── PALAVRAS PROIBIDAS ─── */
 
   async badwordsMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -802,13 +711,6 @@ class SecuritySystem {
       async (i) => {
         const v = i.data.values[0];
 
-        // ⚠️ "add" precisa abrir um Modal, e um Modal só pode ser a
-        // PRIMEIRA resposta de uma interação — por isso o deferUpdate()
-        // (que já responde a interação com type 6) só acontece para os
-        // demais ramos, DEPOIS de sabermos que não vamos abrir Modal.
-        // Fazer deferUpdate incondicionalmente aqui e só depois chamar
-        // addBadword() era exatamente a causa do erro
-        // "Interaction has already been acknowledged".
         if (v === "add") return this.addBadword(i, guild, user);
 
         await this.deferUpdate(i);
@@ -860,13 +762,6 @@ class SecuritySystem {
     });
   }
 
-  /**
-   * Abre o Modal "Adicionar Palavra Proibida".
-   *
-   * IMPORTANTE: esta função deve ser a PRIMEIRA (e única) resposta à
-   * interação `interaction` — nada de reply()/deferReply()/update()/
-   * deferUpdate() antes disso. showModal() é a própria resposta.
-   */
   async addBadword(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, "badwords");
@@ -887,14 +782,7 @@ class SecuritySystem {
           placeholder: "termo1, frase ruim, xingamento"
         }]
       }],
-      // `mi`  = interação do MODAL_SUBMIT (diferente da interação original
-      //         que abriu o modal — cada uma tem seu próprio id/token).
-      // `fields.words` = valor digitado no campo acima.
       funcao: async (mi, _client, fields) => {
-        // Confirma a submissão do Modal atualizando a mensagem original
-        // (type 6 = DEFER_UPDATE_MESSAGE). Isso conta como a ÚNICA resposta
-        // a `mi` — chamado sempre via InteractionManager._callback, que já
-        // protege contra callback duplicado (state.replied).
         await this.client.interactions._callback(mi, { type: 6 });
 
         const raw = (fields.words || "");
@@ -908,13 +796,11 @@ class SecuritySystem {
           return this.badwordsMenu(mi, guild, user);
         }
 
-        // Recarrega a config (pode ter mudado entre abrir o modal e o
-        // envio) e evita duplicadas.
         const sec2 = this.getSecurity(guild);
         const cfg2 = this.getSimpleCfg(sec2, "badwords");
         if (!cfg2.list) cfg2.list = [];
 
-        const MAX_WORDS = 100; // mesmo limite da API do AutoMod (keyword_filter)
+        const MAX_WORDS = 100; 
         const novas = candidates.filter(w => !cfg2.list.includes(w));
         const espacoDisponivel = Math.max(0, MAX_WORDS - cfg2.list.length);
         const aceitas    = novas.slice(0, espacoDisponivel);
@@ -975,7 +861,6 @@ class SecuritySystem {
     });
   }
 
-  /* ─── ANTI-SPAM ─── */
 
   async antispamMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1059,7 +944,6 @@ class SecuritySystem {
     return this.antispamMenu(interaction, guild, user);
   }
 
-  /* ─── ANTI-CAPS ─── */
 
   async anticapsMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1143,7 +1027,6 @@ class SecuritySystem {
     return this.anticapsMenu(interaction, guild, user);
   }
 
-  /* ─── ANTI-EMOJI (sem equivalente nativo — detecção própria da Ayami) ─── */
 
   async antiemojiMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1221,7 +1104,6 @@ class SecuritySystem {
     return this.antiemojiMenu(interaction, guild, user);
   }
 
-  /* ─── ANTI-FILES (arquivos proibidos — sem equivalente nativo) ─── */
 
   async antifilesMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1335,7 +1217,6 @@ class SecuritySystem {
     });
   }
 
-  /* ─── ANTI-LINKS ─── */
 
   async antilinksMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1507,7 +1388,6 @@ class SecuritySystem {
     });
   }
 
-  /* ─── ANTI-MASS MENTION ─── */
 
   async antimentionMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1587,7 +1467,6 @@ class SecuritySystem {
     return this.antimentionMenu(interaction, guild, user);
   }
 
-  /* ─── IGNORED LISTS ─── */
 
   async manageIgnoredList(interaction, guild, user, module, listKey, type) {
     const sec   = this.getSecurity(guild);
@@ -1688,7 +1567,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 2. AUTOMOD AVANÇADO ================= */
 
   async automodAdvancedMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1741,7 +1619,6 @@ class SecuritySystem {
     return this.automodAdvancedMenu(interaction, guild, user);
   }
 
-  // Retorna o rótulo amigável de uma ação de escalonamento
   _actionLabel(action) {
     const labels = {
       "warn_message": "💬 Aviso no chat",
@@ -1759,7 +1636,6 @@ class SecuritySystem {
     const sec   = this.getSecurity(guild);
     if (!sec.automod.advanced.warns) sec.automod.advanced.warns = [];
 
-    // Identifica o módulo a partir do prefixo "modulo: motivo"
     const moduleName = reason.includes(":") ? reason.split(":")[0].trim() : "manual";
 
     sec.automod.advanced.warns.push({
@@ -1778,17 +1654,14 @@ class SecuritySystem {
       "warns"
     );
 
-    // Estado de escalonamento já aplicado (evita repetir a mesma punição)
     if (!sec.automod.advanced.escalationState) sec.automod.advanced.escalationState = {};
     if (!sec.automod.advanced.escalationState[targetUserId]) sec.automod.advanced.escalationState[targetUserId] = {};
     const state = sec.automod.advanced.escalationState[targetUserId];
 
-    // ── Escalonamento por módulo ──
     if (sec.automod.simple[moduleName]) {
       const cfg   = this.getSimpleCfg(sec, moduleName);
       const table = (cfg.escalation || []).map(e => ({ warns: Number(e.warns), action: e.action }));
 
-      // Pega o maior nível cujo requisito já foi atingido (warns <= warnCount)
       const tier = table
         .filter(e => e.warns <= warnCount)
         .sort((a, b) => b.warns - a.warns)[0];
@@ -1805,7 +1678,6 @@ class SecuritySystem {
       }
     }
 
-    // ── Escalonamento global (acumulado entre todos os módulos) ──
     if (sec.automod.advanced.autoPunish) {
       const table = (sec.automod.advanced.globalEscalation || []).map(e => ({ warns: Number(e.warns), action: e.action }));
 
@@ -1867,14 +1739,12 @@ class SecuritySystem {
       });
     }
 
-    // Group by user
     const grouped = {};
     for (const w of all) {
       if (!grouped[w.userId]) grouped[w.userId] = [];
       grouped[w.userId].push(w);
     }
 
-    // Sort by warn count descending, show last 20 warns overall
     const sortedUsers = Object.entries(grouped)
       .sort((a, b) => b[1].length - a[1].length);
 
@@ -1892,7 +1762,6 @@ class SecuritySystem {
       .map(w => `<@${w.userId}> — ${w.reason} (${w.date.slice(0, 10)})`)
       .join("\n");
 
-    // Paginate: show page 1 by default (users overview)
     const select = this.select(
       user,
       [
@@ -2103,7 +1972,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 3. CARGOS E PERMISSÕES ================= */
 
   async rolesPermissionsMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -2203,7 +2071,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 4. LOGS ================= */
 
   async logsMenu(interaction, guild, user) {
     const sec    = this.getSecurity(guild);
@@ -2279,7 +2146,6 @@ class SecuritySystem {
     { key: "antifiles",   label: "Antifiles"   },
   ];
 
-  /** Canal específico por módulo do AutoMod — recurso de assinatura. */
   async automodModuleLogsMenu(interaction, guild, user) {
     const hasAccess = await this.hasAdvancedSystemsAccess(interaction.guild_id);
 
@@ -2347,7 +2213,6 @@ class SecuritySystem {
     guild.markModified("security");
     await this.save(guild);
 
-    // Verifica se o bot consegue enviar mensagens/embeds nesse canal
     const missing = await this._missingBotPerms(interaction.guild_id, ["SEND_MESSAGES", "EMBED_LINKS"], id);
     if (missing.length) {
       await this.followUpEphemeral(interaction, {
@@ -2376,15 +2241,12 @@ class SecuritySystem {
 
     const select = this.select(
       user,
-      // undefined/true = ativo (mesmo critério de sendSecurityAlert: só
-      // `=== false` desativa) — antes aqui comparava truthy puro, então
-      // o rótulo mostrava 🔴 mesmo quando o log já estava ativo por padrão.
       logTypes.map(t => ({ label: `${types[t.key] !== false ? "🟢" : "🔴"} ${t.label}`, value: t.key })),
       "Ativar/Desativar",
       async (i) => {
         await this.deferUpdate(i);
         if (!sec.logs.types) sec.logs.types = {};
-        sec.logs.types[i.data.values[0]] = types[i.data.values[0]] === false; // false→true (ativa) | undefined/true→false (desativa)
+        sec.logs.types[i.data.values[0]] = types[i.data.values[0]] === false; 
         guild.markModified("security");
         await this.save(guild);
         return this.logTypesMenu(i, guild, user);
@@ -2408,7 +2270,6 @@ class SecuritySystem {
     const warns = sec.automod.advanced.warns || [];
     if (!warns.length) return this.followUpEphemeral(interaction, { content: "Nenhum warn para exportar." });
     const json = JSON.stringify(warns, null, 2);
-    // Discord message limit: 2000 chars. Split if needed.
     const chunks = [];
     for (let i = 0; i < json.length; i += 1800) {
       chunks.push(json.slice(i, i + 1800));
@@ -2429,7 +2290,6 @@ class SecuritySystem {
       });
     }
 
-    // Show last 20 events grouped by date
     const byDate = {};
     for (const w of warns) {
       const day = w.date.slice(0, 10);
@@ -2456,7 +2316,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 5. VERIFICAÇÃO DE PERMISSÕES ================= */
 
   async permissionCheck(interaction, guild, user) {
     const guildId    = interaction.guild_id;
@@ -2474,7 +2333,7 @@ class SecuritySystem {
     const VIEW          = 1n << 10n;
     const MENTION_ALL   = 1n << 17n;
     const MANAGE_CH     = 1n << 4n;
-    const MANAGE_ROLES  = 1n << 28n; // também = "Gerenciar Permissões" no contexto de canal
+    const MANAGE_ROLES  = 1n << 28n; 
     const ADMIN         = 1n << 3n;
     const MANAGE_GUILD  = 1n << 5n;
     const BAN           = 1n << 2n;
@@ -2486,7 +2345,6 @@ class SecuritySystem {
     const risks      = [];
     const immuneRoles = sec.roles.immune || [];
 
-    // ── Mapa de nomes de cargos (para exibir nomes em vez de só menções) ──
     const roleMap = {};
     for (const r of roles) roleMap[r.id] = r.name;
 
@@ -2500,7 +2358,6 @@ class SecuritySystem {
       { flag: KICK,           label: "Expulsar Membros"     }
     ];
 
-    // Permissões perigosas relevantes a nível de CANAL (via overwrite de cargo)
     const CHANNEL_DANGEROUS = [
       { flag: ADMIN,          label: "Administrador"            },
       { flag: MANAGE_CH,      label: "Gerenciar Canal"           },
@@ -2510,7 +2367,6 @@ class SecuritySystem {
       { flag: MANAGE_MSG,     label: "Gerenciar Mensagens"       }
     ];
 
-    // ── 1. Verificação de canais (acesso geral do @everyone) ──
     for (const ch of channels) {
       if (ch.type !== 0 && ch.type !== 5) continue;
       const ow   = (ch.permission_overwrites || []).find(o => o.id === guildId);
@@ -2521,7 +2377,6 @@ class SecuritySystem {
       if ((bits & THREADS) === THREADS) risks.push(`⚠️ <#${ch.id}> — Todos podem criar tópicos`);
     }
 
-    // ── 2. Verificação de permissões globais por cargo ──
     for (const role of roles) {
       if (role.id === guildId) continue;
       if (role.managed)        continue;
@@ -2532,19 +2387,17 @@ class SecuritySystem {
       if (found.length) risks.push(`⚠️ <@&${role.id}> (${roleMap[role.id] || role.id}) — ${found.join(", ")}`);
     }
 
-    // ── 3. Verificação de overwrites de cargos por canal (permissões concedidas localmente) ──
     for (const ch of channels) {
-      // categorias (4), texto (0), voz (2), anúncios (5), fórum (15) — todos relevantes
       if (![0, 2, 4, 5, 13, 15].includes(ch.type)) continue;
 
       for (const ow of (ch.permission_overwrites || [])) {
-        if (ow.type !== 0) continue;          // somente overwrites de CARGO
-        if (ow.id === guildId) continue;      // @everyone já tratado acima
+        if (ow.type !== 0) continue;          
+        if (ow.id === guildId) continue;      
         if (staffRoles.includes(ow.id))  continue;
         if (immuneRoles.includes(ow.id)) continue;
 
         const role = roles.find(r => r.id === ow.id);
-        if (role?.managed) continue;          // cargos de bots gerenciados
+        if (role?.managed) continue;          
 
         const allow = BigInt(ow.allow || 0);
         const found = CHANNEL_DANGEROUS.filter(d => (allow & d.flag) === d.flag).map(d => d.label);
@@ -2569,9 +2422,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 5B. VERIFICAÇÃO DE NOVOS MEMBROS ================= */
-  // Motor real mora em Security/MemberVerification.js. Sempre informa
-  // exatamente qual regra foi violada — nunca um veredito genérico.
 
   _verificationActionLabels() {
     return {
@@ -2662,7 +2512,6 @@ class SecuritySystem {
           await this.save(guild);
           return this.verificationRulesMenu(i, guild, user);
         }
-        // minAccountAge: primeiro pergunta se liga/desliga, depois oferece editar horas via submenu simples
         return this.verificationMinAgeDetail(i, guild, user);
       }
     );
@@ -2823,10 +2672,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 5C. CANAL ARMADILHA ================= */
-  // Motor real mora em Security/TrapChannel.js. Detecta self-bots/scripts
-  // que respondem em todos os canais — inclusive no canal armadilha, onde
-  // nenhum humano deveria escrever.
 
   _trapPunishmentLabels() {
     return {
@@ -3119,10 +2964,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 6. ANTIRAID INTELIGENTE ================= */
-  // Motor real de detecção mora em Security/RaidIntelligence.js (multi-fator,
-  // nunca aciona a resposta com base em um único evento isolado). Os métodos
-  // abaixo são só a UI de /configurar por cima daquele motor.
 
   _raidActionLabels() {
     return {
@@ -3435,7 +3276,6 @@ class SecuritySystem {
     return this.raidDetection(interaction, guild, user);
   }
 
-  /* ================= 7. MODO EMERGÊNCIA ================= */
 
   async emergencyMode(interaction, guild, user) {
     const sec    = this.getSecurity(guild);
@@ -3521,7 +3361,6 @@ class SecuritySystem {
 
   async _emergencyLockdown(guild, guildId) {
     try {
-      // Verifica permissão antes de tentar alterar overwrites de canais
       const allowed = await this._ensurePerms(
         guildId,
         ["MANAGE_ROLES", "MANAGE_CHANNELS"],
@@ -3656,17 +3495,14 @@ class SecuritySystem {
     });
   }
 
-  // Helper to log emergency events
   _logEmergencyEvent(guild, event) {
     const sec = this.getSecurity(guild);
     if (!sec.emergency) sec.emergency = {};
     if (!sec.emergency.logs) sec.emergency.logs = [];
     sec.emergency.logs.push({ timestamp: Date.now(), event });
-    // Keep last 50 events
     if (sec.emergency.logs.length > 50) sec.emergency.logs = sec.emergency.logs.slice(-50);
   }
 
-  /* ================= 8. MONITORAMENTO ================= */
 
   async monitoringSystem(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -3751,7 +3587,6 @@ class SecuritySystem {
       });
     }
 
-    // Group by day
     const byDay = {};
     for (const e of history) {
       const day = new Date(e.timestamp).toLocaleDateString("pt-BR");
@@ -3775,7 +3610,6 @@ class SecuritySystem {
     });
   }
 
-  // Helper to log monitoring events
   async _logMonitoringEvent(guildId, type, description) {
     try {
       const guild = await this.getGuild(guildId);
@@ -3790,7 +3624,6 @@ class SecuritySystem {
     } catch (err) { console.error("[Security] _logMonitoringEvent:", err); }
   }
 
-  /* ================= 9. BOTS SUSPEITOS ================= */
 
   async botAnalysis(interaction, guild, user) {
     const guildId          = interaction.guild_id;
@@ -3830,16 +3663,7 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 10. ATIVIDADE =================
-     Removido — a antiga "Verificação de Atividade" (ranking, histórico,
-     previsão, canais mortos, _trackActivity) saiu daqui e virou o
-     módulo independente Análise de Atividade. Ver:
-       - function/System/Activity/ActivityAnalyticsSystem.js
-       - Mongodb/activityDailyStat.js, activityDailyUser.js,
-         activityUserStat.js, activityChannelStat.js, activityTermStat.js
-     Acesse pelo /configurar > Análise de Atividade. */
 
-  /* ================= 11. BACKUP DO SERVIDOR ================= */
 
   async backupMenu(interaction, guild, user) {
     const sec     = this.getSecurity(guild);
@@ -3915,9 +3739,8 @@ class SecuritySystem {
         ? sec.backups[sec.backups.length - 1]
         : null;
 
-      // ── ROLES ──
       for (const role of roles) {
-        if (role.managed) continue; // skip bot-managed roles
+        if (role.managed) continue; 
 
         const roleData = {
           id:          role.id,
@@ -3937,7 +3760,6 @@ class SecuritySystem {
         backup.roles.push(roleData);
       }
 
-      // ── CATEGORIES ──
       const cats = channels.filter(c => c.type === 4);
       for (const cat of cats) {
         const catData = {
@@ -3957,9 +3779,8 @@ class SecuritySystem {
         backup.categories.push(catData);
       }
 
-      // ── CHANNELS ──
       for (const ch of channels) {
-        if (ch.type === 4) continue; // categories handled separately
+        if (ch.type === 4) continue; 
 
         const chData = {
           id:        ch.id,
@@ -4071,7 +3892,6 @@ class SecuritySystem {
   }
 
   async restoreBackup(interaction, guild, user, backupId) {
-    // Verifica permissão ANTES de qualquer alteração visível
     const missing = await this._missingBotPerms(interaction.guild_id, ["MANAGE_ROLES", "MANAGE_CHANNELS"]);
     if (missing.length) {
       return this.editOriginal(interaction, {
@@ -4104,7 +3924,6 @@ class SecuritySystem {
         });
       }
 
-      // Fetch current state
       const [currentChannels, currentRoles] = await Promise.all([
         DiscordRequest(`/guilds/${guildId}/channels`),
         DiscordRequest(`/guilds/${guildId}/roles`)
@@ -4114,18 +3933,10 @@ class SecuritySystem {
       let created  = 0;
       let errors   = 0;
 
-      // ── RESTORE ROLES ──
-      // Guarda um mapa ID-antigo → ID-atual. Isso é essencial: se um cargo
-      // precisou ser recriado (ex: servidor foi "nukado" e o cargo original
-      // não existe mais), o Discord dá um ID NOVO a ele — e é esse ID novo
-      // que precisa aparecer nos permission_overwrites de categorias/canais,
-      // nunca o antigo (que já não significa nada).
-      const roleIdMap = { [guildId]: guildId }; // @everyone nunca muda de ID
+      const roleIdMap = { [guildId]: guildId }; 
       for (const role of backup.roles) {
-        if (role.id === guildId) continue; // skip @everyone
+        if (role.id === guildId) continue; 
 
-        // Casa primeiro pelo ID original; se sumiu, tenta pelo nome (mesmo
-        // cargo, recriado manualmente ou por outro processo).
         const existing = currentRoles.find(r => r.id === role.id)
           || currentRoles.find(r => !r.managed && r.name === role.name);
 
@@ -4162,9 +3973,6 @@ class SecuritySystem {
         }
       }
 
-      // Remapeia permission_overwrites: overwrites de CARGO (type 0) usam o
-      // ID novo do cargo; overwrites de MEMBRO (type 1) mantêm o ID (contas
-      // de usuário não mudam de ID).
       const remapOverwrites = (list) => (list || []).map(ow => ({
         id:    ow.type === 0 ? (roleIdMap[ow.id] || ow.id) : ow.id,
         type:  ow.type,
@@ -4172,12 +3980,11 @@ class SecuritySystem {
         deny:  ow.deny
       }));
 
-      // ── RESTORE CATEGORIES ── (na ordem original de posição)
       const categoryIdMap = {};
       const sortedCats = [...(backup.categories || [])].sort((a, b) => a.position - b.position);
       for (const cat of sortedCats) {
         const existing = currentChannels.find(c => c.id === cat.id && c.type === 4)
-          || currentChannels.find(c => c.type === 4 && c.name === cat.name); // fallback por nome
+          || currentChannels.find(c => c.type === 4 && c.name === cat.name); 
         const overwrites = remapOverwrites(cat.permission_overwrites);
 
         if (existing) {
@@ -4195,7 +4002,6 @@ class SecuritySystem {
             restored++;
           } catch { errors++; }
         } else {
-          // Categoria não existe mais (ID sumiu, nome sumiu) → recriar do zero
           try {
             const createdCat = await DiscordRequest(`/guilds/${guildId}/channels`, {
               method: "POST",
@@ -4207,8 +4013,6 @@ class SecuritySystem {
         }
       }
 
-      // ── RESTORE CHANNELS ── (na ordem original; canal sem categoria no
-      // backup permanece sem categoria — nunca é encaixado em uma à força)
       const sortedChannels = [...(backup.channels || [])].sort((a, b) => a.position - b.position);
       const positionUpdates = [];
 
@@ -4221,7 +4025,6 @@ class SecuritySystem {
 
         const overwrites = remapOverwrites(ch.permission_overwrites);
 
-        // Casa pelo ID original + tipo; se sumiu, tenta por nome+tipo+categoria-alvo.
         const existing = currentChannels.find(c => c.id === ch.id && c.type === ch.type)
           || currentChannels.find(c => c.type === ch.type && c.name === ch.name && (c.parent_id || null) === targetParentId);
 
@@ -4246,9 +4049,6 @@ class SecuritySystem {
             restored++;
           } catch { errors++; }
         } else {
-          // Categoria existe (ou foi recriada acima) → canal nasce dentro
-          // dela. Categoria não existe/backup não tinha categoria → nasce
-          // sem categoria, exatamente como estava no original.
           try {
             const body = {
               name:                ch.name,
@@ -4267,10 +4067,6 @@ class SecuritySystem {
         }
       }
 
-      // ── AJUSTE FINAL DE ORDEM ──
-      // Best-effort: reaplica a posição original de categorias e canais em
-      // lote. Não é crítico o bastante pra derrubar a restauração inteira
-      // se falhar — por isso fica isolado num try/catch próprio.
       try {
         const catPositions = sortedCats
           .map(cat => ({ id: categoryIdMap[cat.id], position: cat.position }))
@@ -4283,7 +4079,6 @@ class SecuritySystem {
         console.error("[Security] restoreBackup: ajuste de ordem falhou (não crítico):", err);
       }
 
-      // Limpa o cache de permissões: canais/cargos podem ter sido criados/alterados
       this._clearBotPermCache(guildId);
 
       await this.sendSecurityAlert(guildId,
@@ -4348,7 +4143,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= 12. VERIFICAÇÃO COMPLETA ================= */
 
   async fullSecurityCheck(interaction, guild, user) {
     const guildId = interaction.guild_id;
@@ -4411,7 +4205,6 @@ class SecuritySystem {
     });
   }
 
-  /* ================= GATEWAY HANDLERS ================= */
 
   async handleMemberJoin(data) {
     try {
@@ -4421,8 +4214,6 @@ class SecuritySystem {
       const userId = data.user?.id;
       if (!userId) return;
 
-      // Verificação de Novos Membros — roda independente do AntiRaid (regras
-      // individuais sobre o membro que entrou: idade da conta, avatar, etc).
       if (sec.verification?.enabled) {
         await this.memberVerification.check(guild, data.guild_id, sec, data.user)
           .catch(err => console.error("[Security] memberVerification.check:", err));
@@ -4430,9 +4221,6 @@ class SecuritySystem {
 
       if (!sec.raid?.enabled) return;
 
-      // Multi-fator, cálculo de score e resposta automática (kick/ban/
-      // timeout/quarantine/lockdown + auto-restore) mora em RaidIntelligence
-      // — aqui só alimentamos o motor com o evento.
       await this.raidIntelligence.registerJoin(guild, data.guild_id, sec, userId);
 
     } catch (err) { console.error("[Security] handleMemberJoin:", err); }
@@ -4480,7 +4268,6 @@ class SecuritySystem {
     } catch (err) { console.error("[Security] handleWebhookCreate:", err); }
   }
 
-  /* ================= AUTOMOD — MESSAGE HANDLER ================= */
 
   async handleMessage(data) {
     try {
@@ -4497,19 +4284,11 @@ class SecuritySystem {
 
       const memberRoles = data.member?.roles || [];
 
-      // ── Canal Armadilha ──
-      // Alimenta o rastreador de mensagens recentes (usado para apagar
-      // mensagens do mesmo autor em outros canais, se configurado) e,
-      // se esta mensagem caiu no canal armadilha, trata como violação
-      // isolada — não passa pelo resto do automod abaixo.
       this.trapChannel.trackMessage(guildId, userId, channelId, data.id);
       if (sec.trapChannel?.enabled && sec.trapChannel.channelId && sec.trapChannel.channelId === channelId) {
         return await this.trapChannel.handle(guild, guildId, sec, data, memberRoles);
       }
 
-      // Alimenta o AntiRaid Inteligente (mensagens repetidas, spam coordenado,
-      // menções e convites em massa) — roda em paralelo, nunca bloqueia o
-      // automod abaixo e falhas aqui não devem derrubar o resto do handler.
       if (sec.raid?.enabled) {
         const mentionCount = (data.mentions?.length || 0) + (data.mention_roles?.length || 0) + (data.mention_everyone ? 1 : 0);
         this.raidIntelligence
@@ -4517,7 +4296,6 @@ class SecuritySystem {
           .catch(err => console.error("[Security] raidIntelligence.registerMessage:", err));
       }
 
-      // Immune roles bypass automod entirely
       const immuneRoles = sec.roles?.immune || [];
       if (immuneRoles.some(r => memberRoles.includes(r))) return;
 
@@ -4528,12 +4306,10 @@ class SecuritySystem {
         return false;
       };
 
-      // Execute all configured actions for a module
       const doActions = async (actions, reason, module) => {
         const acts    = actions || ["delete"];
         const skipped = [];
 
-        // Always try to delete the message first
         if (acts.includes("delete")) {
           if (await this._hasBotPerms(guildId, ["MANAGE_MESSAGES"], channelId)) {
             await DiscordRequest(`/channels/${channelId}/messages/${data.id}`, {
@@ -4547,8 +4323,6 @@ class SecuritySystem {
         let warnCount = 0;
 
         if (acts.includes("warn")) {
-          // addWarn não chama API de moderação diretamente (a não ser via escalonamento,
-          // que já verifica permissão internamente)
           warnCount = await this.addWarn(guildId, userId, `${module}: ${reason}`, this.client.clientId, channelId);
         }
 
@@ -4591,14 +4365,7 @@ class SecuritySystem {
         );
       };
 
-      // ── Palavras proibidas, Anti-Spam, Links/Convites e Anti-Mass-Mention ──
-      // Não são mais detectados aqui: essas 4 categorias têm equivalente
-      // nativo no Discord AutoMod e a detecção acontece no servidor do
-      // Discord (ver Security/NativeAutoMod.js). Quando a ação configurada
-      // pede algo além de deletar/timeout (warn/kick/ban), isso é aplicado
-      // reativamente em handleAutoModExecution(), disparado pelo gateway.
 
-      // ── ANTI-CAPS (sem equivalente nativo) ──
       const capsCfg = s.anticaps;
       if (capsCfg?.enabled && !isIgnored(capsCfg)) {
         const min     = capsCfg.minLength || 10;
@@ -4613,7 +4380,6 @@ class SecuritySystem {
         }
       }
 
-      // ── ANTI-EMOJI (sem equivalente nativo) ──
       const emojiCfg = s.antiemoji;
       if (emojiCfg?.enabled && !isIgnored(emojiCfg)) {
         const max = emojiCfg.maxEmojis || 10;
@@ -4625,7 +4391,6 @@ class SecuritySystem {
         }
       }
 
-      // ── ARQUIVOS PROIBIDOS (sem equivalente nativo) ──
       const filesCfg = s.antifiles;
       if (filesCfg?.enabled && !isIgnored(filesCfg) && data.attachments?.length) {
         const blocked = (filesCfg.blockedExtensions || []).map(e => e.toLowerCase());
@@ -4642,15 +4407,6 @@ class SecuritySystem {
     } catch (err) { console.error("[Security] handleMessage:", err); }
   }
 
-  /**
-   * Disparado pelo gateway em AUTO_MODERATION_ACTION_EXECUTION — toda vez
-   * que uma regra nativa de AutoMod (badwords/antispam/antilinks/
-   * antimention) é acionada. A regra nativa já cuida de bloquear a
-   * mensagem e aplicar timeout quando configurado; aqui a Ayami só
-   * completa o que o Discord não pode fazer nativamente: registrar warn
-   * e aplicar kick/ban, além de mandar o alerta no canal de logs
-   * configurado (mesmo formato usado pelos outros módulos).
-   */
   async handleAutoModExecution(data) {
     try {
       const guildId = data.guild_id;
@@ -4669,7 +4425,7 @@ class SecuritySystem {
         { key: "antilinks",   cfg: s.antilinks,   label: s.antilinks?.invitesRuleId === ruleId ? "Convites" : "Links" },
       ];
       const match = moduleMap.find(m => m.cfg?.nativeRuleId === ruleId || m.cfg?.invitesRuleId === ruleId);
-      if (!match) return; // regra criada manualmente no Discord, fora do escopo da Ayami
+      if (!match) return; 
 
       const cfg = match.cfg;
       const acts = cfg.actions || [];
@@ -4700,7 +4456,6 @@ class SecuritySystem {
     }
   }
 
-  // Apply a single escalation action
   async _applyEscalationAction(guildId, userId, action, channelId, gId) {
     try {
       if (action === "warn_message") {
@@ -4754,34 +4509,11 @@ class SecuritySystem {
     } catch (err) { console.error("[Security] _applyEscalationAction:", err); }
   }
 
-  /**
-   * Envia um alerta de log de Segurança.
-   *
-   * ANTES: sempre ia pro `logs.channels.main`, e os toggles em
-   * `logs.types.*` (Moderação/AutoMod/Warns/Punições/Segurança) e o
-   * "Modo: Múltiplos Canais" existiam na tela de configuração mas não
-   * tinham NENHUM efeito real — todo mundo caía no mesmo canal único,
-   * sempre. Agora cada categoria tem seu próprio canal configurável
-   * (com fallback pro canal principal se não tiver um específico), e o
-   * toggle de tipo realmente impede o envio quando desativado.
-   *
-   * @param {string} guildId
-   * @param {string} message
-   * @param {'moderation'|'automod'|'warns'|'punishments'|'security'} category
-   */
-  /**
-   * @param {string} subKey  Chave do módulo específico (ex: "badwords") pra
-   *                         sobrepor o canal da categoria — só é honrado se
-   *                         o servidor tiver a assinatura que libera isso
-   *                         (ver hasAdvancedSystemsAccess). Sem assinatura,
-   *                         cai automaticamente no canal da categoria.
-   */
   async sendSecurityAlert(guildId, message, category = "security", subKey = null) {
     try {
       const guild = await this.getGuild(guildId);
       const sec   = this.getSecurity(guild);
 
-      // Toggle de tipo desativado explicitamente → não envia nada.
       if (sec.logs.types[category] === false) return;
 
       let channelId = null;

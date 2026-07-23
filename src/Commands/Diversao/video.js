@@ -140,7 +140,6 @@ module.exports = {
     async execute(interaction, client) {
         const subcommand = interaction.data.options[0].name;
 
-        // Defer imediatamente — vídeo demora bem mais que imagem
         await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
             method: 'POST',
             body: { type: 5 }
@@ -162,7 +161,6 @@ module.exports = {
     }
 };
 
-// ─── /video homer ─────────────────────────────────────────────────────────────
 
 async function _homer(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -173,7 +171,6 @@ async function _homer(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment    = interaction.data.resolved?.attachments?.[attachmentId];
@@ -209,14 +206,12 @@ async function _homer(interaction, client) {
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza vídeo ───────────────────────────────────────────────────
     const buffer = await client.MediaManager.Video.Render({
         Template:    'homer',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -230,7 +225,6 @@ async function _homer(interaction, client) {
     });
 }
 
-// ─── /video what ─────────────────────────────────────────────────────────────
 
 async function _what(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -241,7 +235,6 @@ async function _what(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment    = interaction.data.resolved?.attachments?.[attachmentId];
@@ -277,14 +270,12 @@ async function _what(interaction, client) {
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza vídeo ───────────────────────────────────────────────────
     const buffer = await client.MediaManager.Video.Render({
         Template:    'what',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -298,7 +289,6 @@ async function _what(interaction, client) {
     });
 }
 
-// ─── /video Henry Danger ─────────────────────────────────────────────────────────────
 
 async function _henrydanger(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -309,7 +299,6 @@ async function _henrydanger(interaction, client) {
     let avatarUrl1    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment    = interaction.data.resolved?.attachments?.[attachmentId];
@@ -345,14 +334,12 @@ async function _henrydanger(interaction, client) {
         avatarUrl1  = _getAvatarURL(user);
     }
 
-    // ── Renderiza vídeo ───────────────────────────────────────────────────
     const buffer = await client.MediaManager.Video.Render({
         Template:    'henrydanger',
         avatarUrl1,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -366,7 +353,6 @@ async function _henrydanger(interaction, client) {
     });
 }
 
-// ─── /video Carta da Jujuba ─────────────────────────────────────────────────────────────
 
 async function _cartadajujuba(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -377,7 +363,6 @@ async function _cartadajujuba(interaction, client) {
     let avatarUrl1    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment    = interaction.data.resolved?.attachments?.[attachmentId];
@@ -413,14 +398,12 @@ async function _cartadajujuba(interaction, client) {
         avatarUrl1  = _getAvatarURL(user);
     }
 
-    // ── Renderiza vídeo ───────────────────────────────────────────────────
     const buffer = await client.MediaManager.Video.Render({
         Template:    'cartadajujuba',
         avatarUrl1,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -434,7 +417,6 @@ async function _cartadajujuba(interaction, client) {
     });
 }
 
-// ─── /video HomeLand ─────────────────────────────────────────────────────────────
 
 async function _homelander(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -445,7 +427,6 @@ async function _homelander(interaction, client) {
     let avatarUrl1    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment    = interaction.data.resolved?.attachments?.[attachmentId];
@@ -481,14 +462,12 @@ async function _homelander(interaction, client) {
         avatarUrl1  = _getAvatarURL(user);
     }
 
-    // ── Renderiza vídeo ───────────────────────────────────────────────────
     const buffer = await client.MediaManager.Video.Render({
         Template:    'homelander',
         avatarUrl1,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -503,7 +482,6 @@ async function _homelander(interaction, client) {
 }
 
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function _getAvatarURL(user) {
     if (!user?.avatar)

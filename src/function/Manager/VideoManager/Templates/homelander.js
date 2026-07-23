@@ -50,7 +50,6 @@ class HomerLanderTemplate extends BaseVideo {
             if (DEBUG) _drawDebug(ctx, coords, slot, frameIndex);
         }
 
-        // Frame base + chroma key — carrega direto do disco, 1 frame por vez.
         const { dir, files } = this._baseFramesDir;
         const baseFramePath  = path.join(dir, files[frameIndex % files.length]);
         const baseFrame      = await loadImage(baseFramePath);
@@ -59,7 +58,7 @@ class HomerLanderTemplate extends BaseVideo {
         bgCtx.drawImage(baseFrame, 0, 0, W, H);
         chromaKeyGreen(bgCtx, W, H, 160, false);
         ctx.drawImage(bgCanvas, 0, 0);
-        _freeCanvas(bgCanvas); // já foi copiado pro canvas principal, libera logo
+        _freeCanvas(bgCanvas); 
 
         if (DEBUG && slot) {
             _drawDebugOver(ctx, _calcCoords(slot), slot, frameIndex);
@@ -67,12 +66,10 @@ class HomerLanderTemplate extends BaseVideo {
         }
 
         const buffer = canvas.toBuffer('image/png');
-        _freeCanvas(canvas); // idem — já temos o Buffer, não precisa mais do canvas nativo
+        _freeCanvas(canvas); 
         return buffer;
     }
 
-    // Chamado automaticamente pelo VideoRenderer ao final do render
-    // (sucesso ou erro) — apaga o diretório de frames extraídos do disco.
     dispose() {
         FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
         this._baseFramesDir = null;
@@ -108,7 +105,6 @@ function _getSlot(frameIndex) {
     return null;
 }
 
-// ─── Calcula os 3 cantos a partir do slot ─────────────────────────────────────
 
 function _calcCoords({ x, y, w, h, skewX, skewY }) {
     return {
@@ -127,7 +123,6 @@ function _calcCoords({ x, y, w, h, skewX, skewY }) {
     };
 }
 
-// ─── Perspectiva ──────────────────────────────────────────────────────────────
 
 function _drawPerspective(ctx, canvasModule, img, { topoEsq, topDir, baixEsq }) {
     const tW = topDir.x  - topoEsq.x;
@@ -147,29 +142,16 @@ function _drawPerspective(ctx, canvasModule, img, { topoEsq, topDir, baixEsq }) 
     ctx.drawImage(tmp, 0, 0, tW, tH);
     ctx.restore();
 
-    // Libera a memória nativa do canvas temporário imediatamente. O V8 não
-    // sente pressão de heap por causa desse objeto (o wrapper JS é minúsculo,
-    // o buffer de pixels é nativo/Cairo), então sem isso ele fica esperando
-    // um GC que pode demorar — e com 1 canvas desses por frame, 360 frames
-    // seguidos acumulam memória nativa bem mais rápido do que o V8 percebe.
     _freeCanvas(tmp);
 }
 
-/**
- * Zera as dimensões do canvas para forçar o Cairo a liberar o buffer de
- * pixels nativo na hora, em vez de esperar o GC do V8 coletar o wrapper JS.
- *
- * @param {import('canvas').Canvas} canvas
- */
 function _freeCanvas(canvas) {
     if (!canvas) return;
     try { canvas.width = 0; canvas.height = 0; } catch {}
 }
 
-// ─── Debug ────────────────────────────────────────────────────────────────────
 
 function _drawDebug(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
-    // Linha do contorno
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,0,0.7)';
     ctx.lineWidth   = 1;
@@ -197,14 +179,11 @@ function _drawDebugOver(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
         ctx.fillStyle   = cor;
         ctx.lineWidth   = 2;
 
-        // Cruz
         ctx.beginPath(); ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8); ctx.stroke();
 
-        // Círculo
         ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fillStyle = cor; ctx.fill();
 
-        // Label
         ctx.font         = 'bold 11px Arial';
         ctx.fillStyle    = cor;
         ctx.strokeStyle  = '#000';
@@ -217,7 +196,6 @@ function _drawDebugOver(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
         ctx.restore();
     }
 
-    // Slot info no canto
     ctx.save();
     ctx.font         = 'bold 12px Arial';
     ctx.fillStyle    = '#FFFF00';

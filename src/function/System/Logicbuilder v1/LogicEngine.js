@@ -11,24 +11,14 @@ const DiscordRequest = require("../../DiscordRequest.js")
 
 
 const AUDIT_LOG_CHANNEL = '1511462019545563237';
-const MAX_CONCURRENT_FLOWS = 50; // por guild, evita flood
+const MAX_CONCURRENT_FLOWS = 50; 
 
-/**
- * Converte uma string de duração humana em milissegundos.
- * Aceita combinações como: "24h", "22h 10m", "1d 5h 30m", "90m", "2d".
- * Unidades: d (dias), h (horas), m (minutos), s (segundos).
- * Também aceita número puro (assume milissegundos, para compatibilidade
- * com cooldowns antigos salvos antes desta mudança).
- *
- * @param {string|number} input
- * @returns {number} duração em ms (0 se inválido/vazio)
- */
 function parseDuration(input) {
   if (input === undefined || input === null || input === '') return 0;
   if (typeof input === 'number') return Math.max(0, input);
 
   const str = String(input).trim().toLowerCase();
-  if (/^\d+$/.test(str)) return Number(str); // número puro = ms (legado)
+  if (/^\d+$/.test(str)) return Number(str); 
 
   const UNIT_MS = { d: 86_400_000, h: 3_600_000, m: 60_000, s: 1_000 };
   const regex   = /(\d+)\s*(d|h|m|s)/g;
@@ -44,11 +34,6 @@ function parseDuration(input) {
   return matched ? total : 0;
 }
 
-/**
- * Formata uma duração em ms para texto legível em português.
- * Ex: 86400000 → "24 horas" | 80400000 → "22 horas e 20 minutos"
- *     45000 → "45 segundos" | 0 → "agora"
- */
 function formatDuration(ms) {
   if (ms <= 0) return 'agora';
 
@@ -61,7 +46,6 @@ function formatDuration(ms) {
   if (days)    parts.push(`${days} dia${days > 1 ? 's' : ''}`);
   if (hours)   parts.push(`${hours} hora${hours > 1 ? 's' : ''}`);
   if (minutes) parts.push(`${minutes} minuto${minutes > 1 ? 's' : ''}`);
-  // Só mostra segundos se for a única unidade (evita "1 hora, 2 minutos e 14 segundos" verboso)
   if (!days && !hours && !minutes && seconds) parts.push(`${seconds} segundo${seconds > 1 ? 's' : ''}`);
 
   if (!parts.length) return 'menos de 1 minuto';
@@ -69,56 +53,34 @@ function formatDuration(ms) {
   return parts.slice(0, -1).join(', ') + ' e ' + parts[parts.length - 1];
 }
 
-/**
- * LogicEngine
- *
- * Orquestra o pipeline completo:
- *   TriggerRegistry → FlowModel lookup → ConditionEvaluator → ActionRunner
- *
- * Integra com o TaskManager existente para triggers de tempo.
- * Integra com NextMessageCollector para comandos personalizados.
- *
- * Exposição no client:
- *   client.logicEngine = new LogicEngine(client);
- *   client.logicEngine.start();
- */
 class LogicEngine {
 
   constructor(client) {
     this.client    = client;
     this._running  = false;
 
-    // Sub-sistemas
     this.triggerRegistry = new TriggerRegistry(client);
     this.conditionEval   = new ConditionEvaluator(client);
     this.actionRunner    = new ActionRunner(client);
 
-    // Rastreamento de execuções concorrentes por guild
-    this._concurrentMap = new Map();  // guildId → count
+    this._concurrentMap = new Map();  
 
-    // Cache de fluxos em memória (TTL 30s para reduzir queries)
-    this._flowCache    = new Map();   // `${guildId}:${category}:${type}` → { flows, expires }
+    this._flowCache    = new Map();   
     this._CACHE_TTL_MS = 30_000;
   }
 
-  /* ════════════════════������══════════════════════
-     INICIALIZAÇÃO
-     ═══════════════════════════════════════════ */
 
   start() {
     if (this._running) return;
     this._running = true;
 
-    // Escuta todos os eventos normalizados pelo TriggerRegistry
     this.triggerRegistry.on('trigger', ({ triggerCategory, triggerType, guildId, discordCtx }) => {
       this._onTrigger(triggerCategory, triggerType, guildId, discordCtx)
         .catch(err => console.error('[LogicEngine] Erro no pipeline de trigger:', err));
     });
 
-    // Registra o handler de comandos personalizados no NextMessageCollector existente
     this._hookCustomCommands();
 
-    // Registra tarefas de tempo no TaskManager existente
     this._hookTaskManager();
 
     console.log('[LogicEngine] Iniciado.');
@@ -130,23 +92,15 @@ class LogicEngine {
     console.log('[LogicEngine] Parado.');
   }
 
-  /* ═══════════════════════════════════════════
-     GATEWAY HANDLER
-     Chamado pelo gateway handler do bot para cada evento
-     ═══════════════════════════════════════════ */
 
   handleGateway(payload) {
     this.triggerRegistry.handle(payload);
   }
 
-  /* ═══════════════════════════════════════════
-     PIPELINE PRINCIPAL
-     ═══════════════════════════════════════════ */
 
   async _onTrigger(triggerCategory, triggerType, guildId, discordCtx) {
     if (!guildId) return;
 
-    // Limita concorrência por guild
     const current = this._concurrentMap.get(guildId) || 0;
     if (current >= MAX_CONCURRENT_FLOWS) {
       console.warn(`[LogicEngine] Guild ${guildId} atingiu limite de fluxos concorrentes.`);
@@ -169,9 +123,6 @@ class LogicEngine {
     await Promise.allSettled(promises);
   }
 
-  /* ═══════════════════════════════════════════
-     EXECUÇÃO DE UM FLUXO
-     ═══════════════════════════════════════════ */
 
   async _runFlow(flow, discordCtx) {
     const start = Date.now();
@@ -179,7 +130,6 @@ class LogicEngine {
     let errorMsg = null;
 
     try {
-      // ── Cooldown check ──
       if (flow.cooldown > 0 && discordCtx.userId) {
         const expires = flow.cooldownMap?.[discordCtx.userId] || 0;
         const remaining = expires - Date.now();
@@ -190,26 +140,21 @@ class LogicEngine {
         }
       }
 
-      // ── Contexto de execução ──
       const ctx = new ExecutionContext({ flow, discordCtx, client: this.client });
      ctx.runtimeVars = await this._loadGlobalVars(discordCtx.guildId); 
       await ctx.loadPersistent();
       
 
-      // ── Avaliação de condições ──
       const condOk = await this.conditionEval.evaluate(flow.conditions, ctx);
       if (!condOk) {
         result = 'condition_blocked';
         return;
       }
 
-      // ── Execução de ações ──
       await this.actionRunner.run(flow.actions, ctx, flow.executionMode);
 
-      // ── Salva variáveis persistentes ──
       await ctx.savePersistent();
 
-      // ── Atualiza cooldown ──
       if (flow.cooldown > 0 && discordCtx.userId) {
         const expiresAt = Date.now() + flow.cooldown;
         flow.cooldownMap = { ...(flow.cooldownMap || {}), [discordCtx.userId]: expiresAt };
@@ -219,7 +164,6 @@ class LogicEngine {
         );
       }
 
-      // ── Invalida cache deste fluxo (stats) ──
       this._invalidateCache(discordCtx.guildId, flow.trigger.category, flow.trigger.type);
 
     } catch (err) {
@@ -229,14 +173,12 @@ class LogicEngine {
     } finally {
       const duration = Date.now() - start;
 
-      // Atualiza stats no banco (fire-and-forget)
       const statsUpdate = { $inc: { 'stats.totalRuns': 1 }, $set: { 'stats.lastRunAt': new Date() } };
       if (result === 'success') statsUpdate.$inc['stats.successRuns'] = 1;
       if (result === 'failed')  statsUpdate.$inc['stats.failedRuns']  = 1;
 
       FlowModel.updateOne({ flowId: flow.flowId }, statsUpdate).catch(() => {});
 
-      // Log de execução (apenas se falhou ou debug ativo)
       if (result !== 'condition_blocked') {
         FlowRunLogModel.create({
           flowId:   flow.flowId,
@@ -250,10 +192,6 @@ class LogicEngine {
     }
   }
 
-  /**
-   * Envia a mensagem de cooldown ativo. Usa reply na interação se disponível
-   * (ephemeral, não enche o canal), senão envia no canal normalmente.
-   */
   async _sendCooldownWarning(discordCtx, remainingMs) {
     const timeText = formatDuration(remainingMs);
     const content  = `⏳ Ainda faltam **${timeText}** pra poder usar isso de novo!`;
@@ -276,10 +214,6 @@ class LogicEngine {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     EXECUÇÃO PÚBLICA (por ID)
-     Usado por ações "run_flow" e TaskManager
-     ═══════════════════════════════════════════ */
 
   async runById(flowId, discordCtx) {
     const flow = await FlowModel.findOne({ flowId, enabled: true }).lean();
@@ -287,9 +221,6 @@ class LogicEngine {
     return this._runFlow(flow, discordCtx);
   }
 
-  /* ═══════════════════════════════════════════
-     LOOKUP DE FLUXOS COM CACHE
-     ═══════════════════════════════════════════ */
 
   async _findFlows(guildId, triggerCategory, triggerType) {
     const key    = `${guildId}:${triggerCategory}:${triggerType}`;
@@ -315,28 +246,15 @@ class LogicEngine {
     this._flowCache.delete(key);
   }
 
-  /**
-   * Invalida todo o cache de uma guild.
-   * Chamado quando um fluxo é criado/editado/deletado.
-   */
   invalidateGuildCache(guildId) {
     for (const key of this._flowCache.keys()) {
       if (key.startsWith(`${guildId}:`)) this._flowCache.delete(key);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     HOOK: COMANDOS PERSONALIZADOS
-     Integra com o NextMessageCollector existente
-     ═══════════════════════════════════════════ */
 
   _hookCustomCommands() {
-    // NextMessageCollector chama _runPipeline em cada mensagem.
-    // Adicionamos nosso handler sem alterar o arquivo original —
-    // basta que o gateway handler chame handleGateway() com MESSAGE_CREATE.
-    // O LogicEngine processa triggers de comando via _handleCustomCommand.
 
-    // Adiciona handler especial para comandos customizados
     this.triggerRegistry.on('trigger', async ({ triggerCategory, triggerType, guildId, discordCtx }) => {
       if (triggerCategory !== 'message' || triggerType !== 'message_created') return;
 
@@ -364,7 +282,6 @@ class LogicEngine {
 
     if (!matched) continue;
 
-    // cooldown
     if (cmd.cooldown > 0) {
       const expires   = cmd.cooldownMap?.[discordCtx.userId] || 0;
       const remaining = expires - Date.now();
@@ -374,7 +291,6 @@ class LogicEngine {
       }
     }
 
-    // executa apenas o fluxo vinculado a este comando
     await this.runById(cmd.flowId, {
       ...discordCtx,
       customData: {
@@ -383,7 +299,6 @@ class LogicEngine {
       }
     });
 
-    // atualiza cooldown
     if (cmd.cooldown > 0) {
       const expiresAt = Date.now() + cmd.cooldown;
       CustomCommandModel.updateOne(
@@ -391,9 +306,6 @@ class LogicEngine {
         { $set: { [`cooldownMap.${discordCtx.userId}`]: expiresAt } }
       ).catch(() => {});
 
-      // Invalida o cache de comandos deste guild — sem isso, uma segunda
-      // execução dentro da mesma janela de cache (60s) lê a cópia antiga
-      // do comando, sem o cooldownMap atualizado, e o cooldown não bloqueia.
       this._flowCache.delete(`cmd:${guildId}`);
     }
 
@@ -411,16 +323,11 @@ async _getCustomCommands(guildId) {
   return commands;
 }
 
-  /* ═══════════════════════════════════════════
-     HOOK: TASK MANAGER (triggers de tempo)
-     Registra novos tipos de task no TaskManager existente
-     ═══════════════════════════════════════════ */
 
   _hookTaskManager() {
     const tm = this.client.taskManager;
     if (!tm) return;
 
-    // Estende o execute() do TaskManager para reconhecer os novos tipos
     const originalExecute = tm.execute.bind(tm);
 
     tm.execute = async (task) => {
@@ -442,14 +349,12 @@ async _getCustomCommands(guildId) {
         }
 
         case 'time_trigger': {
-          // Trigger de tempo: dispara um fluxo específico
           const { flowId, guildId } = task.dados;
           await this.runById(flowId, { guildId, channelId: null, userId: null });
           break;
         }
 
         default:
-          // Repassa para os handlers originais do TaskManager
           await originalExecute(task);
       }
     };
@@ -457,14 +362,7 @@ async _getCustomCommands(guildId) {
     console.log('[LogicEngine] TaskManager hooked.');
   }
 
-  /* ═══════════════════════════════════════════
-     GERENCIAMENTO DE FLUXOS (CRUD)
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Cria um novo fluxo.
-   * @param {{ guildId, name, trigger, conditions?, actions?, variables?, options? }} data
-   */
   async createFlow(data) {
     const { randomUUID } = require('crypto');
     const flow = await FlowModel.create({
@@ -546,10 +444,8 @@ async _getCustomCommands(guildId) {
   enabled: flow.enabled
 }).catch(() => {});
 
-  // ── Horário agendado ──
   if (flow.trigger?.type === 'scheduled_trigger') {
     if (flow.enabled) {
-      // ativa — cria a task
       const { hour = 0, minute = 0 } = flow.trigger.filters || {};
       const task = await this.client.taskManager.createScheduled({
         guildId,
@@ -557,13 +453,11 @@ async _getCustomCommands(guildId) {
         hour:   Number(hour),
         minute: Number(minute)
       });
-      // salva o taskId no fluxo para poder cancelar depois
       await FlowModel.updateOne(
   { flowId },
   { $set: { 'trigger.filters.taskId': task.taskId } }
 );
     } else {
-      // desativa — cancela a task
       const taskId = flow.trigger.filters?.taskId;
       if (taskId) await this.client.taskManager.cancel(taskId);
     }
@@ -576,7 +470,6 @@ async _getCustomCommands(guildId) {
 
 async _auditLog(action, guildId, data) {
   try {
-    // busca nome do servidor
     const guild = await DiscordRequest(`/guilds/${guildId}`).catch(() => null);
     const guildName = guild?.name || guildId;
 
@@ -596,7 +489,6 @@ async _auditLog(action, guildId, data) {
     if (data.name)    fields.push({ name: '📌 Nome',    value: data.name,    inline: true });
     if (data.enabled !== undefined) fields.push({ name: '⚡ Status', value: data.enabled ? '🟢 Ativo' : '🔴 Desativado', inline: true });
 
-    // Trigger
     if (data.trigger) {
       const t = data.trigger;
       fields.push({
@@ -607,7 +499,6 @@ async _auditLog(action, guildId, data) {
       });
     }
 
-    // Condições
     if (data.conditions?.length) {
       const lines = data.conditions.map((c, i) =>
         `${i + 1}. \`${c.category}:${c.type}\`` +
@@ -617,7 +508,6 @@ async _auditLog(action, guildId, data) {
       fields.push({ name: `🔍 Condições (${data.conditions.length})`, value: lines.slice(0, 1024), inline: false });
     }
 
-    // Ações
     if (data.actions?.length) {
       const lines = data.actions
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -628,7 +518,6 @@ async _auditLog(action, guildId, data) {
       fields.push({ name: `⚡ Ações (${data.actions.length})`, value: lines.slice(0, 1024), inline: false });
     }
 
-    // Variáveis
     if (data.variables?.length) {
       const lines = data.variables.map(v =>
         `• \`${v.name}\` (${v.type}/${v.scope || 'flow'}) = \`${JSON.stringify(v.defaultValue)}\`${v.persistent ? ' 💾' : ''}`
@@ -636,7 +525,6 @@ async _auditLog(action, guildId, data) {
       fields.push({ name: `📦 Variáveis (${data.variables.length})`, value: lines.slice(0, 1024), inline: false });
     }
 
-    // Comando
     if (data.prefix && data.commandName) {
       fields.push({
         name:  '🔧 Comando',
@@ -666,9 +554,6 @@ async _auditLog(action, guildId, data) {
   }
 }
 
-  /* ═══════════════════════════════════════════
-     GERENCIAMENTO DE COMANDOS PERSONALIZADOS
-     ═══════════════════════════════════════════ */
 
   async createCommand(data) {
     const { randomUUID } = require('crypto');

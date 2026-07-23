@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Tighnari
- * Elemento: Dendro | Raridade: 5 estrelas
- * Role: DPS, Sub-DPS
- *
- * Mecânicas únicas:
- * - Atira flechas Dendro de carregamento rápido após habilidade
- * - Altamente escalável com Proficiência Elemental
- */
 module.exports = {
     nome:     'Tighnari',
     raridade: '5',

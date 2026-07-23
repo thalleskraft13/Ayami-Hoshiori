@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Amber
- * Elemento: Pyro | Raridade: 4 estrelas
- * Role: Sub-DPS, suporte básico
- *
- * Mecânicas únicas:
- * - Barão Coelho: isca que explode
- * - Chuva de Flechas: dano em área com aplicação Pyro
- */
 module.exports = {
     nome:     'Amber',
     raridade: '4',

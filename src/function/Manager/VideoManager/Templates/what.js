@@ -19,16 +19,12 @@ class WhatTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl, avatarBuffer } = data;
 
-        // ── Frames do vídeo base ficam no disco, nunca todos na RAM ────────
-        // (antes: extractFrames carregava tudo como Buffers de uma vez,
-        // causando o pico de memória no render de vídeo).
         if (!this._baseFramesDir) {
             const videoPath = context.assets.videos.get('what');
             if (!videoPath) throw new Error('[What] Asset "what" não encontrado em videos/.');
 
             this._baseFramesDir = await FFmpeg.extractFramesToDir(videoPath, 15);
 
-            // Expõe o caminho do vídeo para o VideoRenderer extrair o áudio
             this.constructor._audioSourcePath = videoPath;
         }
 
@@ -38,13 +34,9 @@ class WhatTemplate extends BaseVideo {
         const canvas = canvasModule.createCanvas(W, H);
         const ctx    = canvas.getContext('2d');
 
-        // Frame base — carrega direto do disco, 1 frame por vez.
         const { dir, files } = this._baseFramesDir;
         const baseFrame = await loadImage(path.join(dir, files[frameIndex % files.length]));
 
-        // Avatar decodificado uma única vez e reaproveitado em todos os
-        // frames (antes: era baixado do cache e decodificado de novo em
-        // cada um dos ~86 frames).
         if (!this._avatarImg && (avatarUrl || avatarBuffer)) {
             this._avatarImg = avatarBuffer
                 ? await loadImage(avatarBuffer)
@@ -79,8 +71,6 @@ class WhatTemplate extends BaseVideo {
         return buffer;
     }
 
-    // Chamado automaticamente pelo VideoRenderer ao final do render
-    // (sucesso ou erro) — apaga o diretório de frames extraídos do disco.
     dispose() {
         FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
         this._baseFramesDir = null;
@@ -88,12 +78,6 @@ class WhatTemplate extends BaseVideo {
     }
 }
 
-/**
- * Zera as dimensões do canvas para forçar o Cairo a liberar o buffer de
- * pixels nativo na hora, em vez de esperar o GC do V8 coletar o wrapper JS.
- *
- * @param {import('canvas').Canvas} canvas
- */
 function _freeCanvas(canvas) {
     if (!canvas) return;
     try { canvas.width = 0; canvas.height = 0; } catch {}

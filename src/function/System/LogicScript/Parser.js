@@ -1,11 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — PARSER v2
-   Adições:
-   - new EmbedBuilder() → NewExpression node
-   - on command("nome", ...) aceita string como 1º arg
-   ═══════════════════════════════════════════ */
 
 const { TokenType, LexerError } = require('./Lexer.js');
 
@@ -79,7 +73,7 @@ class Parser {
   }
 
   _parseFunctionDecl(isExported = false) {
-    this._advance(); // 'function'
+    this._advance(); 
     const name   = this._expect(TokenType.IDENT, 'Nome da função esperado').value;
     const params = this._parseParamList();
     const body   = this._parseBlock([TokenType.END]);
@@ -156,12 +150,8 @@ class Parser {
     return { type: 'ForNum', var: varName, start, limit, step, body };
   }
 
-  /* ══════════════════════════════════════
-     on evento(params)
-     Suporta string como 1º arg: on command("ping", user, args)
-     ══════════════════════════════════════ */
   _parseOnEvent() {
-    this._advance(); // 'on'
+    this._advance(); 
     const eventName = this._expect(TokenType.IDENT, 'Nome do evento esperado').value;
 
     this._expect(TokenType.LPAREN, "'(' esperado");
@@ -169,7 +159,6 @@ class Parser {
     let commandName = null;
     const params    = [];
 
-    // Verificar se primeiro token é uma string (ex: on command("ping", ...))
     if (this._check(TokenType.STRING)) {
       commandName = this._advance().value;
       if (this._match(TokenType.COMMA)) {
@@ -234,9 +223,6 @@ class Parser {
     return { type: 'ExprStmt', expr };
   }
 
-  /* ══════════════════════════════════════
-     EXPRESSÕES
-     ══════════════════════════════════════ */
   _parseExpression() { return this._parseOr(); }
 
   _parseOr() {
@@ -297,9 +283,8 @@ class Parser {
     if (this._check(TokenType.NOT)) { this._advance(); return { type: 'UnaryOp', op: 'not', operand: this._parseUnary() }; }
     if (this._check(TokenType.MINUS)) { this._advance(); return { type: 'UnaryOp', op: '-', operand: this._parseUnary() }; }
 
-    // ── new ClassName(...) ──
     if (this._check(TokenType.IDENT) && this._current().value === 'new') {
-      this._advance(); // consome 'new'
+      this._advance(); 
       const name = this._expect(TokenType.IDENT, 'Nome da classe esperado').value;
       const args = this._parseArgList();
       return { type: 'NewExpression', name, args };

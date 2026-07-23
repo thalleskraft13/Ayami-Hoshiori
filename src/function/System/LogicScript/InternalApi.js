@@ -1,21 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — BOT INTERNAL API v2
-   Arquivo: src/function/System/LogicScript/InternalApi.js
-
-   Rotas:
-   POST /internal/logicscript/invalidate         → invalida cache de handlers
-   POST /internal/logicscript/invalidate-config  → invalida cache de configuração
-   POST /internal/logicscript/validate           → valida sintaxe
-   POST /internal/logicscript/run               → executa script
-   POST /internal/logicscript/emit              → dispara custom event
-
-   Adicione no DiscordGatewayClient.js:
-     const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
-     // após o bot estar pronto:
-     startInternalApi(this);
-   ═══════════════════════════════════════════ */
 
 const http = require('http');
 
@@ -29,7 +13,6 @@ function startInternalApi(client) {
 
   _server = http.createServer(async (req, res) => {
 
-    /* ── Auth ── */
     const auth = req.headers['authorization'] ?? '';
     if (INTERNAL_SECRET && auth !== INTERNAL_SECRET) {
       res.writeHead(403);
@@ -37,7 +20,6 @@ function startInternalApi(client) {
       return;
     }
 
-    /* ── Body ── */
     let body = '';
     for await (const chunk of req) body += chunk;
     let data = {};
@@ -48,7 +30,6 @@ function startInternalApi(client) {
     const url    = req.url;
     const runner = client.logicScriptRunner;
 
-    /* ── Invalidar cache de handlers ── */
     if (url === '/internal/logicscript/invalidate' && req.method === 'POST') {
       if (data.guildId && runner) runner.invalidateCache(data.guildId);
       res.writeHead(200);
@@ -56,7 +37,6 @@ function startInternalApi(client) {
       return;
     }
 
-    /* ── Invalidar cache de configuração ── */
     if (url === '/internal/logicscript/invalidate-config' && req.method === 'POST') {
       if (data.guildId && runner) runner.invalidateConfig(data.guildId);
       res.writeHead(200);
@@ -64,7 +44,6 @@ function startInternalApi(client) {
       return;
     }
 
-    /* ── Validar sintaxe ── */
     if (url === '/internal/logicscript/validate' && req.method === 'POST') {
       if (!runner) {
         res.writeHead(503);
@@ -77,7 +56,6 @@ function startInternalApi(client) {
       return;
     }
 
-    /* ── Executar script manualmente ── */
     if (url === '/internal/logicscript/run' && req.method === 'POST') {
       if (!runner) {
         res.writeHead(503);
@@ -98,7 +76,6 @@ function startInternalApi(client) {
       return;
     }
 
-    /* ── Disparar evento customizado ── */
     if (url === '/internal/logicscript/emit' && req.method === 'POST') {
       if (!runner) {
         res.writeHead(503);

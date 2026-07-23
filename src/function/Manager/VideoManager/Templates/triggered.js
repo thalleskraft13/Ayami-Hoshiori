@@ -2,16 +2,6 @@
 
 const BaseVideo = require('../BaseVideo');
 
-/**
- * "TRIGGERED" meme GIF.
- * Shakes the avatar randomly and overlays a red tint + TRIGGERED text.
- *
- * @example
- * const gif = await MediaManager.Video.Render({
- *     Template:  'triggered',
- *     avatarUrl: 'https://cdn.discordapp.com/avatars/…',
- * });
- */
 class TriggeredTemplate extends BaseVideo {
 
     static get templateName() { return 'triggered'; }
@@ -38,7 +28,6 @@ class TriggeredTemplate extends BaseVideo {
         const canvas = canvasModule.createCanvas(W, H);
         const ctx    = canvas.getContext('2d');
 
-        // ── 1. Load avatar ────────────────────────────────────────────────
         let avatarImg;
         if (avatarBuffer) {
             avatarImg = await loadImage(avatarBuffer);
@@ -46,11 +35,9 @@ class TriggeredTemplate extends BaseVideo {
             avatarImg = await this.loadAvatar(context, avatarUrl, avatarSize);
         }
 
-        // ── 2. Random shake offset (different every frame) ────────────────
-        const shakeX = Math.floor(Math.random() * 20) - 10; // -10 to +10
+        const shakeX = Math.floor(Math.random() * 20) - 10; 
         const shakeY = Math.floor(Math.random() * 20) - 10;
 
-        // ── 3. Draw avatar with shake ─────────────────────────────────────
         if (avatarImg) {
             ctx.drawImage(avatarImg, shakeX, shakeY, avatarSize + 10, avatarSize + 10);
         } else {
@@ -58,19 +45,16 @@ class TriggeredTemplate extends BaseVideo {
             ctx.fillRect(0, 0, W, avatarSize);
         }
 
-        // ── 4. Red tint overlay (random intensity per frame) ──────────────
-        const redIntensity = 0.2 + Math.random() * 0.25; // 0.20–0.45
+        const redIntensity = 0.2 + Math.random() * 0.25; 
         ctx.fillStyle = `rgba(255, 0, 0, ${redIntensity})`;
         ctx.fillRect(0, 0, W, avatarSize);
 
-        // ── 5. TRIGGERED bar at the bottom ───────────────────────────────
         const barY = avatarSize;
-        const barH = H - avatarSize; // 44px
+        const barH = H - avatarSize; 
 
         ctx.fillStyle = '#FF0000';
         ctx.fillRect(0, barY, W, barH);
 
-        // Text shake
         const txtShakeX = Math.floor(Math.random() * 8) - 4;
         const txtShakeY = Math.floor(Math.random() * 4) - 2;
 

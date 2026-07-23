@@ -7,11 +7,6 @@ const getPerm        = require('../../Utils/GetPerm.js');
 const holeHighter    = require('../../Utils/RoleHigher.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
-/* ─────────────────────────────────────────────
-   EMOJIS DA AYAMI — client.emoji
-   ───────────────────────────────────────────── */
-// Usado como: AYAMI.feliz  →  "<:ayamifeliz:...>"
-// (acesso real via this.client.emoji.<nome>)
 const AYAMI_FALLBACK = {
   default:    '<:ayami:1513904360407695370>',
   animada:    '<:ayamianimada:1513895694824378408>',
@@ -33,9 +28,6 @@ const AYAMI_FALLBACK = {
   sria:       '<:ayamisria:1513904083969380372>'
 };
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,   // azul principal (hoodie/meias)
   gold:    0xFFD966,   // dourado (estrelas)
@@ -47,14 +39,8 @@ const COLOR = {
   success: 0x57F287,   // verde Discord
 };
 
-/* ─────────────────────────────────────────────
-   LINK DO GUIA
-   ───────────────────────────────────────────── */
 const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
 
-/* ─────────────────────────────────────────────
-   CATÁLOGOS — label e metadados de cada tipo
-   ───────────────────────────────────────────── */
 
 const TRIGGER_CATALOG = [
   { category: 'time',      type: 'scheduled_trigger',      label: '🕐 Horário agendado',      description: 'Dispara em um horário específico todo dia' },
@@ -136,7 +122,6 @@ const CONDITION_CATALOG = [
   { category: 'time',        type: 'between',            label: '⏰ Entre horários',            params: ['from', 'to'] },
   { category: 'permission',  type: 'is_admin',           label: '🛡️ É administrador',           params: [] },
   { category: 'permission',  type: 'has_permission',     label: '🛡️ Tem permissão',             params: ['permSelect'] },
-  // ── Args ────────────────────────────────────────────────────
   { category: 'args', type: 'args_has_content', label: '📝 Args tem conteúdo',          params: ['errorMsg'] },
   { category: 'args', type: 'arg_is_type',      label: '🔍 Arg X é tipo específico',   params: ['argSelect', 'errorMsg'] },
 ];
@@ -193,42 +178,25 @@ const ACTION_CATALOG = [
   { category: 'webhook',  type: 'http_request',        label: '🌐 Requisição HTTP',             params: ['url', 'method'] }
 ];
 
-/* ─────────────────────────────────────────────
-   Quais params precisam de seleção de CANAL ou CARGO
-   via select-menu (ao invés de digitar ID)
-   ───────────────────────────────────────────── */
 const NEEDS_CHANNEL_SELECT = ['channelId', 'categoryId'];
 const NEEDS_ROLE_SELECT    = ['roleId'];
 
-/* ─────────────────────────────────────────────
-   Params opcionais (não obrigatórios no modal)
-   ───────────────────────────────────────────── */
 const OPTIONAL_PARAMS = [
   'reason', 'description', 'channelId', 'userId',
   'ephemeral', 'saveAs', 'messageId', 'embed', 'embedObj', 'interactionObj',
   'targetUserId', 'timeout', 'cancelMessage', 'baseValue', 'removeComponents'
 ];
 
-/* ─────────────────────────────────────────────
-   Params booleanos (sim/não) — usam Select Menu
-   dentro do modal em vez de campo de texto livre
-   ───────────────────────────────────────────── */
 const BOOLEAN_PARAMS = {
   ephemeral:        { label: 'Mensagem visível só para o usuário?',     yes: '👁️ Sim — só ele(a) vê (ephemeral)',   no: '📢 Não — todo mundo vê',                default: 'false' },
   removeComponents: { label: 'Remover os botões/selects da mensagem?', yes: '🗑️ Sim — remove tudo (padrão)',       no: '✅ Não — mantém os componentes atuais', default: 'true'  },
 };
 
-/* ─────────────────────────────────────────────
-   Params que NÃO entram no modal (resolvidos via select)
-   ───────────────────────────────────────────── */
 const NEEDS_ARG_SELECT    = ['argSelect'];
 const NEEDS_PERM_SELECT   = ['permSelect'];
 const NEEDS_THREAD_TARGET = ['threadTargetTypeSelect'];
 const SKIP_IN_MODAL = [...NEEDS_CHANNEL_SELECT, ...NEEDS_ROLE_SELECT, ...NEEDS_ARG_SELECT, ...NEEDS_PERM_SELECT, ...NEEDS_THREAD_TARGET];
 
-/* ─────────────────────────────────────────────
-   FLOW BUILDER
-   ───────────────────────────────────────────── */
 
 class FlowBuilder {
 
@@ -237,14 +205,11 @@ class FlowBuilder {
     this.ui     = ui;
   }
 
-  /* ── helper rápido para pegar emojis da Ayami ── */
   _e(name) {
     return this.client?.emoji?.[name] ?? AYAMI_FALLBACK[name] ?? '';
   }
 
-  /* ── botão de link para o guia ── */
   _guideButton() {
-    // Botão de link Discord (style 5) — não precisa de handler
     return {
       type:  2,
       style: 5,
@@ -253,9 +218,6 @@ class FlowBuilder {
     };
   }
 
-  /* ═══════════════════════════════════════════
-     CRIAR FLUXO
-     ═══════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
     const ayami = this._e('animada');
@@ -317,9 +279,6 @@ class FlowBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════════
-     MENU: TRIGGER
-     ═══════════════════════════════════════════ */
 
   async triggerMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -378,9 +337,6 @@ class FlowBuilder {
     return this.triggerMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Trigger definido: **${this.ui._triggerLabel({ category, type })}**` });
   }
 
-  /* ══════════════════════════════════════════════════════════════════════════
-     FILTROS DO TRIGGER — UI visual por categoria
-     ══════════════════════════════════════════════════════════════════════════ */
   async _triggerFilters(interaction, user, flowId) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
     if (!flow) return;
@@ -409,7 +365,6 @@ class FlowBuilder {
     }
   }
 
-  // ── Filtros: Mensagem ──────────────────────────────────────────────────────
   async _filterPanelMessage(interaction, user, flowId, type, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -509,7 +464,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Reação ────────────────────────────────────────────────────────
   async _filterPanelReaction(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -565,7 +519,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Membro ────────────────────────────────────────────────────────
   async _filterPanelMember(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -612,7 +565,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Voz ──────────────────────────────────────────────────────────
   async _filterPanelVoice(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const lines = [
@@ -649,7 +601,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Componente (botão/select/modal) ───────────────────────────────
   async _filterPanelComponent(interaction, user, flowId, type, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const typeLabel = type === 'button_clicked' ? 'Botão' : type === 'select_used' ? 'Select Menu' : 'Modal';
@@ -703,7 +654,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  // ── Filtros: Horário ──────────────────────────────────────────────────────
   async _filterPanelTime(interaction, user, flowId, filters, saveFilters) {
     const renderPanel = async (i, f) => {
       const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -797,9 +747,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-  /* ═══════════════════════════════════════════
-     MENU: CONDIÇÕES
-     ═══════════════════════════════════════════ */
 
   async conditionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow  = await this._getFlow(interaction.guild_id, flowId);
@@ -830,7 +777,6 @@ class FlowBuilder {
       selectRows.push(this.ui.row(select));
     }
 
-    // Select de edição de condição existente
     const editComponents = [];
     if (conds.length > 0) {
       const editSel = this.ui.select(
@@ -841,7 +787,6 @@ class FlowBuilder {
         }),
         '✏️ Editar condição existente',
         async (i) => {
-          // SEM deferUpdate — _editConditionSelect abre modal via showModal
           const condId = i.data.values[0];
           return this._editConditionSelect(i, user, flowId, condId);
         }
@@ -890,7 +835,6 @@ class FlowBuilder {
   async _addCondition(interaction, user, flowId, category, type) {
     const meta = CONDITION_CATALOG.find(c => c.category === category && c.type === type);
 
-    // Sem params — adiciona direto
     if (!meta?.params?.length) {
       await this.ui.deferUpdate(interaction);
       const flow  = await this._getFlow(interaction.guild_id, flowId);
@@ -900,17 +844,14 @@ class FlowBuilder {
       return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Condição **${meta?.label}** adicionada!` });
     }
 
-    // Verifica se precisa de canal/cargo via select
     const needsChannelOrRole = meta.params.some(p => SKIP_IN_MODAL.includes(p));
     const modalParams         = meta.params.filter(p => !SKIP_IN_MODAL.includes(p));
 
-    // Só tem params de canal/cargo — pula modal, vai direto pro select
     if (modalParams.length === 0) {
       await this.ui.deferUpdate(interaction);
       return this._resolveSelectParams(interaction, user, flowId, meta, {}, 'condition');
     }
 
-    // Tem params de texto — abre modal primeiro
     const components = modalParams.slice(0, 4).map(p => ({
       type: 1,
       components: [{
@@ -925,7 +866,6 @@ class FlowBuilder {
       }]
     }));
 
-    // Campo de operador (AND/OR) + negação — agora como selects, não texto livre
     components.push(
       this.ui.modalSelect('_operator', 'Como combinar com a condição anterior?', [
         { label: '✅ E (AND) — as duas precisam ser verdadeiras', value: 'AND', default: true },
@@ -956,12 +896,10 @@ class FlowBuilder {
           { method: 'POST', body: { type: 6 } }
         );
 
-        // Se ainda precisa de canal/cargo, vai pro select
         if (needsChannelOrRole) {
           return this._resolveSelectParams(modalInteraction, user, flowId, meta, params, 'condition');
         }
 
-        // Senão salva direto
         return this._saveCondition(modalInteraction, user, flowId, category, type, params);
       }
     });
@@ -984,7 +922,6 @@ class FlowBuilder {
     return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Condição **${meta?.label}** adicionada!` });
   }
 
-  /* ─── Editar condição existente ─── */
 
   async _editConditionSelect(interaction, user, flowId, condId) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -993,14 +930,11 @@ class FlowBuilder {
 
     const meta = CONDITION_CATALOG.find(c => c.category === cond.category && c.type === cond.type);
 
-    // Monta preview dos valores atuais
     const currentVals = Object.entries(cond.params || {})
       .map(([k, v]) => `**${this._paramLabel(k)}:** \`${v}\``)
       .join('\n') || '_Sem parâmetros_';
 
-    // Apenas abre o modal direto, sem followUp extra
 
-    // Reabre o fluxo de adição para essa condição, passando os valores existentes
     return this._openEditConditionModal(interaction, user, flowId, cond, meta);
   }
 
@@ -1011,7 +945,6 @@ class FlowBuilder {
 
     const modalParams = meta.params.filter(p => !SKIP_IN_MODAL.includes(p));
     if (!modalParams.length) {
-      // Só tem canal/cargo, vai pro select
       return this._resolveSelectParams(interaction, user, flowId, meta, { _condId: cond.id }, 'condition_edit');
     }
 
@@ -1085,9 +1018,6 @@ class FlowBuilder {
     return this.conditionsMenu(interaction, user, flowId, { successMsg: `${this._e('feliz')} Condição atualizada!` });
   }
 
-  /* ═══════════════════════════════════════════
-     MENU: AÇÕES
-     ═══════════════════════════════════════════ */
 
   async actionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
@@ -1118,7 +1048,6 @@ class FlowBuilder {
       selectRows.push(this.ui.row(select));
     }
 
-    // Select de edição de ação existente
     const editComponents = [];
     if (actions.length > 0) {
       const sorted = [...actions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -1130,8 +1059,6 @@ class FlowBuilder {
         }),
         '✏️ Editar ação existente',
         async (i) => {
-          // NÃO deferUpdate aqui — _editActionSelect abre modal via showModal
-          // e modal não pode ser aberto após a interação já ter sido acknowledged
           return this._editActionSelect(i, user, flowId, i.data.values[0]);
         }
       );
@@ -1180,7 +1107,6 @@ class FlowBuilder {
   async _addAction(interaction, user, flowId, category, type) {
     const meta = ACTION_CATALOG.find(a => a.category === category && a.type === type);
 
-    // Sem params — adiciona imediatamente
     if (!meta?.params?.length) {
       await this.ui.deferUpdate(interaction);
       const flow    = await this._getFlow(interaction.guild_id, flowId);
@@ -1190,22 +1116,18 @@ class FlowBuilder {
       return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('curtida')} Ação **${meta?.label}** adicionada!` });
     }
 
-    // Params que vão no modal (sem canal/cargo/embed)
     const modalParams = meta.params.filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed' && p !== 'embedObj');
     const hasEmbedObj = meta.params.includes('embedObj');
     const needsSelect = meta.params.some(p => SKIP_IN_MODAL.includes(p));
 
-    // Modal com os params de texto (embed é tratado depois pelo builder)
     if (modalParams.length > 0) {
       return this._openActionModal(interaction, user, flowId, meta, null, modalParams, false, needsSelect, hasEmbedObj);
     }
 
-    // Sem params de texto mas tem embedObj — vai direto pro ask
     if (hasEmbedObj) {
       return this._askEmbedOrSave(interaction, user, flowId, meta, {}, false, null, needsSelect);
     }
 
-    // Só precisa de canal/cargo — vai direto pro select
     await this.ui.deferUpdate(interaction);
     return this._resolveSelectParams(interaction, user, flowId, meta, {}, 'action');
   }
@@ -1214,7 +1136,6 @@ class FlowBuilder {
     const isEdit     = !!existingAction;
     const components = [];
 
-    // Params textuais
     for (const p of modalParams.slice(0, 4)) {
       if (BOOLEAN_PARAMS[p]) {
         const cfg = BOOLEAN_PARAMS[p];
@@ -1244,7 +1165,6 @@ class FlowBuilder {
       });
     }
 
-    // embedObj é tratado pelo builder visual, não por campo no modal
 
     const modal = this.client.interactions.createModal({
       user,
@@ -1265,23 +1185,19 @@ class FlowBuilder {
           { method: 'POST', body: { type: 6 } }
         );
 
-        // Se precisa de embed builder
         if (hasEmbedObj) {
           return this._askEmbedOrSave(modalInteraction, user, flowId, meta, params, isEdit, existingAction, needsSelect);
         }
 
-        // Se precisa de canal/cargo, vai pro select
         if (needsSelect && !isEdit) {
           return this._resolveSelectParams(modalInteraction, user, flowId, meta, params, 'action');
         }
 
-        // Se é edição com canal/cargo
         if (needsSelect && isEdit) {
           params._actionId = existingAction.id;
           return this._resolveSelectParams(modalInteraction, user, flowId, meta, params, 'action_edit');
         }
 
-        // Salva direto
         if (isEdit) {
           return this._applyActionEdit(modalInteraction, user, flowId, existingAction.id, params);
         }
@@ -1292,10 +1208,6 @@ class FlowBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // EMBED BUILDER integrado ao FlowBuilder
-  // Pergunta se quer embed, abre o builder e salva no params.embedObj
-  // ══════════════════════════════════════════════════════════════════════════
 
   async _askEmbedOrSave(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existingEmbed = params.embedObj ?? existingAction?.params?.embedObj ?? null;
@@ -1322,7 +1234,6 @@ class FlowBuilder {
 
     const buttons = hasEmbed ? [btnSim, btnNao] : [btnSim, btnNao];
 
-    // Também mostra botão "manter" se já tem embed e é edição
     const rows = [this.ui.row(...buttons)];
     if (hasEmbed && isEdit) {
       const btnManter = this.client.interactions.createButton({
@@ -1352,7 +1263,6 @@ class FlowBuilder {
   }
 
   async _afterEmbedDecision(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
-    // Só pergunta sobre interação se a ação suporta (tem 'interactionObj' no catálogo)
     if (meta.params.includes('interactionObj') && params._skipInteractionAsk !== true) {
       return this._askInteractionOrFinish(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect);
     }
@@ -1373,9 +1283,6 @@ class FlowBuilder {
     return this._saveAction(interaction, user, flowId, meta.category, meta.type, params);
   }
 
-  /* ══════════════════════════════════════════════════════════════════════════
-     INTERAÇÃO (Botão / Select vinculado a outro fluxo) — painel embutido
-     ══════════════════════════════════════════════════════════════════════════ */
 
   async _askInteractionOrFinish(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existing  = params.interactionObj ?? existingAction?.params?.interactionObj ?? null;
@@ -1461,9 +1368,7 @@ class FlowBuilder {
     });
   }
 
-  /* ── Botão vinculado a fluxo ── */
   async _buildInteractionButton(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
-    // Só fluxos cujo trigger é "Botão clicado" aparecem na lista
     const flows = await FlowModel.find({
       guildId:       interaction.guild_id,
       enabled:       true,
@@ -1532,7 +1437,6 @@ class FlowBuilder {
     });
   }
 
-  /* ── Select Menu vinculado a fluxos (cada opção = um fluxo) ── */
   async _buildInteractionSelect(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect, options) {
     const flows = await FlowModel.find({
       guildId:       interaction.guild_id,
@@ -1667,9 +1571,6 @@ class FlowBuilder {
     return renderPanel(interaction, initialOpts);
   }
 
-  /**
-   * Picker paginado de fluxos (25 por página) — reutilizado por botão e select.
-   */
   async _showFlowPicker(interaction, user, flows, page, onPick) {
     const PAGE_SIZE = 25;
     const pages     = Math.ceil(flows.length / PAGE_SIZE);
@@ -1716,7 +1617,6 @@ class FlowBuilder {
   }
 
   async _openFlowEmbedBuilder(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect, existingEmbed) {
-    // Estado do builder — apenas embed (sem content/botões, pois esses já estão em params)
     const embed = existingEmbed ? JSON.parse(JSON.stringify(existingEmbed)) : {
       title: '', description: '', color: 0x7C8FFF,
       url: '', author: { name: '', icon_url: '', url: '' },
@@ -1891,7 +1791,6 @@ class FlowBuilder {
         }
       });
 
-      // A embed renderizada É o preview em tempo real — cada edição re-renderiza
       return this.ui.editOriginal(i, {
         embeds: [{
           title:       embed.title       || `🎨 Editor de Embed ${this._e('animada')}`,
@@ -1921,7 +1820,6 @@ class FlowBuilder {
     const guildId = interaction.guild_id;
     const warnings = [];
 
-    // ── validação de permissões ──
     const idWarnings = await this._validateIds(guildId, params);
     warnings.push(...idWarnings);
 
@@ -1972,7 +1870,6 @@ class FlowBuilder {
 
     const flow    = await this._getFlow(guildId, flowId);
     const actions = flow.actions || [];
-    // JSON roundtrip garante que objetos aninhados (embedObj) são detectados pelo Mongoose
     const safeParams = JSON.parse(JSON.stringify(params));
     actions.push({ id: this._uid(), category, type, params: safeParams, order: actions.length });
     await this.client.logicEngine.updateFlow(flowId, guildId, { actions });
@@ -1984,7 +1881,6 @@ class FlowBuilder {
     return this.actionsMenu(interaction, user, flowId, { successMsg: msg });
   }
 
-  /* ─── Editar ação existente ─── */
 
   async _editActionSelect(interaction, user, flowId, actionId) {
     const flow   = await this._getFlow(interaction.guild_id, flowId);
@@ -1997,7 +1893,6 @@ class FlowBuilder {
       .map(([k, v]) => `**${this._paramLabel(k)}:** \`${String(v).slice(0, 50)}\``)
       .join('\n') || '_Sem parâmetros_';
 
-    // Apenas abre o modal direto, sem followUp extra
 
     const modalParams = (meta?.params || []).filter(p => !SKIP_IN_MODAL.includes(p) && p !== 'embed' && p !== 'embedObj');
     const hasEmbedObj = meta?.params?.includes('embedObj');
@@ -2018,21 +1913,13 @@ class FlowBuilder {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
     const actions = (flow?.actions || []).map(a => {
       if (a.id !== actionId) return a;
-      // JSON roundtrip garante que objetos aninhados (embedObj) são detectados pelo Mongoose
       return { ...a, params: JSON.parse(JSON.stringify(params)) };
     });
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { actions });
     return this.actionsMenu(interaction, user, flowId, { successMsg: `${this._e('feliz')} Ação atualizada!` });
   }
 
-  /* ═══════════════════════════════════════════
-     RESOLVER CANAL / CARGO VIA SELECT MENU
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Fluxo unificado para preencher channelId ou roleId via select.
-   * @param {string} mode 'action' | 'action_edit' | 'condition' | 'condition_edit'
-   */
   async _resolveSelectParams(interaction, user, flowId, meta, params, mode) {
     const needsChannel = meta.params.some(p => NEEDS_CHANNEL_SELECT.includes(p)) && params.channelId === undefined;
     const needsRole    = meta.params.some(p => NEEDS_ROLE_SELECT.includes(p))    && params.roleId    === undefined;
@@ -2046,12 +1933,10 @@ class FlowBuilder {
     if (needsPerm)    return this._showPermSelect(interaction, user, flowId, meta, params, mode);
     if (needsThread)  return this._showThreadTargetSelect(interaction, user, flowId, meta, params, mode);
 
-    // Não precisa de nenhum select — salva direto
     return this._finalizeSave(interaction, user, flowId, meta, params, mode);
   }
 
   async _showChannelSelect(interaction, user, flowId, meta, params, mode) {
-    // Usa Channel Select nativo do Discord (type 8) — options preenchidas automaticamente
     const channelSel = this.client.interactions.createChannelSelect({
       user,
       data: {
@@ -2078,7 +1963,6 @@ class FlowBuilder {
   }
 
   async _showRoleSelect(interaction, user, flowId, meta, params, mode) {
-    // Usa Role Select nativo do Discord (type 6) — options preenchidas automaticamente
     const roleSel = this.client.interactions.createRoleSelect({
       user,
       data: {
@@ -2103,7 +1987,6 @@ class FlowBuilder {
     });
   }
 
-  /* ── Permission Select — 3 páginas com todas as perms do Discord ── */
   async _showPermSelect(interaction, user, flowId, meta, params, mode) {
     const PERM_PAGES = [
       [
@@ -2201,7 +2084,6 @@ class FlowBuilder {
     return renderPage(interaction, 0);
   }
 
-  /* ── Thread Target Select — escolhe Usuário ou Cargo para adicionar ao tópico ── */
   async _showThreadTargetSelect(interaction, user, flowId, meta, params, mode) {
     const typeSel = this.client.interactions.createSelect({
       user,
@@ -2220,7 +2102,6 @@ class FlowBuilder {
           return this._showRoleSelect(i, user, flowId, meta, params, mode);
         }
 
-        // Usuário — pede o ID via modal (aceita {arg0}, menção ou ID puro)
         const modal = this.client.interactions.createModal({
           user,
           title: 'Usuário a adicionar',
@@ -2253,9 +2134,7 @@ class FlowBuilder {
     });
   }
 
-  /* ── Arg Select — escolhe índice e tipo do arg ── */
   async _showArgSelect(interaction, user, flowId, meta, params, mode) {
-    // Step 1: seleciona o índice do arg (0-4, exibidos como 1-5)
     const argIndexSel = this.client.interactions.createSelect({
       user,
       data: {
@@ -2325,7 +2204,6 @@ class FlowBuilder {
     delete params._condId;
 
     if (mode === 'action') {
-      // Edita a mensagem original e salva
       return this._saveAction(interaction, user, flowId, meta.category, meta.type, params);
     }
 
@@ -2350,7 +2228,6 @@ class FlowBuilder {
     }
   }
 
-  /* ─── validação de IDs ─── */
 
   async _validateIds(guildId, params) {
     const warnings = [];
@@ -2382,9 +2259,6 @@ class FlowBuilder {
     return warnings;
   }
 
-  /* ═══════════════════════════════════════════
-     MENU: VARIÁVEIS  (novo fluxo guiado)
-     ═══════════════════════════════════════════ */
 
   async variablesMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -2433,7 +2307,6 @@ class FlowBuilder {
     });
   }
 
-  /* ── PASSO 1: Escopo da variável ── */
   async _varStep1_Scope(interaction, user, flowId) {
     const sel = this.ui.select(
       user,
@@ -2473,7 +2346,6 @@ class FlowBuilder {
     });
   }
 
-  /* ── PASSO 2: Tipo de valor ── */
   async _varStep2_Type(interaction, user, flowId, scope) {
     const sel = this.ui.select(
       user,
@@ -2501,8 +2373,6 @@ class FlowBuilder {
       ],
       '📦 Qual o tipo de valor?',
       async (i) => {
-        // NÃO dar deferUpdate aqui — _varStep3_Name abre um modal (showModal),
-        // e modal não pode ser aberto após a interação já ter sido acknowledged.
         return this._varStep3_Name(i, user, flowId, scope, i.data.values[0]);
       }
     );
@@ -2522,7 +2392,6 @@ class FlowBuilder {
     });
   }
 
-  /* ── PASSO 3: Nome e persistência ── */
   async _varStep3_Name(interaction, user, flowId, scope, type) {
     const modal = this.client.interactions.createModal({
       user,
@@ -2570,7 +2439,6 @@ class FlowBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ── PASSO 4: Valor padrão ── */
   async _varStep4_DefaultValue(interaction, user, flowId, varData) {
     const defaultsByType = {
       string:  '`""` — texto vazio',
@@ -2579,7 +2447,6 @@ class FlowBuilder {
       list:    '`[]` — lista vazia'
     };
 
-    // Para listas, oferece opção de definir valores iniciais
     if (varData.type === 'list') {
       const sel = this.ui.select(
         user,
@@ -2602,12 +2469,10 @@ class FlowBuilder {
             await this.ui.deferUpdate(i);
             return this._saveVariable(i, user, flowId, { ...varData, defaultValue: [] });
           }
-          // Abre modal para definir itens iniciais
           return this._varListDefaultModal(i, user, flowId, varData);
         }
       );
 
-      // interaction vem de modal submit (type:6 já enviado) — editOriginal edita a mensagem do painel
       return this.ui.editOriginal(interaction, {
         embeds: [{
           title:       `📦 Criar Variável — Passo 4 de 4 ${this._e('festa')}`,
@@ -2622,8 +2487,6 @@ class FlowBuilder {
       });
     }
 
-    // Para outros tipos — cria modal e mostra via followUpEphemeral com botões
-    // (não é possível abrir modal a partir de modal submit — precisamos de um componente intermediário)
     const modal = this.client.interactions.createModal({
       user,
       title: `📦 Valor Padrão — ${varData.name}`,
@@ -2661,7 +2524,6 @@ class FlowBuilder {
 
     const defaultLabel = varData.type === 'number' ? '0' : varData.type === 'boolean' ? 'false' : 'vazio';
 
-    // interaction vem de modal submit — editOriginal edita a mensagem do painel com os botões
     return this.ui.editOriginal(interaction, {
       embeds: [{
         title:       `📦 Criar Variável — Passo 4 de 4 ${this._e('festa')}`,
@@ -2723,7 +2585,6 @@ class FlowBuilder {
     const flow = await this._getFlow(interaction.guild_id, flowId);
     const vars = flow.variables || [];
 
-    // Guarda de duplicidade (pode ter sido criada enquanto o usuário preenchia)
     if (vars.find(v => v.name === varData.name)) {
       return this.variablesMenu(interaction, user, flowId, {
         successMsg: `${this._e('emburrada')} Já existe uma variável chamada **${varData.name}**!`
@@ -2738,7 +2599,6 @@ class FlowBuilder {
       ? `[${defaultValue.join(', ') || 'vazio'}]`
       : String(defaultValue ?? 'null');
 
-    // Edita a mensagem do painel direto com confirmação + volta ao menu de variáveis
     return this.variablesMenu(interaction, user, flowId, {
       successMsg:
         `${this._e('festa')} **Variável \`${name}\` criada!** Use com \`{var:${name}}\` nas ações.\n` +
@@ -2746,9 +2606,6 @@ class FlowBuilder {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     MENU: CONFIGURAÇÕES
-     ═══════════════════════════════════════════ */
 
   async settingsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -2901,9 +2758,6 @@ class FlowBuilder {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════ */
 
   async _getFlow(guildId, flowId) {
     return FlowModel.findOne({ flowId, guildId }).lean();

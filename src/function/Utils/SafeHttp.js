@@ -1,38 +1,15 @@
 'use strict';
 
-/* ═══════════════════════════════════════════════════════════
-   SAFE HTTP — cliente HTTP protegido, compartilhado entre
-   Logic Script (function global `http`) e Logic Builder
-   (ações `http_request` / `send_webhook` do ActionRunner.js).
-
-   Antes desta atualização, `http_request`/`send_webhook` no
-   ActionRunner.js chamavam `fetch()` cru: sem timeout, sem
-   limite de tamanho de resposta, sem bloqueio de localhost/IP
-   privado e sem limite de requisições por execução — ou seja,
-   qualquer fluxo podia ser usado para SSRF contra a rede interna
-   (incluindo a própria API interna do bot em 127.0.0.1:3001).
-
-   Este módulo centraliza TODAS as proteções pedidas:
-     - Rate limit (por guild, janela deslizante)
-     - Timeout por requisição
-     - Limite de tamanho da resposta
-     - Bloqueio de localhost
-     - Bloqueio de IPs privados/reservados
-     - Limite de requisições por execução (contador passado pelo caller)
-     - Logs (o caller decide o que logar — ver LogicScript/Interpreter.js
-       e ActionRunner.js, que só logam ações que de fato saem pra rede)
-   ═══════════════════════════════════════════════════════════ */
 
 const dns = require('dns').promises;
 const { URL } = require('url');
 
-const DEFAULT_TIMEOUT_MS     = 10_000;       // 10s por requisição
-const MAX_RESPONSE_BYTES     = 2 * 1024 * 1024; // 2MB
-const MAX_REQUESTS_PER_RUN   = 10;           // por execução de script/fluxo
-const RATE_LIMIT_WINDOW_MS   = 60_000;       // janela de 1 minuto
-const RATE_LIMIT_MAX_REQUESTS = 30;          // por guild, por janela
+const DEFAULT_TIMEOUT_MS     = 10_000;       
+const MAX_RESPONSE_BYTES     = 2 * 1024 * 1024; 
+const MAX_REQUESTS_PER_RUN   = 10;           
+const RATE_LIMIT_WINDOW_MS   = 60_000;       
+const RATE_LIMIT_MAX_REQUESTS = 30;          
 
-// guildId -> array de timestamps das requisições feitas na janela atual
 const _rateLimitBuckets = new Map();
 
 class SafeHttpError extends Error {
@@ -42,32 +19,26 @@ class SafeHttpError extends Error {
   }
 }
 
-/* ─────────────────────────────────────────────
-   BLOQUEIO DE LOCALHOST / IP PRIVADO
-   ───────────────────────────────────────────── */
 
 function isPrivateOrReservedIp(ip) {
-  // IPv4
   const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])];
-    if (a === 127) return true;                          // loopback
-    if (a === 10) return true;                            // 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return true;      // 172.16.0.0/12
-    if (a === 192 && b === 168) return true;               // 192.168.0.0/16
-    if (a === 169 && b === 254) return true;               // link-local / metadata cloud
-    if (a === 0) return true;                              // 0.0.0.0/8
-    if (a === 100 && b >= 64 && b <= 127) return true;      // CGNAT 100.64.0.0/10
+    if (a === 127) return true;                          
+    if (a === 10) return true;                            
+    if (a === 172 && b >= 16 && b <= 31) return true;      
+    if (a === 192 && b === 168) return true;               
+    if (a === 169 && b === 254) return true;               
+    if (a === 0) return true;                              
+    if (a === 100 && b >= 64 && b <= 127) return true;      
     return false;
   }
 
-  // IPv6
   const lower = ip.toLowerCase();
-  if (lower === '::1') return true;                        // loopback
-  if (lower.startsWith('fe80:')) return true;               // link-local
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA (fc00::/7)
+  if (lower === '::1') return true;                        
+  if (lower.startsWith('fe80:')) return true;               
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; 
   if (lower.startsWith('::ffff:')) {
-    // IPv4-mapped — reaplica a checagem de IPv4
     const mapped = lower.split(':').pop();
     if (mapped && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(mapped)) {
       return isPrivateOrReservedIp(mapped);
@@ -95,7 +66,6 @@ async function assertUrlIsSafe(rawUrl) {
     throw new SafeHttpError('Requisições para localhost não são permitidas.', 'BLOCKED_HOST');
   }
 
-  // Se já for um literal de IP, valida direto.
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) || hostname.includes(':')) {
     if (isPrivateOrReservedIp(hostname)) {
       throw new SafeHttpError('Requisições para IPs privados/reservados não são permitidas.', 'BLOCKED_IP');
@@ -103,8 +73,6 @@ async function assertUrlIsSafe(rawUrl) {
     return;
   }
 
-  // Resolve o hostname e valida TODOS os IPs retornados (evita DNS rebinding
-  // básico — se qualquer IP resolvido for privado, bloqueia a requisição inteira).
   let addresses;
   try {
     addresses = await dns.lookup(hostname, { all: true });
@@ -119,9 +87,6 @@ async function assertUrlIsSafe(rawUrl) {
   }
 }
 
-/* ─────────────────────────────────────────────
-   RATE LIMIT POR GUILD
-   ───────────────────────────────────────────── */
 
 function checkRateLimit(guildId) {
   const now = Date.now();
@@ -139,9 +104,6 @@ function checkRateLimit(guildId) {
   _rateLimitBuckets.set(guildId, bucket);
 }
 
-/* ─────────────────────────────────────────────
-   LEITURA DE RESPOSTA COM LIMITE DE TAMANHO
-   ───────────────────────────────────────────── */
 
 async function readBodyWithLimit(response, maxBytes) {
   if (!response.body) return await response.text();
@@ -168,17 +130,6 @@ async function readBodyWithLimit(response, maxBytes) {
   return Buffer.concat(chunks.map(c => Buffer.from(c))).toString('utf-8');
 }
 
-/* ─────────────────────────────────────────────
-   REQUISIÇÃO PROTEGIDA
-   ─────────────────────────────────────────────
-
-   opts:
-     method, headers, body (já serializado ou objeto — objeto vira JSON)
-     guildId          — obrigatório, usado no rate limit
-     requestCounter   — { count } mutável, compartilhado pela execução
-                        inteira (script ou fluxo) pra aplicar o limite
-                        de requisições por execução
-*/
 async function safeRequest(rawUrl, opts = {}) {
   const {
     method = 'GET',

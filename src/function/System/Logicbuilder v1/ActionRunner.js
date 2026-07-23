@@ -2,34 +2,13 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-/**
- * ActionRunner
- *
- * Executa as ações de um fluxo contra um ExecutionContext.
- * Ações são executadas na ordem definida pelo campo `order`.
- * Respeita ctx.shouldStop() — para imediatamente se o fluxo for cancelado.
- *
- * Categorias implementadas:
- *   message, embed, user, economy, variable,
- *   inventory, channel, voice, time, system, discord, webhook
- */
 class ActionRunner {
 
   constructor(client) {
     this.client = client;
   }
 
-  /* ═══════════════════════════════════════════
-     ENTRY POINT
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Executa todas as ações do fluxo.
-   *
-   * @param {object[]}         actions  — array de actionSchema, já ordenados
-   * @param {ExecutionContext}  ctx
-   * @param {'sequential'|'parallel'} mode
-   */
   async run(actions, ctx, mode = 'sequential') {
     const sorted = [...actions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
@@ -44,9 +23,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     EXECUÇÃO INDIVIDUAL
-     ═══════════════════════════════════════════ */
 
   async _runOne(action, ctx) {
     try {
@@ -77,13 +53,9 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     MESSAGE ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _message(type, p, ctx) {
     const channelId = p.channelId || ctx.discord.channelId;
-    // valida se o canal pertence ao mesmo servidor
     if (channelId) {
       try {
         const ch = await DiscordRequest(`/channels/${channelId}`);
@@ -183,9 +155,6 @@ class ActionRunner {
         break;
       }
 
-      // ── Editar a mensagem original onde o botão/select foi clicado ──
-      // Só funciona quando a ação está num fluxo disparado por uma interação
-      // de componente (trigger: button_clicked / select_used / modal_submitted).
       case 'edit_interaction_message': {
         const interaction = ctx.discord.interaction;
         if (!interaction) {
@@ -193,29 +162,22 @@ class ActionRunner {
           break;
         }
 
-        const removeComponents = p.removeComponents !== 'false'; // padrão: true (remove)
+        const removeComponents = p.removeComponents !== 'false'; 
 
         const body = {};
 
-        // content vazio = mantém o atual (não envia o campo, Discord preserva)
         if (p.content && p.content.trim() !== '') {
           body.content = p.content;
         }
 
-        // embedObj presente = substitui a(s) embed(s) atual(is)
         if (p.embedObj && typeof p.embedObj === 'object') {
           body.embeds = [this._buildEmbed(p.embedObj)];
         }
 
-        // components: [] remove tudo; omitir o campo mantém os atuais
         if (removeComponents) {
           body.components = [];
         }
 
-        // Se a interação ainda não foi respondida (nenhum deferUpdate/update
-        // anterior), precisa dar o acknowledge primeiro (type 6 = silencioso,
-        // não mostra "pensando..."), senão o Discord marca a interação como
-        // falha mesmo que o PATCH @original funcione depois.
         const state = this.client.interactions._getState?.(interaction.id);
         if (!state || (!state.replied && !state.deferred)) {
           await DiscordRequest(
@@ -250,11 +212,9 @@ class ActionRunner {
     const body = {};
     if (p.content) body.content = p.content;
 
-    // embedObj = objeto estruturado do Embed Builder visual (preferencial)
     if (p.embedObj && typeof p.embedObj === 'object') {
       body.embeds = [this._buildEmbed(p.embedObj)];
     } else if (p.embed) {
-      // embed = fallback legado (JSON string ou objeto plano)
       try {
         const raw = typeof p.embed === 'string' ? JSON.parse(p.embed) : p.embed;
         body.embeds = [this._buildEmbed(raw)];
@@ -263,8 +223,6 @@ class ActionRunner {
       }
     }
 
-    // interactionObj = botão ou select vinculado a outro fluxo, configurado
-    // direto no painel do FlowBuilder (ver _askInteractionOrFinish)
     if (p.interactionObj && typeof p.interactionObj === 'object') {
       const comp = await this._buildInteractionComponent(p.interactionObj, ctx);
       if (comp) body.components = [{ type: 1, components: [comp] }];
@@ -273,23 +231,11 @@ class ActionRunner {
     return body;
   }
 
-  /**
-   * Constrói o componente (botão ou select) que dispara outro fluxo,
-   * a partir do que foi configurado no painel "Adicionar Interação?".
-   *
-   * Botões podem ser:
-   *   - Permanentes (padrão): custom_id é o JSON {t:'flow_trigger', f: flowId} direto.
-   *     Nunca expira, funciona para sempre, qualquer pessoa pode clicar.
-   *   - Temporários: registrados no InteractionManager (createButton), que tem TTL
-   *     e expira automaticamente do cache após um tempo. Útil para confirmações
-   *     pontuais, ações sensíveis a tempo, etc.
-   */
   async _buildInteractionComponent(io, ctx) {
     if (io.kind === 'button') {
-      const isPermanent = io.permanent !== false; // padrão: permanente
+      const isPermanent = io.permanent !== false; 
 
       if (!isPermanent && ctx?.client?.interactions?.createButton) {
-        // Temporário — registra no InteractionManager, expira via TTL padrão
         return ctx.client.interactions.createButton({
           user: undefined, // qualquer pessoa pode clicar (não é dono-específico)
           data: {
@@ -309,7 +255,6 @@ class ActionRunner {
         });
       }
 
-      // Permanente — custom_id fixo, reconhecido direto pelo handleComponent
       return {
         type:      2,
         style:     Number(io.style) || 1,
@@ -342,11 +287,6 @@ class ActionRunner {
     return { name: raw };
   }
 
-  /**
-   * Normaliza um objeto de embed para o formato da Discord API.
-   * Suporta tanto o formato do Embed Builder (objetos aninhados completos)
-   * quanto o formato legado simplificado (strings planas).
-   */
   _buildEmbed(e) {
     if (!e || typeof e !== 'object') return {};
     const embed = {};
@@ -355,35 +295,30 @@ class ActionRunner {
     if (e.description) embed.description = e.description;
     if (e.url)         embed.url         = e.url;
 
-    // color: aceita número ou string hex
     if (e.color != null) {
       embed.color = typeof e.color === 'string'
         ? parseInt(e.color.replace('#', ''), 16)
         : e.color;
     }
 
-    // footer: aceita { text, icon_url } (builder) ou string (legado)
     if (e.footer) {
       embed.footer = typeof e.footer === 'string'
         ? { text: e.footer }
         : { text: e.footer.text, ...(e.footer.icon_url ? { icon_url: e.footer.icon_url } : {}) };
     }
 
-    // image: aceita { url } (builder) ou string (legado)
     if (e.image) {
       embed.image = typeof e.image === 'string'
         ? { url: e.image }
         : (e.image.url ? { url: e.image.url } : undefined);
     }
 
-    // thumbnail: aceita { url } (builder) ou string (legado)
     if (e.thumbnail) {
       embed.thumbnail = typeof e.thumbnail === 'string'
         ? { url: e.thumbnail }
         : (e.thumbnail.url ? { url: e.thumbnail.url } : undefined);
     }
 
-    // author: aceita { name, icon_url, url } (builder) ou string (legado)
     if (e.author) {
       if (typeof e.author === 'string') {
         embed.author = { name: e.author };
@@ -394,7 +329,6 @@ class ActionRunner {
       }
     }
 
-    // fields: array de { name, value, inline }
     if (Array.isArray(e.fields) && e.fields.length) {
       embed.fields = e.fields.map(f => ({
         name:   f.name  || '​',
@@ -406,9 +340,6 @@ class ActionRunner {
     return embed;
   }
 
-  /* ═══════════════════════════════════════════
-     EMBED ACTIONS (alias de message)
-     ═══════════════════════════════════════════ */
 
   async _embed(type, p, ctx) {
     switch (type) {
@@ -417,9 +348,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     USER ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _user(type, p, ctx) {
     const guildId = ctx.discord.guildId;
@@ -496,9 +424,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     ECONOMY ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _economy(type, p, ctx) {
     const eco = this.client.economyManager;
@@ -515,17 +440,7 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     VARIABLE ACTIONS
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Todas as operações de variável aceitam o param opcional `targetUserId`.
-   * Se a variável for de escopo "user" e targetUserId for informado (ID puro
-   * ou menção @usuário), a operação afeta a variável DESSE usuário.
-   * Se vazio/omitido, afeta o autor que disparou o fluxo (comportamento padrão).
-   * Para variáveis de escopo "flow", targetUserId é ignorado.
-   */
   async _variable(type, p, ctx) {
     const target = p.targetUserId;
 
@@ -599,9 +514,8 @@ class ActionRunner {
           if (Array.isArray(cur) && cur.length) {
             picked = cur[Math.floor(Math.random() * cur.length)];
           }
-          return cur; // não modifica a lista original
+          return cur; 
         });
-        // saveAs sempre fica no escopo padrão (autor atual), pois é só o resultado sorteado
         ctx.setVar(p.saveAs || p.name + '_random', picked);
         break;
       }
@@ -611,7 +525,6 @@ class ActionRunner {
         break;
 
       case 'set_user_var': {
-        // Ação legada — mantida por compatibilidade. Use 'set' com targetUserId no lugar.
         const { UserVarModel } = require('../../../Mongodb/flow.js');
         const guildId = ctx.discord.guildId;
         const targetUserId = ctx.resolveTargetUserId(p.targetUserId);
@@ -626,9 +539,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     INVENTORY ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _inventory(type, p, ctx) {
     const inv = this.client.inventoryManager;
@@ -644,9 +554,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     CHANNEL ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _channel(type, p, ctx) {
     const guildId = ctx.discord.guildId;
@@ -708,14 +615,10 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     THREAD ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _thread(type, p, ctx) {
     switch (type) {
 
-      // ── Criar tópico público (type 11) ────────────────────────
       case 'create_public_thread': {
         const cid = p.channelId || ctx.discord.channelId;
         if (!cid) break;
@@ -731,7 +634,6 @@ class ActionRunner {
         break;
       }
 
-      // ── Criar tópico privado (type 12) ────────────────────────
       case 'create_private_thread': {
         const cid = p.channelId || ctx.discord.channelId;
         if (!cid) break;
@@ -748,13 +650,11 @@ class ActionRunner {
         break;
       }
 
-      // ── Adicionar usuário ou cargo ao tópico atual ────────────
       case 'add_thread_member': {
         const threadId = ctx.lastChannelId || ctx.discord.channelId;
         if (!threadId) break;
 
         if (p.threadTargetType === 'role') {
-          // Adiciona todos os membros do servidor que têm esse cargo
           const guildId = ctx.discord.guildId;
           const members = await DiscordRequest(`/guilds/${guildId}/members?limit=1000`).catch(() => []);
           const targets = (members || []).filter(m => m.roles?.includes(p.roleId));
@@ -770,7 +670,6 @@ class ActionRunner {
         break;
       }
 
-      // ── Fechar/arquivar o tópico atual ─────────────────────────
       case 'close_thread': {
         const threadId = ctx.lastChannelId || ctx.discord.channelId;
         if (!threadId) break;
@@ -783,9 +682,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     VOICE ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _voice(type, p, ctx) {
     const guildId = ctx.discord.guildId;
@@ -823,9 +719,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     TIME ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _time(type, p, ctx) {
     switch (type) {
@@ -850,9 +743,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     SYSTEM ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _system(type, p, ctx) {
     switch (type) {
@@ -861,8 +751,6 @@ class ActionRunner {
         const engine = this.client.logicEngine;
         if (!engine) break;
 
-        // ── CORREÇÃO: salva variáveis persistentes ANTES de rodar o fluxo filho
-        // Garante que o filho leia os valores já atualizados do banco
         await ctx.savePersistent();
 
         await engine.runById(p.flowId, ctx.discord);
@@ -873,8 +761,6 @@ class ActionRunner {
         const engine = this.client.logicEngine;
         if (!engine) break;
 
-        // ── CORREÇÃO: salva variáveis persistentes ANTES de emitir o evento
-        // O fluxo ouvinte do evento vai carregar do banco — precisa estar salvo
         await ctx.savePersistent();
 
         const interpolatedData = await ctx.interpolateParams(p.data || {});
@@ -902,9 +788,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     DISCORD ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _discord(type, p, ctx) {
     const channelId = p.channelId || ctx.discord.channelId;
@@ -940,9 +823,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     WEBHOOK / HTTP ACTIONS
-     ═══════════════════════════════════════════ */
 
   async _webhook(type, p, ctx) {
     switch (type) {
@@ -979,9 +859,6 @@ class ActionRunner {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════ */
 
   _sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -1096,7 +973,6 @@ class ActionRunner {
   const channelId = ctx.discord.channelId;
   if (!channelId) return;
 
-  // resolve o userId alvo — pode ser {arg0} já interpolado
   let targetUserId = p.targetUserId?.trim() || '';
   const mentionMatch = targetUserId.match(/^<@!?(\d{17,20})>$/);
   if (mentionMatch) targetUserId = mentionMatch[1];
@@ -1141,7 +1017,6 @@ class ActionRunner {
       }
     });
 
-    // envia a mensagem de confirmação
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body: {
@@ -1150,7 +1025,6 @@ class ActionRunner {
       }
     });
 
-    // timeout — se não responder, cancela
     setTimeout(async () => {
       if (resolved) return;
       resolved = true;

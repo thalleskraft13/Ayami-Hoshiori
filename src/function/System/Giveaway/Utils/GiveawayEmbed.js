@@ -7,27 +7,13 @@ const E = Object.freeze({
   pensando: '<:ayamipensando:1513891183036989533>',
 });
 
-/**
- * GiveawayEmbed
- *
- * Centraliza a construção de todas as embeds relacionadas a sorteios,
- * garantindo visual consistente e personalidade da Ayami.
- *
- * Estas embeds são PÚBLICAS (mensagem no canal, visível a todo mundo),
- * então não há um "locale de quem está vendo" — usamos o client (se
- * fornecido) pra traduzir com fallback automático em pt-BR quando não
- * há contexto de usuário/idioma específico.
- */
 class GiveawayEmbed {
 
   static _t(client, key, extra = {}) {
     if (client?.t) return client.t(`sorteio.${key}`, extra);
-    return key; // fallback defensivo — nunca deve ser atingido em produção
+    return key; 
   }
 
-  /* ─────────────────────────────────────────
-     SORTEIO ATIVO
-  ───────────────────────────────────────── */
 
   static buildActive(doc, client) {
 
@@ -107,9 +93,6 @@ class GiveawayEmbed {
     };
   }
 
-  /* ─────────────────────────────────────────
-     SORTEIO ENCERRADO (mensagem original)
-  ───────────────────────────────────────── */
 
   static buildEnded(doc, result, client) {
 
@@ -128,9 +111,6 @@ class GiveawayEmbed {
     };
   }
 
-  /* ─────────────────────────────────────────
-     RELATÓRIO DE ENCERRAMENTO
-  ───────────────────────────────────────── */
 
   static buildEndReport(doc, result, client) {
 
@@ -171,7 +151,6 @@ class GiveawayEmbed {
       },
     ];
 
-    // Histórico de sorteio
     if (result.drawHistory?.length) {
       const historyLines = result.drawHistory
         .map(h => {
@@ -182,7 +161,7 @@ class GiveawayEmbed {
             : '❌';
           return `\`#${h.position}\` ${icon} <@${h.userId}>${h.reason ? ` — ${h.reason}` : ''}`;
         })
-        .slice(0, 10) // máx 10 linhas para não estourar o limite
+        .slice(0, 10) 
         .join('\n');
 
       fields.push({
@@ -191,7 +170,6 @@ class GiveawayEmbed {
       });
     }
 
-    // Quem teria vencido
     if (wouldHaveWon?.length) {
       const wouldLines = wouldHaveWon
         .map(w => `• <@${w.userId}> — ${w.reason || t('embed_would_no_reason')}`)
@@ -214,9 +192,6 @@ class GiveawayEmbed {
     };
   }
 
-  /* ─────────────────────────────────────────
-     HELPER
-  ───────────────────────────────────────── */
 
   static _reqLabel(req, client) {
     const t = (key, extra) => this._t(client, key, extra);

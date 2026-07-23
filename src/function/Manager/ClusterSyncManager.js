@@ -1,43 +1,13 @@
 'use strict';
 
-/**
- * ClusterSyncManager — sincronização de estado entre clusters.
- *
- * Problema: o bot roda em múltiplos clusters (worker threads via
- * ClusterManager/ClusterWorker), cada um com memória isolada. Um cache em
- * memória (blacklist, premium, permissões) alterado num cluster não se
- * propaga sozinho pros outros.
- *
- * Mongo Change Streams. Cada cluster escuta
- * mudanças direto nas collections relevantes do Mongo, sem depender do
- * ClusterManager como intermediário. Mais desacoplado que IPC manual (opção
- * A) e escala melhor conforme novos tipos de dado forem adicionados — basta
- * chamar `watch()` de novo com outro model, sem tocar no ClusterManager/
- * ClusterWorker.
- *
- * Requer MongoDB rodando como replica set (padrão em Atlas e a maioria dos
- * provedores gerenciados). Se change streams não estiverem disponíveis
- * (ex: Mongo standalone em dev local), cai para um polling de fallback —
- * o subsistema continua funcionando, só perde a propagação instantânea.
- *
- */
 class ClusterSyncManager {
 
     constructor() {
-        /** @type {Map<string, { model: import('mongoose').Model, stream: any, pollTimer: any }>} */
         this._watchers = new Map();
     }
 
-    /**
-     * Começa a escutar mudanças numa collection via Mongo Change Stream.
-     * @param {string} name         Nome único desse watcher (pra poder parar depois).
-     * @param {import('mongoose').Model} model  Model do mongoose a observar.
-     * @param {(change: object) => void} onChange  Callback chamado a cada insert/update/delete/replace.
-     * @param {object} [opts]
-     * @param {number} [opts.pollIntervalMs=15000]  Intervalo do fallback por polling, se change streams falharem.
-     */
     watch(name, model, onChange, opts = {}) {
-        if (this._watchers.has(name)) return; // já observando
+        if (this._watchers.has(name)) return; 
 
         try {
             const stream = model.watch([], { fullDocument: 'updateLookup' });
@@ -83,7 +53,6 @@ class ClusterSyncManager {
         this._watchers.set(name, { model, stream: null, pollTimer: timer });
     }
 
-    /** Para um watcher específico. */
     unwatch(name) {
         const w = this._watchers.get(name);
         if (!w) return;
@@ -92,7 +61,6 @@ class ClusterSyncManager {
         this._watchers.delete(name);
     }
 
-    /** Para todos os watchers (usar no shutdown do processo). */
     destroy() {
         for (const name of this._watchers.keys()) this.unwatch(name);
     }

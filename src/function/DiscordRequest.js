@@ -17,21 +17,6 @@ const DEFAULT_COLOR = 0x95A5A6;
 
 
 
-/**
- * Central Discord REST API wrapper for Arlecchino Bot.
- *
- * Fully backwards-compatible with all existing callers.
- * Automatically switches between JSON and multipart/form-data payloads.
- *
- * @param {string} route   Discord API route (with or without leading slash)
- * @param {object} options
- * @param {string}   [options.method='GET']
- * @param {object}   [options.body]         JSON payload (existing usage — unchanged)
- * @param {Array}    [options.files]        File attachments → triggers multipart mode
- *   Each file: { name: string, data: Buffer|Blob|ReadableStream, contentType?: string }
- * @param {number}   [options._retries]     Internal — do not pass manually
- * @returns {Promise<object|null>}
- */
 async function DiscordRequest(route, options = {}) {
     _assertToken();
 
@@ -106,10 +91,6 @@ function _assertToken() {
         throw new Error('[DiscordRequest] DISCORD_TOKEN is not defined.');
 }
 
-/**
- * Build the fetch config object.
- * Automatically selects JSON or multipart based on whether files are present.
- */
 function _buildRequestConfig(method, options) {
     const baseHeaders = {
         Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
@@ -182,7 +163,6 @@ function _formatError(apiError) {
 function _parseRetryAfter(response) {
     const header = response.headers?.get('retry-after');
     if (!header) return 1000;
-    // Discord sends retry-after in seconds (float)
     return Math.ceil(parseFloat(header) * 1000) || 1000;
 }
 
@@ -192,10 +172,6 @@ function _sleep(ms) {
 
 
 
-/**
- * Build and fire a log embed to the bot's log channel.
- * Uses a raw fetch (not DiscordRequest itself) to prevent recursion.
- */
 function _sendLog({ title, color, method, safeRoute, origin, elapsed, extra = [] }) {
     const embed = {
         title,

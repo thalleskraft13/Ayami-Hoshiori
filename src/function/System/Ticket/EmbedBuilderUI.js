@@ -5,38 +5,6 @@ const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 const COLOR_GOLD = 0xFFD966;
 
-/* ═══════════════════════════════════════════════════════════
-   EmbedBuilderUI — criador de embed reutilizável (estilo Ayami)
-   ═══════════════════════════════════════════════════════════
-
-   Mesmo padrão usado no Logic Builder:
-     1. Captura channelId + messageId da mensagem RAIZ antes de
-        qualquer followUp ser criado (interação ainda intocada).
-     2. Abre o painel builder como FOLLOWUP, com preview REAL
-        (mensagem clássica de embed, já que CV2 não permite
-        misturar com `embeds:[]`).
-     3. Cada edição faz PATCH no followUp (preview ao vivo).
-     4. Ao confirmar/remover: apaga o followUp e devolve o
-        controle via callback `onDone(rootInteraction, embedObjOrNull)`,
-        onde `rootInteraction` já está marcada com `__rootOverride`
-        para que qualquer `editOriginal` subsequente edite a
-        mensagem raiz de verdade (e não o followUp).
-
-   Uso:
-     const EmbedBuilderUI = require('.../EmbedBuilderUI.js');
-     EmbedBuilderUI.open(interaction, client, {
-       user, existingEmbed: panel.painelPrincipal,
-       onDone: async (rootInteraction, embedObj) => {
-         panel.painelPrincipal = embedObj;
-         await save(guild);
-         return someMenu(rootInteraction, ...);
-       }
-     });
-
-   IMPORTANTE: `interaction` passado para `.open()` deve ser a
-   interação do botão/select que ainda NÃO recebeu deferUpdate
-   (precisamos ler `channel_id` e `message.id` dela intactos).
-   ═══════════════════════════════════════════════════════════ */
 
 function t(client, key, ctx) {
   return client.t(`ticket.${key}`, ctx);
@@ -82,14 +50,6 @@ function buildLiveEmbed(embed, client, ctx) {
   return e;
 }
 
-/**
- * Reconhece a interação (DEFER_UPDATE) delegando ao InteractionManager
- * do framework, que mantém o Map `_states` sincronizado. Bater direto
- * no Discord por fora disso causava dessincronia: em caso de erro
- * subsequente, o fallback de erro do framework tentava reconhecer a
- * interação de novo (achando que ainda não tinha sido respondida) e
- * batia em "Unknown interaction" / "Unknown Webhook" (404).
- */
 async function deferUpdate(interaction, client) {
   return client.interactions.defer(interaction);
 }
@@ -110,24 +70,10 @@ async function deleteFollowUp(interaction, client, messageId) {
 
 const EmbedBuilderUI = {
 
-  /**
-   * Abre o criador de embed.
-   *
-   * @param {object} interaction   Interação intocada (sem deferUpdate ainda)
-   * @param {object} client
-   * @param {object} opts
-   * @param {string} opts.user             ID do usuário dono da interação
-   * @param {object|null} opts.existingEmbed  Embed já existente (para editar) ou null
-   * @param {string} [opts.title]          Título exibido no header do followUp
-   * @param {function} opts.onDone         async (rootInteraction, embedObjOrNull) => any
-   *        rootInteraction já vem com `__rootOverride: { channelId, messageId }`
-   *        setado, pronto para qualquer `editOriginal`-like subsequente.
-   */
   async open(interaction, client, opts) {
     const ctx = localeCtx(interaction);
     const { user, existingEmbed = null, title = t(client, 'eb_default_title', ctx), onDone } = opts;
 
-    // ── Captura definitiva da msg raiz (canal + id), ANTES do followUp ──
     const rootChannelId = interaction.channel_id || interaction.channel?.id;
     const rootMessageId = interaction.message?.id;
 
@@ -245,8 +191,6 @@ const EmbedBuilderUI = {
         await deferUpdate(i2, client);
         await deleteFollowUp(i2, client, followUpMsgId);
 
-        // Marca a interação com o override de destino — qualquer
-        // editOriginal subsequente vai editar a msg raiz de verdade.
         i2.__rootOverride = { channelId: rootChannelId, messageId: rootMessageId };
 
         return onDone(i2, embedResult);

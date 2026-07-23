@@ -62,25 +62,6 @@ function bitfieldToArray(bitfield) {
   return perms;
 }
 
-/**
- * Resolve as permissões efetivas de um membro (ou do bot) num servidor/canal.
- *
- *  Qiando um `client`
- * (DiscordGatewayClient) é passado, os dados são lidos via `client.guilds`
- * (GuildManager) — que já mantém cache em memória atualizado pelo gateway —
- * em vez de bater direto na API REST do Discord a cada chamada.
- *
- * Retrocompatível: se `client` não for passado, cai de volta pro
- * comportamento antigo (DiscordRequest puro), então nenhum call site quebra
- * enquanto a migração dos demais arquivos não é concluída.
- *
- * @param {object}  opts
- * @param {boolean} [opts.channel=false] Se true, também resolve overwrites do canal `id`.
- * @param {string}  opts.id              ID do usuário (ou do canal, se `channel`+`bot`).
- * @param {string}  opts.guildId         ID do servidor.
- * @param {boolean} [opts.bot=false]     Se true, resolve as permissões do próprio bot.
- * @param {import('../DiscordGatewayClient.js')} [opts.client] Instância do client (recomendado).
- */
 async function getPerm({ channel = false, id, guildId, bot = false, client = null }) {
 
   const useCache = !!client?.guilds;
@@ -136,19 +117,16 @@ async function getPerm({ channel = false, id, guildId, bot = false, client = nul
 
     for (const overwrite of overwrites) {
 
-      // user overwrite
       if (overwrite.id === userId) {
         allow |= BigInt(overwrite.allow);
         deny |= BigInt(overwrite.deny);
       }
 
-      // role overwrite
       if (memberRoles.includes(overwrite.id)) {
         allow |= BigInt(overwrite.allow);
         deny |= BigInt(overwrite.deny);
       }
 
-      // @everyone overwrite
       if (overwrite.id === guildId) {
         allow |= BigInt(overwrite.allow);
         deny |= BigInt(overwrite.deny);

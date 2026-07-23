@@ -3,7 +3,6 @@
 const MessageEmbed = require('../../Messages/EmbedBuild.js');
 const BattleTeam   = require('./BattleTeam.js');
 
-// Emojis dos elementos
 const EMOJI_ELEMENTO = {
     pyro:    '🔥',
     hydro:   '💧',
@@ -14,27 +13,13 @@ const EMOJI_ELEMENTO = {
     geo:     '🪨',
 };
 
-// Emojis de raridade
 const EMOJI_RARIDADE = {
     '5': '⭐⭐⭐⭐⭐',
     '4': '⭐⭐⭐⭐',
 };
 
-/**
- * BattleEmbed
- *
- * Constrói todos os embeds visuais da batalha.
- * Centraliza a lógica de formatação, separada da engine e do comando.
- */
 class BattleEmbed {
 
-    /**
-     * Embed principal da batalha — exibido a cada turno.
-     *
-     * @param {object} snapshot - Retornado por engine.gerarSnapshot()
-     * @param {string[]} logTurno
-     * @param {object} [aposta]
-     */
     static batalha(snapshot, logTurno = [], aposta = null) {
         const { timeA, timeB, turno, vez } = snapshot;
 
@@ -43,30 +28,25 @@ class BattleEmbed {
             .setColor(0xE74C3C)
             .setFooter(`Vez de: ${vez === 'A' ? timeA.username : timeB.username}`);
 
-        // ─── Time A ───────────────────────────────────────────────────────────
         embed.addField(
             `🔵 ${timeA.username}`,
             BattleEmbed._renderTime(timeA),
             true
         );
 
-        // Separador
         embed.addField('⚔️', '**vs**', true);
 
-        // ─── Time B ───────────────────────────────────────────────────────────
         embed.addField(
             `🔴 ${timeB.username}`,
             BattleEmbed._renderTime(timeB),
             true
         );
 
-        // ─── Log do turno ─────────────────────────────────────────────────────
         if (logTurno.length > 0) {
-            const logTexto = logTurno.slice(-10).join('\n'); // Máximo 10 linhas
+            const logTexto = logTurno.slice(-10).join('\n'); 
             embed.addField('📜 Turno', logTexto.slice(0, 1024));
         }
 
-        // ─── Aposta ───────────────────────────────────────────────────────────
         if (aposta) {
             embed.addField('💰 Aposta', BattleEmbed._renderAposta(aposta));
         }
@@ -74,9 +54,6 @@ class BattleEmbed {
         return embed;
     }
 
-    /**
-     * Embed de vitória/derrota.
-     */
     static resultado(vencedor, perdedor, estatisticas, aposta = null) {
         const embed = new MessageEmbed()
             .setTitle('🏆 Batalha Encerrada!')
@@ -96,9 +73,6 @@ class BattleEmbed {
         return embed;
     }
 
-    /**
-     * Embed de convite de batalha.
-     */
     static convite(desafianteNome, adversarioNome, timeDesafiante, aposta = null) {
         const embed = new MessageEmbed()
             .setTitle('⚔️ Desafio de Batalha!')
@@ -124,9 +98,6 @@ class BattleEmbed {
         return embed;
     }
 
-    /**
-     * Embed de histórico de batalhas.
-     */
     static historico(userId, username, batalhas = []) {
         const embed = new MessageEmbed()
             .setTitle(`📜 Histórico — ${username}`)
@@ -147,9 +118,6 @@ class BattleEmbed {
         return embed;
     }
 
-    /**
-     * Embed de ranking da Arena.
-     */
     static ranking(jogadores = []) {
         const embed = new MessageEmbed()
             .setTitle('🏆 Ranking da Arena')
@@ -170,7 +138,6 @@ class BattleEmbed {
         return embed;
     }
 
-    // ─── Helpers internos ─────────────────────────────────────────────────────
 
     static _renderTime(timeSnapshot) {
         return timeSnapshot.personagens.map((p, i) => {

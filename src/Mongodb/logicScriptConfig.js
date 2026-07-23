@@ -1,10 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — CONFIG SCHEMA
-   Configurações por guild: prefixo, etc.
-   Arquivo: src/Mongodb/logicScriptConfig.js
-   ═══════════════════════════════════════════ */
 
 const { Schema, model, models } = require('mongoose');
 

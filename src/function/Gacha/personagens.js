@@ -1,5 +1,4 @@
 module.exports = {
-//Banners
   banners: {
     "atual": {
        t5: ["Lohen", "Mavuika"],
@@ -12,7 +11,6 @@ module.exports = {
     }
   },
   
- //Elementos
  elementos: {
    pyro: ["Arlecchino", "Chevrouse", "Amber", "Diluc", "Hutao", "Bennett", "Xiangling", "Mavuika"],
    anemo: ["Lanyan", "Jean"],

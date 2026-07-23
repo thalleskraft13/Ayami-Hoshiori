@@ -28,15 +28,10 @@ class GiveawaySystem {
     this._drafts = new Map();
   }
 
-  // Atalho para o LanguageManager — sempre resolve o locale a partir da
-  // interação (via localeCtx) e injeta variáveis extras pro render(ctx).
   t(interaction, key, extra = {}) {
     return this.client.t(`sorteio.${key}`, localeCtx(interaction, extra));
   }
 
-  /* ═══════════════════════════════════════
-     HELPERS — DISCORD
-  ═══════════════════════════════════════ */
 
   async reply(interaction, data) {
     return DiscordRequest(
@@ -52,7 +47,6 @@ class GiveawaySystem {
     );
   }
 
-  // Edita SEMPRE a mensagem original — única msg de configuração visível
   async editOriginal(interaction, data) {
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
@@ -60,8 +54,6 @@ class GiveawaySystem {
     );
   }
 
-  // followUp ephemeral — para perguntas "envie isso" e feedbacks rápidos
-  // Sempre deleta depois de receber a resposta para manter o chat limpo
   async followUpEphemeral(interaction, data) {
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}`,
@@ -95,20 +87,9 @@ class GiveawaySystem {
     return { type: 1, components };
   }
 
-  /* ═══════════════════════════════════════
-     HELPER CENTRAL — _ask
-
-     Fluxo:
-       1. editOriginal → mantém a tela de config com indicador "aguardando"
-       2. followUpEphemeral → pergunta efêmera "envie isso"
-       3. NextMessageCollector → aguarda resposta do user
-       4. Deleta: followUp efêmero + msg do user
-       5. Retorna o conteúdo (ou null se timeout/cancelar)
-  ═══════════════════════════════════════ */
 
   async _ask(interaction, draft, questionEmbed) {
 
-    // 1. Atualiza a msg original mostrando que está aguardando input
     await this.editOriginal(interaction, {
       embeds: [{
         ...this._embedDraft(draft, interaction),
@@ -117,7 +98,6 @@ class GiveawaySystem {
       components: [],
     });
 
-    // 2. followUp efêmero com a pergunta
     const prompt = await this.followUpEphemeral(interaction, {
       embeds: [{
         description: questionEmbed,
@@ -126,7 +106,6 @@ class GiveawaySystem {
       }]
     });
 
-    // 3. Aguarda msg do user
     try {
       const msg = await this.client.NextMessageCollector.wait({
         channelId: interaction.channel_id,
@@ -134,7 +113,6 @@ class GiveawaySystem {
         timeout:   TIMEOUT_MS,
       });
 
-      // 4. Limpa: followUp efêmero + msg do user
       if (prompt?.id) this.deleteFollowUp(interaction, prompt.id);
       this.deleteMsg(interaction.channel_id, msg.id);
 
@@ -147,9 +125,6 @@ class GiveawaySystem {
     }
   }
 
-  /* ═══════════════════════════════════════
-     HELPERS — DRAFT
-  ═══════════════════════════════════════ */
 
   _getDraft(userId) {
     if (!this._drafts.has(userId)) {
@@ -168,15 +143,6 @@ class GiveawaySystem {
 
   _clearDraft(userId) { this._drafts.delete(userId); }
 
-  /**
-   * Mantém a tarefa persistida `giveaway_end` (usada pelo TaskManager,
-   * poll a cada 1s) em sincronia com o agendamento em memória do
-   * gScheduler. Isso é necessário porque um sorteio pode ter sido
-   * criado pelo site (que só agenda via tarefa persistida, já que
-   * roda em outro processo) e depois ser gerenciado pelo Discord
-   * (pausar/ajustar tempo/encerrar) — sem isso, a tarefa antiga
-   * continuaria disparando no horário errado.
-   */
   async _syncEndTask(doc) {
     try {
       await TaskDb.findOneAndUpdate(
@@ -203,11 +169,6 @@ class GiveawaySystem {
     }
   }
 
-  /**
-   * Os recursos premium do sistema de sorteios (requisitos avançados e
-   * multi-servidor) são liberados a partir do 2º plano (Lua Crescente)
-   * em diante — o 1º plano (Nova Estrela) NÃO libera esses recursos.
-   */
   async isPremium(guildId) {
     const p = await PremiumManager.getGuildPremium(guildId);
     if (!p.status) return false;
@@ -238,9 +199,6 @@ class GiveawaySystem {
     };
   }
 
-  /* ═══════════════════════════════════════
-     MENU PRINCIPAL
-  ═══════════════════════════════════════ */
 
   async startMenu(interaction) {
 
@@ -279,14 +237,6 @@ class GiveawaySystem {
     });
   }
 
-  /* ═══════════════════════════════════════
-     CRIAÇÃO — /sorteio criar
-
-     Regras:
-       - Modal → único, só no comando (interação virgem)
-       - Perguntas → followUpEphemeral (some após resposta)
-       - Tela de config → sempre editOriginal
-  ═══════════════════════════════════════ */
 
   async criar(interaction) {
 
@@ -322,7 +272,6 @@ class GiveawaySystem {
         draft.prize       = fields.prize.trim();
         draft.description = fields.description?.trim() || '';
 
-        // ACK do modal — exibe a msg original pela primeira vez
         await DiscordRequest(
           `/interactions/${mi.id}/${mi.token}/callback`,
           {
@@ -345,7 +294,6 @@ class GiveawaySystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ── Passo 1: Canal ───────────────────────────────────────── */
 
   async _criarStep_Canal(interaction, user) {
 
@@ -375,7 +323,6 @@ class GiveawaySystem {
     return this._criarStep_Vencedores(interaction, user);
   }
 
-  /* ── Passo 2: Vencedores ──────────────────────────────────── */
 
   async _criarStep_Vencedores(interaction, user) {
 
@@ -405,7 +352,6 @@ class GiveawaySystem {
     return this._criarStep_Duracao(interaction, user);
   }
 
-  /* ── Passo 3: Duração ─────────────────────────────────────── */
 
   async _criarStep_Duracao(interaction, user) {
 
@@ -437,7 +383,6 @@ class GiveawaySystem {
     return this._telaExtras(interaction, user);
   }
 
-  /* ── Tela de extras ───────────────────────────────────────── */
 
   async _telaExtras(interaction, user) {
 
@@ -476,12 +421,7 @@ class GiveawaySystem {
     });
   }
 
-  /* ═══════════════════════════════════════
-     CONFIGURAÇÕES
-     Regra: editOriginal para telas, followUpEphemeral para perguntas
-  ═══════════════════════════════════════ */
 
-  /* ── Bônus ────────────────────────────────────────────────── */
 
   async _telaBonus(interaction, user) {
 
@@ -518,7 +458,6 @@ class GiveawaySystem {
 
     const draft = this._getDraft(user);
 
-    // Pergunta o cargo — followUp efêmero, msg original continua visível
     const respRole = await this._ask(interaction, draft,
       `${E.animada} ${this.t(interaction, 'engine_bonus_ask_role')}`
     );
@@ -549,7 +488,6 @@ class GiveawaySystem {
     return this._telaBonus(interaction, user);
   }
 
-  /* ── Requisitos ───────────────────────────────────────────── */
 
   async _telaReqs(interaction, user, premium) {
 
@@ -699,7 +637,6 @@ class GiveawaySystem {
     return this._telaReqs(interaction, user, premium);
   }
 
-  /* ── Visual ───────────────────────────────────────────────── */
 
   async _telaVisual(interaction, user) {
 
@@ -730,7 +667,6 @@ class GiveawaySystem {
     return this._telaExtras(interaction, user);
   }
 
-  /* ── Mensagem personalizada ───────────────────────────────── */
 
   async _telaMsg(interaction, user) {
 
@@ -746,7 +682,6 @@ class GiveawaySystem {
     return this._telaExtras(interaction, user);
   }
 
-  /* ── Multi-servidor ───────────────────────────────────────── */
 
   async _telaMulti(interaction, user, premium) {
 
@@ -851,9 +786,6 @@ class GiveawaySystem {
     return this._telaMulti(interaction, user, premium);
   }
 
-  /* ═══════════════════════════════════════
-     PUBLICAR
-  ═══════════════════════════════════════ */
 
   async _publicar(interaction, user) {
 
@@ -924,9 +856,6 @@ class GiveawaySystem {
     }];
   }
 
-  /* ═══════════════════════════════════════
-     PARTICIPAÇÃO
-  ═══════════════════════════════════════ */
 
   async join(interaction) {
     try {
@@ -988,9 +917,6 @@ class GiveawaySystem {
     });
   }
 
-  /* ═══════════════════════════════════════
-     MENU DE GERENCIAMENTO
-  ═══════════════════════════════════════ */
 
   async giveawayMenu(interaction, doc, user) {
 
@@ -1042,9 +968,6 @@ class GiveawaySystem {
     });
   }
 
-  /* ═══════════════════════════════════════
-     AÇÕES DE GERENCIAMENTO
-  ═══════════════════════════════════════ */
 
   async endGiveaway(interaction, doc) {
     if (doc.status === 'ended') {
@@ -1183,9 +1106,6 @@ class GiveawaySystem {
     return this.giveawayMenu(interaction, doc, user);
   }
 
-  /* ═══════════════════════════════════════
-     EXPORTAR
-  ═══════════════════════════════════════ */
 
   async exportMenu(interaction, doc, user) {
 
@@ -1242,9 +1162,6 @@ class GiveawaySystem {
     }
   }
 
-  /* ═══════════════════════════════════════
-     ESTATÍSTICAS
-  ═══════════════════════════════════════ */
 
   async showStats(interaction, doc, user) {
 
@@ -1284,9 +1201,6 @@ class GiveawaySystem {
     });
   }
 
-  /* ═══════════════════════════════════════
-     RELATÓRIO DE ENCERRAMENTO
-  ═══════════════════════════════════════ */
 
   async _sendEndReport(doc, result) {
     const embed = GiveawayEmbed.buildEndReport(doc, result, this.client);
@@ -1307,14 +1221,6 @@ class GiveawaySystem {
     }
   }
 
-  /* ═══════════════════════════════════════
-     AUTORIZAÇÃO INTER-SERVIDOR
-     
-     Fluxo:
-       1. Tenta enviar DM ao dono do servidor
-       2. Se DM fechada → busca canal do servidor e manda mencionando o dono
-       3. Apenas o dono pode aceitar (validado no handleAuthResponse)
-  ═══════════════════════════════════════ */
 
   async _checkBotInGuild(guildId) {
     try { await DiscordRequest(`/guilds/${guildId}`, { method: 'GET' }); return true; }
@@ -1339,7 +1245,6 @@ class GiveawaySystem {
       multi_giveaway: this.t(interaction, 'engine_auth_level_multi'),
     };
 
-    // Buscar dados do servidor dono
     let ownerGuild;
     try {
       ownerGuild = await DiscordRequest(`/guilds/${ownerGuildId}?with_counts=false`, { method: 'GET' });
@@ -1352,13 +1257,11 @@ class GiveawaySystem {
 
     const ownerId = ownerGuild.owner_id;
 
-    // Buscar dados do servidor solicitante
     let requesterGuild = { name: requesterGuildId, icon: null };
     try {
       requesterGuild = await DiscordRequest(`/guilds/${requesterGuildId}?with_counts=false`, { method: 'GET' });
     } catch {}
 
-    // Buscar username de quem está configurando
     const configurerId = interaction.member?.user?.id || interaction.user?.id;
     let configurerTag  = `<@${configurerId}>`;
     try {
@@ -1368,7 +1271,6 @@ class GiveawaySystem {
         : `@${u.username}`;
     } catch {}
 
-    // Criar registro pending no banco
     const auth = await AuthorizationDb.findOneAndUpdate(
       { ownerGuildId, requesterGuildId },
       {
@@ -1381,7 +1283,6 @@ class GiveawaySystem {
       { upsert: true, new: true }
     );
 
-    // Ícone do servidor solicitante (para thumbnail)
     const requesterIcon = requesterGuild.icon
       ? `https://cdn.discordapp.com/icons/${requesterGuildId}/${requesterGuild.icon}.png?size=64`
       : null;
@@ -1413,7 +1314,6 @@ class GiveawaySystem {
       ]
     }];
 
-    // 1. Tentar DM ao dono
     let sentViaDM = false;
 
     try {
@@ -1437,7 +1337,6 @@ class GiveawaySystem {
       sentViaDM = false;
     }
 
-    // 2. DM fechada → enviar no canal do servidor mencionando o dono
     if (!sentViaDM) {
 
       const fallbackChannelId = ownerGuild.system_channel_id || await this._findTextChannel(ownerGuildId);
@@ -1478,11 +1377,10 @@ class GiveawaySystem {
     });
   }
 
-  // Busca o primeiro canal de texto onde o bot pode enviar mensagens
   async _findTextChannel(guildId) {
     try {
       const channels = await DiscordRequest(`/guilds/${guildId}/channels`, { method: 'GET' });
-      const text = channels.find(c => c.type === 0); // GUILD_TEXT
+      const text = channels.find(c => c.type === 0); 
       return text?.id || null;
     } catch {
       return null;
@@ -1500,7 +1398,6 @@ class GiveawaySystem {
       });
     }
 
-    // Apenas o dono do servidor pode aceitar/recusar
     const responderId = interaction.member?.user?.id || interaction.user?.id;
     if (responderId !== auth.ownerId) {
       return this.reply(interaction, {
@@ -1535,9 +1432,6 @@ class GiveawaySystem {
     );
   }
 
-  /* ═══════════════════════════════════════
-     UTILS
-  ═══════════════════════════════════════ */
 
   _parseDuration(str) {
     const match = str?.trim().match(/^(\d+)(d|h|m|s)$/i);

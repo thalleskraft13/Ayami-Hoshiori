@@ -162,8 +162,6 @@ async function executarPull(interaction, bannerId, amount, client) {
     date:        Date.now()
   });
 
-  // Seção 8: teto do array, mesma correção do Economy.js — senão cresce
-  // pra sempre pra quem gira muito.
   if (user.primogemas.transacoes.length > 100) {
     user.primogemas.transacoes = user.primogemas.transacoes.slice(-100);
   }
@@ -174,11 +172,6 @@ async function executarPull(interaction, bannerId, amount, client) {
 
   await user.save();
 
-  // Seção 8: pull de gacha bypassava completamente o Economy.js — a moeda
-  // era gasta e os personagens concedidos sem NENHUM log (nem webhook, nem
-  // persistência). ⚠️ Assumido (conforme o prompt original) que o log de
-  // economia cobre moeda + personagens de gacha juntos, já que o gasto e a
-  // concessão acontecem na mesma ação.
   UserEconomy.log({
     userId:   userId,
     action:   "banner_pull",

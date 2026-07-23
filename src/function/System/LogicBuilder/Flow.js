@@ -6,9 +6,6 @@ const { localeCtx }   = require('../../Utils/ctxLocale.js');
 const FlowBuilder     = require('./FlowBuilder.js');
 const CommandBuilder  = require('./CommandBuilder.js');
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,   // azul principal
   gold:    0xFFD966,   // dourado
@@ -20,13 +17,6 @@ const COLOR = {
 
 const GUIDE_URL = 'https://ayami-hoshiori.discloud.app/logic-builder';
 
-/**
- * FlowUI — Components V2
- *
- * Todos os painéis principais usam Container (type 17) com blocos cv2*.
- * IS_COMPONENTS_V2 flag = 1 << 15 = 32768
- * EPHEMERAL flag        = 1 << 6  = 64
- */
 class FlowUI {
 
   constructor(client) {
@@ -36,17 +26,14 @@ class FlowUI {
     this._listCache   = {};
   }
 
-  /* ── helper de emoji da Ayami ── */
   _e(name) {
     return this.client?.emoji?.[name] ?? '';
   }
 
-  /** Atalho pra tradução de uma chave do sistema "logicbuilder". */
   t(key, ctx, extra = {}) {
     return this.client.t(`logicbuilder.${key}`, { ...ctx, ...extra });
   }
 
-  /** Contexto de locale + atalhos de emoji, a partir da interação. */
   _tctx(interaction, extra = {}) {
     return localeCtx(interaction, {
       ayami:     this._e('ayami'),
@@ -63,14 +50,10 @@ class FlowUI {
     });
   }
 
-  /* ── botão de link para o guia (estilo 5 = link) ── */
   _guideButton(ctx = {}) {
     return { type: 2, style: 5, label: this.t('guide_button', ctx), url: GUIDE_URL };
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE INTERACTION
-     ═══════════════════════════════════════════ */
 
   async reply(interaction, data) {
     return DiscordRequest(
@@ -115,10 +98,6 @@ async editMessageById(channelId, messageId, data) {
     return this.followUp(interaction, { ...data, flags: (data.flags ?? 0) | 64 });
   }
 
-  /**
-   * Apaga uma mensagem de followUp (pelo messageId retornado no POST).
-   * Usado pelo embed builder para fechar o painel temporário.
-   */
   async deleteFollowUp(interaction, messageId) {
     return DiscordRequest(
       `/webhooks/${this.client.clientId}/${interaction.token}/messages/${messageId}`,
@@ -126,9 +105,6 @@ async editMessageById(channelId, messageId, data) {
     );
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE COMPONENTES (ActionRows legados)
-     ═══════════════════════════════════════════ */
 
   btn(user, label, style, func, opts = {}) {
     return this.client.interactions.createButton({
@@ -150,25 +126,15 @@ async editMessageById(channelId, messageId, data) {
     return { type: 1, components };
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS COMPONENTS V2
-     ═══════════════════════════════════════════ */
 
-  /** Text Display (type 10) */
   cv2Text(content) {
     return { type: 10, content };
   }
 
-  /** Separator (type 14) */
   cv2Divider(spacing = 1) {
     return { type: 14, divider: true, spacing };
   }
 
-  /**
-   * Section (type 9) — texto + botão acessório ao lado.
-   * @param {string} content   Markdown do texto
-   * @param {object} button    Botão já criado com this.btn(...)
-   */
   cv2Section(content, button) {
     return {
       type:      9,
@@ -177,10 +143,6 @@ async editMessageById(channelId, messageId, data) {
     };
   }
 
-  /**
-   * Media Gallery (type 12) — imagem decorativa da Ayami.
-   * @param {string|string[]} urls
-   */
   cv2Gallery(urls) {
     const list = Array.isArray(urls) ? urls : [urls];
     return {
@@ -189,11 +151,6 @@ async editMessageById(channelId, messageId, data) {
     };
   }
 
-  /**
-   * Container raiz (type 17).
-   * @param {object[]} blocks   Blocos internos (cv2Text, cv2Divider, cv2Section, row...)
-   * @param {{ accentColor?: number, spoiler?: boolean }} opts
-   */
   cv2Container(blocks, opts = {}) {
     return {
       type:         17,
@@ -203,21 +160,10 @@ async editMessageById(channelId, messageId, data) {
     };
   }
 
-  /**
-   * Flags para respostas CV2.
-   * IS_COMPONENTS_V2 = 1 << 15 = 32768   EPHEMERAL = 1 << 6 = 64
-   */
   cv2Flags(ephemeral = true) {
     return ephemeral ? 32768 | 64 : 32768;
   }
 
-  /**
-   * Payload completo { flags, components: [container] } pronto para
-   * editOriginal / followUp / reply.
-   *
-   * @param {object[]} blocks
-   * @param {{ accentColor?: number, ephemeral?: boolean }} opts
-   */
   cv2Payload(blocks, opts = {}) {
     return {
       flags:      this.cv2Flags(opts.ephemeral ?? true),
@@ -225,10 +171,6 @@ async editMessageById(channelId, messageId, data) {
     };
   }
 
-  /* ── Modal helpers (type 18) ──
-     Sem acesso à interação aqui (usados por FlowBuilder/CommandBuilder
-     em dezenas de call sites); os defaults abaixo usam o idioma padrão
-     do sistema quando o chamador não define um label customizado. */
 
   modalSelect(customId, label, options, opts = {}) {
     return {
@@ -275,9 +217,6 @@ async editMessageById(channelId, messageId, data) {
     return text?.match(/\d{17,19}/)?.[0];
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE PAGINAÇÃO
-     ═══════════════════════════════════════════ */
 
   _clampPage(page, total) {
     const maxPage  = Math.max(0, Math.ceil(total / 25) - 1);
@@ -301,9 +240,6 @@ async editMessageById(channelId, messageId, data) {
     return this.row(btnPrev, btnNext);
   }
 
-  /* ═══════════════════════════════════════════
-     CACHE DE LISTAS
-     ═══════════════════════════════════════════ */
 
   static CACHE_TTL = 60_000;
 
@@ -327,9 +263,6 @@ async editMessageById(channelId, messageId, data) {
     delete this._listCache[guildId];
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: HOME  ─ Components V2
-     ═══════════════════════════════════════════ */
 
   async open(interaction) {
     const user    = interaction.member?.user?.id || interaction.user?.id;
@@ -364,7 +297,6 @@ async editMessageById(channelId, messageId, data) {
       return this.flowBuilder.startCreate(i, user);
     });
 
-    /* ── Blocos Components V2 ── */
     const blocks = [
       this.cv2Text(this.t('home_title', ctx)),
       this.cv2Divider(),
@@ -386,9 +318,6 @@ async editMessageById(channelId, messageId, data) {
     return this.cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main });
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: LISTA DE FLUXOS  ─ Components V2
-     ═══════════════════════════════════════════ */
 
   async flowList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
@@ -467,9 +396,6 @@ async editMessageById(channelId, messageId, data) {
     return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: MENU DO FLUXO  ─ Components V2
-     ═══════════════════════════════════════════ */
 
   async flowMenu(interaction, user, flowId) {
     const guildId = interaction.guild_id;
@@ -567,9 +493,6 @@ async editMessageById(channelId, messageId, data) {
     }));
   }
 
-  /* ═══════════════════════════════════════════
-     CONFIRMAR EXCLUSÃO  ─ Components V2
-     ═══════════════════════════════════════════ */
 
   async _confirmDelete(interaction, user, flowId, flowName) {
     const ctx = this._tctx(interaction);
@@ -601,9 +524,6 @@ async editMessageById(channelId, messageId, data) {
     }));
   }
 
-  /* ═══════════════════════════════════════════
-     TELA: LISTA DE COMANDOS  ─ Components V2
-     ═══════════════════════════════════════════ */
 
   async commandList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
@@ -682,9 +602,6 @@ async editMessageById(channelId, messageId, data) {
     return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════ */
 
   _triggerLabel(trigger, ctx = {}) {
     if (!trigger) return this.t('trigger_not_configured', ctx);

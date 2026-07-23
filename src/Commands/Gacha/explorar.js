@@ -44,9 +44,6 @@ module.exports = {
 
     const agora = Date.now();
 
-    // ──────────────────────────────────────────
-    //  TEMPO
-    // ──────────────────────────────────────────
     if (subcommand.name === "tempo") {
 
       const exploracao = user.exploracao.mondstadt;
@@ -87,14 +84,10 @@ module.exports = {
       );
     }
 
-    // ──────────────────────────────────────────
-    //  MONDSTADT
-    // ──────────────────────────────────────────
     if (subcommand.name === "mondstadt") {
 
       const exploracao = user.exploracao.mondstadt;
 
-      // Já tem exploração em andamento
       if (exploracao.tempo > agora) {
 
         const restante = exploracao.tempo - agora;
@@ -116,7 +109,6 @@ module.exports = {
         );
       }
 
-      // Tem recompensa pra coletar
       if (exploracao.tempo <= agora && exploracao.coletar > 0) {
 
         const quantidade = exploracao.coletar;
@@ -147,7 +139,6 @@ module.exports = {
         );
       }
 
-      // Painel de exploração
       const buildPanel = (disabled = false) => ([
         {
           type: 10,
@@ -231,7 +222,6 @@ module.exports = {
                     userDoc.exploracao.mondstadt.coletar = recompensa;
                     await userDoc.save();
 
-                    // Edita a mensagem original desabilitando o select
                     await DiscordRequest(
                       `/interactions/${i.id}/${i.token}/callback`,
                       {

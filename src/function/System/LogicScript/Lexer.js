@@ -1,18 +1,12 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — LEXER (Tokenizador)
-   Converte código fonte em tokens tipados.
-   ═══════════════════════════════════════════ */
 
 const TokenType = {
-  // Literais
   NUMBER:     'NUMBER',
   STRING:     'STRING',
   BOOL:       'BOOL',
   NIL:        'NIL',
 
-  // Identificadores e palavras-chave
   IDENT:      'IDENT',
   LET:        'LET',
   CONST:      'CONST',
@@ -37,7 +31,6 @@ const TokenType = {
   OR:         'OR',
   NOT:        'NOT',
 
-  // Operadores
   PLUS:       '+',
   MINUS:      '-',
   STAR:       '*',
@@ -53,7 +46,6 @@ const TokenType = {
   CONCAT:     '..',
   DOT:        '.',
 
-  // Delimitadores
   LPAREN:     '(',
   RPAREN:     ')',
   LBRACE:     '{',
@@ -126,19 +118,14 @@ class Lexer {
 
       const ch = this.source[this.pos];
 
-      // Números
       if (/\d/.test(ch)) { this._readNumber(); continue; }
 
-      // Strings
       if (ch === '"' || ch === "'") { this._readString(ch); continue; }
 
-      // Identificadores e palavras-chave
       if (/[a-zA-Z_]/.test(ch)) { this._readIdent(); continue; }
 
-      // Operadores e pontuação
       if (this._readOperator()) continue;
 
-      // Quebra de linha significativa
       if (ch === '\n') {
         this.tokens.push(new Token(TokenType.NEWLINE, '\n', this.line));
         this.line++;
@@ -161,16 +148,13 @@ class Lexer {
     while (this.pos < this.source.length) {
       const ch = this.source[this.pos];
 
-      // Espaço/tab
       if (ch === ' ' || ch === '\t' || ch === '\r') { this.pos++; continue; }
 
-      // Comentário de linha: --
       if (ch === '-' && this._peek(1) === '-') {
         while (this.pos < this.source.length && this.source[this.pos] !== '\n') this.pos++;
         continue;
       }
 
-      // Comentário de bloco: /* ... */
       if (ch === '/' && this._peek(1) === '*') {
         this.pos += 2;
         while (this.pos < this.source.length) {
@@ -197,7 +181,7 @@ class Lexer {
   }
 
   _readString(quote) {
-    this.pos++; // pula o abre-aspas
+    this.pos++; 
     let str = '';
     while (this.pos < this.source.length) {
       const ch = this.source[this.pos];

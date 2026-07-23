@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Kaeya
- * Elemento: Cryo | Raridade: 4 estrelas
- * Role: Sub-DPS, suporte
- *
- * Mecânicas únicas:
- * - Glacial Waltz: icicles que orbitam e atacam automaticamente
- * - Excelente gerador de energia para o time
- */
 module.exports = {
     nome:     'Kaeya',
     raridade: '4',

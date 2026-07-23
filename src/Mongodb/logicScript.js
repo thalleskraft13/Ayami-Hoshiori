@@ -1,18 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — MODEL v4
-   Arquivo: ayami-fixed/models/logicScript.js
-   (e tambem: bot/src/Mongodb/logicScript.js)
-
-   Novidades:
-   - wasEnabledBeforeError: guarda se estava ativo
-     antes de um salvamento com erro, para poder
-     reativar automaticamente quando corrigido.
-   - lastError: ultimo erro de sintaxe/validacao
-     salvo junto ao script (mostrado no editor
-     mesmo antes de rodar /validate de novo).
-   ═══════════════════════════════════════════ */
 
 const { Schema, model, models } = require('mongoose');
 
@@ -24,7 +11,6 @@ const logicScriptSchema = new Schema({
   enabled:   { type: Boolean, default: true },
   isFolder:  { type: Boolean, default: false },
 
-  // Controle de erro / auto-reativacao
   hasError:               { type: Boolean, default: false },
   lastError:              { type: String,  default: null },
   wasEnabledBeforeError:  { type: Boolean, default: false },

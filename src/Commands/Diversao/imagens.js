@@ -203,7 +203,6 @@ module.exports = {
     async execute(interaction, client) {
         const subcommand = interaction.data.options[0].name;
 
-        // Defer imediatamente — renderização pode demorar
         await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
             method: 'POST',
             body: { type: 5 }
@@ -227,7 +226,6 @@ module.exports = {
     }
 };
 
-// ─── /imagem cinema ───────────────────────────────────────────────────────────
 
 async function _cinema(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -238,7 +236,6 @@ async function _cinema(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -247,23 +244,19 @@ async function _cinema(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -276,19 +269,16 @@ async function _cinema(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'cinema',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -303,7 +293,6 @@ async function _cinema(interaction, client) {
 }
 
 
-// ─── /imagem rezando ───────────────────────────────────────────────────────────
 
 async function _rezando(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -314,7 +303,6 @@ async function _rezando(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -323,23 +311,19 @@ async function _rezando(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -352,19 +336,16 @@ async function _rezando(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'rezando',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -378,7 +359,6 @@ async function _rezando(interaction, client) {
     });
 }
 
-// ─── /imagem jornal ───────────────────────────────────────────────────────────
 
 async function _jornal(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -391,7 +371,6 @@ async function _jornal(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -400,23 +379,19 @@ async function _jornal(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -429,12 +404,10 @@ async function _jornal(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'jornal',
         avatarUrl,
@@ -443,7 +416,6 @@ async function _jornal(interaction, client) {
         descricao: descricao.value,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -457,7 +429,6 @@ async function _jornal(interaction, client) {
     });
 }
 
-// ─── /imagem gohan ───────────────────────────────────────────────────────────
 
 async function _gohan(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -468,7 +439,6 @@ async function _gohan(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -477,23 +447,19 @@ async function _gohan(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -506,19 +472,16 @@ async function _gohan(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'gohan',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -532,7 +495,6 @@ async function _gohan(interaction, client) {
     });
 }
 
-// ─── /imagem prisao ───────────────────────────────────────────────────────────
 
 async function _prisao(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -543,7 +505,6 @@ async function _prisao(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -552,23 +513,19 @@ async function _prisao(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -581,19 +538,16 @@ async function _prisao(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'prisao',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -607,7 +561,6 @@ async function _prisao(interaction, client) {
     });
 }
 
-// ─── /imagem pinkiepie ───────────────────────────────────────────────────────────
 
 async function _pinkiepie(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -618,7 +571,6 @@ async function _pinkiepie(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -627,23 +579,19 @@ async function _pinkiepie(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -656,19 +604,16 @@ async function _pinkiepie(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'pinkiepie',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -682,7 +627,6 @@ async function _pinkiepie(interaction, client) {
     });
 }
 
-// ─── /imagem Plano Maligno ───────────────────────────────────────────────────────────
 
 async function _planomaligno(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -693,7 +637,6 @@ async function _planomaligno(interaction, client) {
     let avatarUrl    = null;
     let avatarBuffer = null;
 
-    // ── Prioridade: arquivo enviado > usuário mencionado > autor ──────────
     if (arquivoOpt) {
         const attachmentId = arquivoOpt.value;
         const attachment   = interaction.data.resolved?.attachments?.[attachmentId];
@@ -702,23 +645,19 @@ async function _planomaligno(interaction, client) {
             return _reply(interaction, '❌ Não consegui ler o arquivo enviado.');
         }
 
-        // Valida extensão antes de baixar
         const url = attachment.url;
         if (!/\.(png|jpe?g)$/i.test(url.split('?')[0])) {
             return _reply(interaction, '❌ Apenas arquivos PNG ou JPEG são aceitos.');
         }
 
-        // Valida tamanho declarado pelo Discord (em bytes)
         if (attachment.size > 8_000_000) {
             return _reply(interaction, '❌ Arquivo muito grande. Máximo permitido: 8MB.');
         }
 
-        // Baixa o arquivo como Buffer
         const res    = await fetch(url);
         const raw    = await res.arrayBuffer();
         const buffer = Buffer.from(raw);
 
-        // Valida magic bytes — garante que é PNG ou JPEG de verdade
         if (!_isValidImage(buffer)) {
             return _reply(interaction, '❌ Arquivo inválido. Envie apenas PNG ou JPEG.');
         }
@@ -731,19 +670,16 @@ async function _planomaligno(interaction, client) {
         avatarUrl    = _getAvatarURL(user);
 
     } else {
-        // Usa o avatar do autor da interação
         const user = interaction.member?.user ?? interaction.user;
         avatarUrl  = _getAvatarURL(user);
     }
 
-    // ── Renderiza ─────────────────────────────────────────────────────────
     const buffer = await client.MediaManager.Render({
         Template:    'planomaligno',
         avatarUrl,
         avatarBuffer,
     });
 
-    // ── Envia ─────────────────────────────────────────────────────────────
     await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
         method: 'POST',
         files: [{
@@ -756,7 +692,6 @@ async function _planomaligno(interaction, client) {
         }
     });
 }
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function _getAvatarURL(user) {
     if (!user?.avatar)

@@ -10,42 +10,11 @@ const PENDING_COLOR = 0xF1C40F;
 
 const CALLBACK_TYPE_UPDATE_MESSAGE = 7;
 
-/**
- * Perfil Personalizado da Ayami por Servidor (Constellation).
- *
- * Este manager só cuida do que acontece DEPOIS que a solicitação já
- * existe no banco (criada pelo dashboard, ver services/ayamiProfileService.js
- * no repo do site) e a mensagem de análise já foi enviada ao canal de
- * revisão via bot token (site/services/discordSender.js#sendAsBot).
- *
- * Responsabilidades daqui pra frente:
- *   1. Rotear os cliques de Aprovar/Recusar (InteractionManager despacha
- *      pra cá quando reconhece custom_id {"t":"ayami_profile_approve"/"ayami_profile_reject"}).
- *   2. Validar permissão (apenas staff da Ayami).
- *   3. Ao aprovar: aplicar as mudanças permitidas pela API do Discord,
- *      atualizar o banco, editar a mensagem de análise, notificar o servidor.
- *   4. Ao recusar: abrir modal pedindo o motivo, registrar, editar a
- *      mensagem de análise, notificar o servidor.
- *
- * IMPORTANTE — limitações reais da API do Discord (jul/2026):
- *   - Avatar do bot POR SERVIDOR: suportado, via
- *     PATCH /guilds/{guild.id}/members/@me { avatar }.
- *   - Banner e "Sobre mim" (about me) POR SERVIDOR: NÃO existe suporte
- *     oficial ainda — só é possível globalmente via PATCH /users/@me,
- *     o que afetaria TODOS os servidores (proibido pelo objetivo deste
- *     sistema). Por isso o dashboard mantém essas opções ocultas e,
- *     mesmo que um documento antigo tenha `changes.banner.requested`
- *     ou `changes.bio.requested` = true, este manager NUNCA aplica —
- *     apenas ignora e deixa registrado como não aplicado.
- */
 class AyamiProfileManager {
     constructor(client) {
         this.client = client;
     }
 
-    /* ═══════════════════════════════════════════════
-       ✅ APROVAR
-       ═══════════════════════════════════════════════ */
     async handleApprove(interaction, requestId) {
         try {
             const responderId = interaction.member?.user?.id || interaction.user?.id;
@@ -80,9 +49,6 @@ class AyamiProfileManager {
         }
     }
 
-    /* ═══════════════════════════════════════════════
-       ❌ RECUSAR — abre modal pedindo o motivo
-       ═══════════════════════════════════════════════ */
     async handleReject(interaction, requestId) {
         const responderId = interaction.member?.user?.id || interaction.user?.id;
 
@@ -149,13 +115,9 @@ class AyamiProfileManager {
         }
     }
 
-    /* ═══════════════════════════════════════════════
-       Aplica as mudanças permitidas pela API do Discord
-       ═══════════════════════════════════════════════ */
     async _applyChanges(request) {
         const applied = { avatar: false, banner: false, bio: false };
 
-        // Avatar — suportado por servidor via member avatar do bot.
         if (request.changes?.avatar?.requested && request.changes.avatar.url) {
             try {
                 const base64 = await this._urlToDataUri(request.changes.avatar.url);
@@ -169,11 +131,6 @@ class AyamiProfileManager {
             }
         }
 
-        // Banner e Bio (about me) — SEM suporte por servidor na API do
-        // Discord ainda. Não aplicamos nada, mesmo que solicitado —
-        // arquitetura já preparada pro dia em que existir suporte oficial.
-        // (request.changes.banner / request.changes.bio permanecem só
-        // registrados no histórico, nunca aplicados por aqui.)
 
         return applied;
     }
@@ -186,9 +143,6 @@ class AyamiProfileManager {
         return `data:${contentType};base64,${buffer.toString('base64')}`;
     }
 
-    /* ═══════════════════════════════════════════════
-       Edita a mensagem de análise no canal de revisão
-       ═══════════════════════════════════════════════ */
     async _updateReviewMessage(interaction, request, { title, color, footer, extraField }) {
         const fields = [
             { name: 'Servidor', value: `${request.guildName || request.guildId} (\`${request.guildId}\`)`, inline: true },
@@ -220,9 +174,6 @@ class AyamiProfileManager {
         });
     }
 
-    /* ═══════════════════════════════════════════════
-       Notifica o servidor solicitante do resultado
-       ═══════════════════════════════════════════════ */
     async _notifyGuild(request, approved, applied, reason) {
         const embed = approved
             ? {
@@ -248,7 +199,6 @@ class AyamiProfileManager {
             console.error('[AyamiProfileManager] Falha ao notificar no canal, tentando DM:', err.message);
         }
 
-        // Fallback: DM pra quem solicitou.
         try {
             const dm = await DiscordRequest('/users/@me/channels', {
                 method: 'POST',

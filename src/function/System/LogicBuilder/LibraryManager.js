@@ -10,30 +10,12 @@ const {
 } = require('../../../Mongodb/flow.js');
 
 
-/* ═══════════════════════════════════════════════════════════
-   LIBRARY MANAGER
-   ═══════════════════════════════════════════════════════════ */
 
-/**
- * LibraryManager
- *
- * Gerencia toda a Biblioteca de Fluxos do Logic Builder:
- *   - Publicação e versionamento de fluxos
- *   - Busca com filtros e paginação
- *   - Instalação com assistente de template vars
- *   - Avaliações (like/dislike + estrelas)
- *   - Perfil de criador e sistema de seguidores
- *   - Destaques semanais
- *
- * Uso:
- *   client.libraryManager = new LibraryManager(client);
- */
 class LibraryManager {
 
   constructor(client) {
     this.client = client;
 
-    // Nomes de variáveis de sistema que NÃO devem virar templateVars
     this._systemVarNames = new Set([
       'user','user_id','user_mention','guild','guild_id',
       'channel','channel_id','message','message_id',
@@ -44,40 +26,15 @@ class LibraryManager {
     this._decayInterval = null;
   }
 
-  /**
-   * Inicia o LibraryManager.
-   * Deve ser chamado APÓS o MongoDB conectar, igual ao LogicEngine.start().
-   *
-   * Exemplo no ready handler:
-   *   client.libraryManager.start();
-   */
   start() {
     this._startWeeklyDecay();
     console.log('[LibraryManager] Iniciado.');
   }
 
-  /* ═══════════════════════════════════════════
-     PUBLICAÇÃO
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Publica um ou mais fluxos na biblioteca.
-   *
-   * @param {object} opts
-   * @param {string}   opts.authorId      — userId do Discord
-   * @param {string}   opts.name          — nome do sistema
-   * @param {string}   opts.shortDesc     — descrição curta
-   * @param {string}   opts.fullDesc      — descrição completa
-   * @param {string}   opts.category      — categoria
-   * @param {string[]} opts.tags          — tags
-   * @param {string[]} opts.flowIds       — IDs dos fluxos do guild a exportar
-   * @param {string}   opts.guildId       — guild de origem (para buscar os fluxos)
-   * @returns {Promise<object>} — documento LibraryFlow criado
-   */
   async publish({ authorId, name, shortDesc, fullDesc, category, tags, flowIds, guildId, ctx = {} }) {
     const { FlowModel } = require('../../../Mongodb/flow.js');
 
-    // Busca os fluxos originais
     const flows = await FlowModel.find({
       guildId,
       flowId: { $in: flowIds }
@@ -87,13 +44,10 @@ class LibraryManager {
       throw new Error(this.client.t('logicbuilder.err_no_flows_to_publish', ctx));
     }
 
-    // Sanitiza: remove guildId, cooldownMap e stats antes de exportar
     const sanitized = flows.map(f => this._sanitizeFlow(f));
 
-    // Detecta variáveis de template
     const templateVars = this._extractTemplateVars(sanitized);
 
-    // Busca ou cria o perfil do criador
     const profile = await this._ensureProfile(authorId);
 
     const entry = await LibraryFlowModel.create({
@@ -114,20 +68,6 @@ class LibraryManager {
     return entry;
   }
 
-  /**
-   * Edita apenas os metadados de uma entrada (nome, descrição, categoria, tags).
-   * Não altera os fluxos nem a versão — use publishUpdate para isso.
-   *
-   * @param {string} libId
-   * @param {string} authorId  — deve ser o mesmo do original
-   * @param {object} fields    — campos editáveis
-   * @param {string} [fields.name]
-   * @param {string} [fields.shortDesc]
-   * @param {string} [fields.fullDesc]
-   * @param {string} [fields.category]
-   * @param {string[]} [fields.tags]
-   * @returns {Promise<object>} — documento atualizado
-   */
   async editMetadata(libId, authorId, { name, shortDesc, fullDesc, category, tags, ctx = {} } = {}) {
     const entry = await LibraryFlowModel.findOne({ libId });
     if (!entry)                        throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
@@ -151,19 +91,6 @@ class LibraryManager {
     return entry.toObject();
   }
 
-  /**
-   * Atualiza os fluxos de uma entrada existente, incrementando a versão.
-   * Notifica todos os instaladores sobre a nova versão disponível.
-   *
-   * @param {object} opts
-   * @param {string}   opts.libId
-   * @param {string}   opts.authorId    — deve ser o mesmo do original
-   * @param {string[]} opts.flowIds     — IDs dos fluxos atualizados no guild
-   * @param {string}   opts.guildId     — guild de origem
-   * @param {string}   opts.newVersion  — ex: '2.0.0'
-   * @param {string}   [opts.changelog] — resumo das mudanças
-   * @returns {Promise<object>} — documento atualizado
-   */
   async publishUpdate({ libId, authorId, flowIds, guildId, newVersion, changelog = '', ctx = {} }) {
     const entry = await LibraryFlowModel.findOne({ libId });
     if (!entry)                       throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
@@ -180,7 +107,6 @@ class LibraryManager {
     const sanitized    = flows.map(f => this._sanitizeFlow(f));
     const templateVars = this._extractTemplateVars(sanitized);
 
-    // Guarda snapshot da versão anterior no histórico
     entry.versionHistory = entry.versionHistory || [];
     entry.versionHistory.push({
       version:   entry.version,
@@ -195,19 +121,11 @@ class LibraryManager {
     entry.updatedAt     = new Date();
     await entry.save();
 
-    // Notifica instaladores de forma assíncrona (não bloqueia o retorno)
     this._notifyUpdate(libId, entry.name, newVersion, changelog).catch(() => {});
 
     return entry.toObject();
   }
 
-  /**
-   * Exclui permanentemente uma entrada da biblioteca.
-   * Apenas o autor pode excluir. Moderadores usam moderate('rejected').
-   *
-   * @param {string} libId
-   * @param {string} authorId
-   */
   async delete(libId, authorId, ctx = {}) {
     const entry = await LibraryFlowModel.findOne({ libId });
     if (!entry)                       throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
@@ -216,13 +134,6 @@ class LibraryManager {
     await this._deleteEntry(libId);
   }
 
-  /**
-   * Lista todas as entradas publicadas por um autor,
-   * com status, versão e stats resumidos.
-   *
-   * @param {string} authorId
-   * @returns {Promise<object[]>}
-   */
   async getMyPublications(authorId) {
     const entries = await LibraryFlowModel
       .find({ authorId })
@@ -250,23 +161,7 @@ class LibraryManager {
     }));
   }
 
-  /* ═══════════════════════════════════════════
-     BUSCA / LISTAGEM
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Pesquisa fluxos na biblioteca com filtros e paginação.
-   *
-   * @param {object} opts
-   * @param {string}  [opts.query]    — texto livre (nome ou descrição)
-   * @param {string}  [opts.category]
-   * @param {string}  [opts.tag]
-   * @param {string}  [opts.authorId]
-   * @param {string}  [opts.sort]     — 'installs' | 'rating' | 'recent' | 'trending'
-   * @param {number}  [opts.page]     — 0-based
-   * @param {number}  [opts.limit]    — padrão 10
-   * @returns {Promise<{ results: object[], total: number, pages: number }>}
-   */
   async search({ query, category, tag, authorId, sort = 'installs', page = 0, limit = 10 } = {}) {
     const filter = { status: 'approved' };
 
@@ -306,16 +201,10 @@ class LibraryManager {
     };
   }
 
-  /**
-   * Busca uma entrada específica pelo libId.
-   */
   async getById(libId) {
     return LibraryFlowModel.findOne({ libId, status: 'approved' }).lean();
   }
 
-  /**
-   * Destaques da semana — retorna top 5 de cada categoria.
-   */
   async getHighlights() {
     const [trending, topInstalls, topRated, recent] = await Promise.all([
       LibraryFlowModel.find({ status: 'approved' }).sort({ 'stats.weeklyScore': -1 }).limit(5).lean(),
@@ -328,26 +217,11 @@ class LibraryManager {
     return { trending, topInstalls, topRated, recent };
   }
 
-  /* ═══════════════════════════════════════════
-     INSTALAÇÃO
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Instala uma entrada da biblioteca em um guild.
-   * Substitui as templateVars pelos valores fornecidos.
-   *
-   * @param {object} opts
-   * @param {string}  opts.libId
-   * @param {string}  opts.guildId
-   * @param {string}  opts.userId       — quem instalou
-   * @param {object}  opts.varValues    — { canal_logs: '123456', cargo_xp: '789' }
-   * @returns {Promise<string[]>} — flowIds criados no guild
-   */
   async install({ libId, guildId, userId, varValues = {}, ctx = {} }) {
     const entry = await LibraryFlowModel.findOne({ libId, status: 'approved' });
     if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found_library', ctx));
 
-    // Clona os fluxos e substitui as templateVars
     const cloned = this._applyTemplateVars(entry.flows, varValues);
 
     const createdIds = [];
@@ -366,27 +240,22 @@ class LibraryManager {
       createdIds.push(flow.flowId);
     }
 
-    // Registra a instalação
     await LibraryInstallModel.findOneAndUpdate(
       { libId, guildId },
       { libId, guildId, installedBy: userId, flowIds: createdIds, version: entry.version, installedAt: new Date() },
       { upsert: true }
     );
 
-    // Atualiza estatísticas
     await LibraryFlowModel.updateOne({ libId }, {
       $inc: {
         'stats.installs':    1,
-        'stats.weeklyScore': 5   // cada instalação vale 5 pontos de tendência
+        'stats.weeklyScore': 5   
       }
     });
 
     return createdIds;
   }
 
-  /**
-   * Verifica se um guild tem uma atualização disponível para uma entrada instalada.
-   */
   async checkUpdate(libId, guildId) {
     const [entry, install] = await Promise.all([
       LibraryFlowModel.findOne({ libId }).lean(),
@@ -399,23 +268,11 @@ class LibraryManager {
     return { currentVersion: install.version, newVersion: entry.version };
   }
 
-  /* ═══════════════════════════════════════════
-     AVALIAÇÕES
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Registra um like ou dislike.
-   * Cada usuário só pode votar uma vez por entrada.
-   *
-   * @param {string} libId
-   * @param {string} userId
-   * @param {'like'|'dislike'} vote
-   */
   async vote(libId, userId, vote) {
     const existing = await LibraryRatingModel.findOne({ libId, userId });
 
     if (existing?.vote === vote) {
-      // Remove o voto (toggle)
       await LibraryRatingModel.deleteOne({ libId, userId });
       const field = vote === 'like' ? 'stats.likes' : 'stats.dislikes';
       await LibraryFlowModel.updateOne({ libId }, { $inc: { [field]: -1 } });
@@ -423,7 +280,6 @@ class LibraryManager {
     }
 
     if (existing) {
-      // Troca o voto
       const oldField = existing.vote === 'like' ? 'stats.likes' : 'stats.dislikes';
       const newField = vote === 'like' ? 'stats.likes' : 'stats.dislikes';
       await LibraryRatingModel.updateOne({ libId, userId }, { vote });
@@ -433,7 +289,6 @@ class LibraryManager {
       return { action: 'changed', vote };
     }
 
-    // Novo voto
     await LibraryRatingModel.create({ libId, userId, vote });
     const field = vote === 'like' ? 'stats.likes' : 'stats.dislikes';
     const scoreInc = vote === 'like' ? 2 : 0;
@@ -443,9 +298,6 @@ class LibraryManager {
     return { action: 'added', vote };
   }
 
-  /**
-   * Registra uma avaliação por estrelas (1–5).
-   */
   async rate(libId, userId, rating, ctx = {}) {
     if (rating < 1 || rating > 5) throw new Error(this.client.t('logicbuilder.err_rating_range', ctx));
 
@@ -458,7 +310,6 @@ class LibraryManager {
       await LibraryRatingModel.create({ libId, userId, rating });
     }
 
-    // Recalcula a média
     const all = await LibraryRatingModel.find({ libId, rating: { $ne: null } }).lean();
     const avg = all.reduce((acc, r) => acc + r.rating, 0) / all.length;
 
@@ -472,20 +323,11 @@ class LibraryManager {
     return { avg: Math.round(avg * 10) / 10, count: all.length };
   }
 
-  /**
-   * Retorna o voto/rating de um usuário em uma entrada.
-   */
   async getUserRating(libId, userId) {
     return LibraryRatingModel.findOne({ libId, userId }).lean();
   }
 
-  /* ═══════════════════════════════════════════
-     PERFIL DE CRIADOR
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Retorna o perfil público de um criador com suas estatísticas agregadas.
-   */
   async getCreatorProfile(authorId) {
     const [profile, entries] = await Promise.all([
       CreatorProfileModel.findOne({ userId: authorId }).lean(),
@@ -523,9 +365,6 @@ class LibraryManager {
     };
   }
 
-  /**
-   * Atualiza o perfil do criador (username, bio).
-   */
   async updateProfile(userId, { username, bio }) {
     return CreatorProfileModel.findOneAndUpdate(
       { userId },
@@ -534,14 +373,7 @@ class LibraryManager {
     );
   }
 
-  /* ═══════════════════════════════════════════
-     SEGUIDORES
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Segue ou deixa de seguir um criador.
-   * Retorna { action: 'followed' | 'unfollowed' }.
-   */
   async toggleFollow(followerId, targetId, ctx = {}) {
     if (followerId === targetId) throw new Error(this.client.t('logicbuilder.err_cannot_follow_self', ctx));
 
@@ -563,23 +395,12 @@ class LibraryManager {
     return { action: 'followed' };
   }
 
-  /**
-   * Retorna os seguidores de um criador como array de userIds.
-   */
   async getFollowers(userId) {
     const profile = await CreatorProfileModel.findOne({ userId }).lean();
     return profile?.followers || [];
   }
 
-  /* ═══════════════════════════════════════════
-     EXCLUSÃO / MODERAÇÃO
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Aprova ou rejeita uma entrada (moderação).
-   * Moderadores podem também excluir via moderate('rejected') + remove manual,
-   * ou usar deleteByModerator() abaixo.
-   */
   async moderate(libId, status, ctx = {}) {
     if (!['approved', 'rejected'].includes(status)) throw new Error(this.client.t('logicbuilder.err_invalid_status', ctx));
     return LibraryFlowModel.findOneAndUpdate(
@@ -589,26 +410,16 @@ class LibraryManager {
     );
   }
 
-  /**
-   * Exclusão forçada por moderador (remove todos os dados relacionados).
-   */
   async deleteByModerator(libId, ctx = {}) {
     const entry = await LibraryFlowModel.findOne({ libId });
     if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
     await this._deleteEntry(libId);
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS INTERNOS
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Remove campos específicos do guild antes de exportar o fluxo.
-   */
   _sanitizeFlow(flow) {
     const clean = { ...flow };
 
-    // remove campos de identidade do guild de origem
     delete clean._id;
     delete clean.__v;
     delete clean.guildId;
@@ -618,15 +429,11 @@ class LibraryManager {
     delete clean.updatedAt;
     delete clean.createdBy;
 
-    // mantém flowId como referência original, mas será recriado na instalação
     delete clean.flowId;
 
     return clean;
   }
 
-  /**
-   * Remove todos os dados relacionados a uma entrada (fluxo, ratings, instalações).
-   */
   async _deleteEntry(libId) {
     await Promise.all([
       LibraryFlowModel.deleteOne({ libId }),
@@ -635,10 +442,6 @@ class LibraryManager {
     ]);
   }
 
-  /**
-   * Verifica se newVersion é estritamente maior que currentVersion.
-   * Segue semver simples: MAJOR.MINOR.PATCH
-   */
   _isNewerVersion(current, next) {
     const parse = v => v.split('.').map(Number);
     const [cMaj, cMin, cPat] = parse(current);
@@ -649,9 +452,6 @@ class LibraryManager {
     return nPat > cPat;
   }
 
-  /**
-   * variáveis de sistema, retornando a lista de templateVars detectadas.
-   */
   _extractTemplateVars(flows) {
     const found = new Set();
     const regex = /\{([a-z_][a-z0-9_]*)\}/g;
@@ -666,23 +466,16 @@ class LibraryManager {
     return [...found];
   }
 
-  /**
-   * Clona os fluxos substituindo cada {templateVar} pelo valor fornecido.
-   */
   _applyTemplateVars(flows, varValues) {
     let str = JSON.stringify(flows);
 
     for (const [key, value] of Object.entries(varValues)) {
-      // substitui tanto {canal_logs} como outros formatos comuns
       str = str.replaceAll(`{${key}}`, value ?? '');
     }
 
     return JSON.parse(str);
   }
 
-  /**
-   * Garante que o perfil de criador existe, criando um vazio se necessário.
-   */
   async _ensureProfile(userId) {
     let profile = await CreatorProfileModel.findOne({ userId });
     if (!profile) {
@@ -691,16 +484,11 @@ class LibraryManager {
     return profile;
   }
 
-  /**
-   * Notifica (via DM ou canal) os instaladores de uma entrada sobre uma nova versão.
-   * Usa o canal de cada guild que instalou, se disponível.
-   */
   async _notifyUpdate(libId, entryName, newVersion, changelog = '') {
     const installs = await LibraryInstallModel.find({ libId }).lean();
 
     for (const install of installs) {
       try {
-        // Tenta notificar o usuário que instalou via DM
         const dm = await DiscordRequest('/users/@me/channels', {
           method: 'POST',
           body:   { recipient_id: install.installedBy }
@@ -727,16 +515,11 @@ class LibraryManager {
     }
   }
 
-  /**
-   * Decaimento semanal do weeklyScore para manter a tendência relevante.
-   * Roda todo domingo à meia-noite (ou na inicialização + intervalo).
-   */
   _startWeeklyDecay() {
     const MS_IN_WEEK = 7 * 24 * 60 * 60 * 1000;
 
     const decay = async () => {
       try {
-        // Reduz o score semanal em 50% a cada semana
         const entries = await LibraryFlowModel.find({ 'stats.weeklyScore': { $gt: 0 } });
         for (const entry of entries) {
           entry.stats.weeklyScore = Math.floor(entry.stats.weeklyScore * 0.5);
@@ -747,7 +530,6 @@ class LibraryManager {
       }
     };
 
-    // Primeira execução: aguarda 1 minuto para o DB estabilizar, depois roda semanalmente
     setTimeout(() => {
       decay();
       this._decayInterval = setInterval(decay, MS_IN_WEEK);
@@ -788,8 +570,5 @@ class LibraryManager {
 }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   EXPORTS
-   ═══════════════════════════════════════════════════════════ */
 
 module.exports = LibraryManager;

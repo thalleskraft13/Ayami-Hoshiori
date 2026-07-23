@@ -12,21 +12,10 @@ const { randomUUID }      = require('crypto');
 const PremiumManager      = require('../../Utils/PremiumManager.js');
 const { getPlan }         = require('../../Utils/PremiumPlans.js');
 
-// Tipos de pergunta "avançados" — contam contra o limite separado do
-// plano (plan.tickets.advancedTypeLimit). Texto curto/longo, número e
-// sim/não são "básicos" e só contam contra o limite total de perguntas.
 const ADVANCED_QUESTION_TYPES = new Set(['select', 'multiple', 'checkbox', 'attachment', 'member', 'role', 'channel']);
 
-/**
- * Valores do campo TYPE do evento `ticketUpdate` do Logic Script —
- * números (não strings), conforme documentado em
- * /docs/reference/enums/ticket-update-type no site.
- */
 const TICKET_UPDATE_TYPE = { CRIADO: 1, FECHADO: 2 };
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI (mesma paleta do Logic Builder)
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,
   gold:    0xFFD966,
@@ -36,10 +25,6 @@ const COLOR = {
   success: 0x57F287,
 };
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS COMPONENTS V2
-   (mesmo padrão usado em todo o resto do bot)
-   ═══════════════════════════════════════════════════════════ */
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -77,11 +62,6 @@ function row(...components) {
   return { type: 1, components };
 }
 
-/**
- * Resolve uma mensagem customizável do painel, com fallback para o
- * texto padrão (Ayami) caso o usuário não tenha personalizado.
- * Substitui {user}, {id} e {count} quando fornecidos no contexto.
- */
 function resolveMsg(panel, key, fallback, ctx = {}) {
   let text = panel.mensagensConfig?.[key] || fallback;
   if (ctx.userId)  text = text.replaceAll('{user}', `<@${ctx.userId}>`).replaceAll('{id}', ctx.userId);
@@ -101,15 +81,10 @@ class TicketSystem {
     return this.client?.emoji?.[name] ?? '';
   }
 
-  /** Atalho pra tradução de uma chave do sistema "ticket". */
   t(key, ctx) {
     return this.client.t(`ticket.${key}`, ctx);
   }
 
-  /**
-   * Contexto de tradução padrão: locale resolvido da interação +
-   * atalhos pros emojis mais usados nas mensagens do sistema.
-   */
   _tctx(interaction, extra = {}) {
     return localeCtx(interaction, {
       animada:   this._e('animada'),
@@ -126,7 +101,6 @@ class TicketSystem {
     });
   }
 
-  /** Opções do tipo de pergunta (form sequencial), traduzidas. */
   _questionTypeChoices(ctx) {
     return [
       { label: this.t('qtype_short_label', ctx),      value: 'short',      description: this.t('qtype_short_desc', ctx) },
@@ -143,19 +117,7 @@ class TicketSystem {
     ];
   }
 
-  /* ═══════════════════════════════════════
-     HELPERS — DISCORD
-  ═══════════════════════════════════════ */
 
-  /**
-   * Responde diretamente à interação (type 4).
-   * Delega para o InteractionManager do framework, que mantém o
-   * Map `_states` sincronizado (replied/deferred) — bater direto no
-   * Discord por fora disso causava dessincronia: em caso de erro
-   * subsequente, `_replyError` tentava reconhecer a interação de
-   * novo (achando que ainda não tinha sido respondida) e batia em
-   * "Unknown interaction" / "Unknown Webhook" (404).
-   */
   async reply(interaction, data) {
     return this.client.interactions._callback(interaction, { type: 4, data });
   }
@@ -164,14 +126,6 @@ class TicketSystem {
     return this.client.interactions.defer(interaction);
   }
 
-  /**
-   * Edita a "mensagem original" do painel. Normalmente relativo a
-   * @original do token da interação atual — mas se a interação foi
-   * marcada com `__rootOverride` (acontece depois do embed builder,
-   * que roda num followUp com token próprio), edita a mensagem raiz
-   * real via REST puro por channelId+messageId. Mesmo padrão do
-   * Logic Builder.
-   */
   async editOriginal(interaction, data) {
     if (interaction.__rootOverride) {
       const { channelId, messageId } = interaction.__rootOverride;
@@ -202,14 +156,6 @@ class TicketSystem {
   }
 
   async _ask(interaction, question, opts = {}) {
-    // Correção: a interação precisa ser reconhecida ANTES de mandar um
-    // follow-up (POST /webhooks/.../{token}) — senão o Discord ainda não
-    // criou o "webhook" da interação e a chamada abaixo falha com
-    // 404 "Unknown Webhook", derrubando a interação inteira pro usuário
-    // ("a interação falhou"), mesmo o bot respondendo depois.
-    // deferUpdate (type 6) reconhece SEM alterar a mensagem do painel,
-    // então @original continua apontando pro painel — o editOriginal()
-    // que roda depois de receber a resposta continua funcionando normal.
     await this.deferUpdate(interaction);
 
     await this.followUpEphemeral(interaction, cv2Payload([
@@ -243,31 +189,16 @@ class TicketSystem {
     return randomUUID().replace(/-/g, '').slice(0, 16);
   }
 
-  /** Resolve o plano premium da guild (FREE se não houver nenhum ativo). */
   async _getGuildPlan(guildId) {
     const premium = await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }));
     return premium.status ? premium.plan : getPlan(null);
   }
 
-  /**
-   * O evento `ticketUpdate` e a função `abrirTicket()` do Logic Script
-   * são recursos Premium — liberados a partir do plano 🌟 Nova Estrela
-   * (ver `logicScript.premiumEvents` em Utils/PremiumPlans.js, espelhado
-   * em site/config/premiumPlans.js).
-   */
   async _isPremiumEventsEnabled(guildId) {
     const plan = await this._getGuildPlan(guildId);
     return !!plan?.logicScript?.premiumEvents;
   }
 
-  /**
-   * Dispara o evento `ticketUpdate` pro Logic Script E o trigger
-   * "🎫 Ticket atualizado" pro Logic Builder da guild, se o plano
-   * permitir. `payload.TYPE` é sempre um número (ver TICKET_UPDATE_TYPE) —
-   * no Logic Builder isso vira o filtro por select (aberto/fechado), não
-   * um campo pra digitar. Nunca lança — é best-effort, igual ao resto dos
-   * side-effects deste sistema (auto-cargo, transcript, etc.).
-   */
   _emitTicketUpdate(guildId, payload) {
     const runner = this.client?.logicScriptRunner;
     if (runner) {
@@ -288,14 +219,6 @@ class TicketSystem {
     }
   }
 
-  /**
-   * Checa se a guild ainda pode adicionar uma pergunta do `tipo` informado
-   * a essa lista de perguntas, respeitando os limites do plano:
-   *   - total de perguntas (plan.tickets.maxQuestions)
-   *   - perguntas de tipo avançado — seleção/múltipla escolha/checkbox/
-   *     anexo/membro/cargo/canal (plan.tickets.advancedTypeLimit)
-   * Retorna { ok: true, plan } ou { ok: false, motivo, plan }.
-   */
   async _checkSeqQuestionLimit(guildId, existingQuestions, tipo, ctx) {
     const plan = await this._getGuildPlan(guildId);
     const questions = existingQuestions || [];
@@ -324,9 +247,6 @@ class TicketSystem {
     return { ok: true, plan };
   }
 
-  /* ═══════════════════════════════════════
-     ABERTURA / LISTA DE PAINÉIS
-  ═══════════════════════════════════════ */
 
   async open(interaction) {
     const user    = interaction.member?.user?.id || interaction.user?.id;
@@ -403,9 +323,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false }));
   }
 
-  /* ═══════════════════════════════════════
-     CRIAR PAINEL
-  ═══════════════════════════════════════ */
 
   async criar(interaction, user) {
     const ctx = this._tctx(interaction);
@@ -440,9 +357,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════
-     MENU DO PAINEL
-  ═══════════════════════════════════════ */
 
   async painelMenu(interaction, user, panelId, { successMsg } = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -556,11 +470,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.danger }));
   }
 
-  /**
-   * Monta as linhas de ação (botão único ou select hub) que abrem o
-   * ticket. SEMPRE geradas pelo sistema — nunca vêm de dentro dos
-   * blocos configurados na Dashboard (ver ComponentsV2Renderer.js).
-   */
   _buildOpenTicketRows(panel, panelId, ctx) {
     return panel.selectMenuConfig?.enabled
       ? [row({
@@ -583,8 +492,6 @@ class TicketSystem {
     if (!panel.canalId) {
       return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_channel', ctx) });
     }
-    // Painel em Components V2 (configurado na Dashboard) não depende de
-    // painelPrincipal — só o modo embed (bot) exige isso.
     if (!panel.useComponentsV2 && !panel.painelPrincipal) {
       return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_no_embed', ctx) });
     }
@@ -592,7 +499,6 @@ class TicketSystem {
     const rows = this._buildOpenTicketRows(panel, panelId, ctx);
     const { body } = ComponentsV2Renderer.buildPanelBody(panel, rows);
 
-    // Se já existe uma mensagem publicada, EDITA em vez de duplicar.
     const msg = panel.messageId
       ? await DiscordRequest(`/channels/${panel.canalId}/messages/${panel.messageId}`, { method: 'PATCH', body }).catch(() => null)
       : null;
@@ -605,9 +511,6 @@ class TicketSystem {
     return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_success', { ...ctx, channelId: panel.canalId }) });
   }
 
-  /* ═══════════════════════════════════════
-     CANAL & CATEGORIA
-  ═══════════════════════════════════════ */
 
   async destinoMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -657,9 +560,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ═══════════════════════════════════════
-     STAFF & NOME DO TICKET
-  ═══════════════════════════════════════ */
 
   async staffNomeMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -716,9 +616,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ═══════════════════════════════════════
-     TIPO DE CRIAÇÃO
-  ═══════════════════════════════════════ */
 
   async tipoCriacaoMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -751,9 +648,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ═══════════════════════════════════════
-     MODAL PERSONALIZADO
-  ═══════════════════════════════════════ */
 
   async modalMenu(interaction, user, panelId, opts = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -852,9 +746,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════
-     FORMULÁRIO SEQUENCIAL
-  ═══════════════════════════════════════ */
 
   async seqFormMenu(interaction, user, panelId, opts = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -891,10 +782,6 @@ class TicketSystem {
       return this.seqFormMenu(i, user, panelId);
     });
 
-    /**
-     * Tempo do Form Sequencial — PERSONALIZÁVEL.
-     * Select com presets comuns + opção de digitar valor customizado.
-     */
     const timeoutSel = this.select(user, [
       { label: this.t('timeout_30s', ctx),  value: '30'  },
       { label: this.t('timeout_1m', ctx),     value: '60'  },
@@ -928,10 +815,6 @@ class TicketSystem {
       return this.painelMenu(i, user, panelId);
     });
 
-    /**
-     * Onde mandar o resumo das respostas — só no ticket (padrão) ou
-     * também/só num canal de log configurado.
-     */
     const sendModeSel = this.select(user, [
       { label: this.t('send_mode_only_ticket', ctx), value: '0', description: cfg.sendMode === 0 ? this.t('selected_label', ctx) : undefined },
       { label: this.t('send_mode_log_channel', ctx), value: '1', description: cfg.sendMode === 1 ? this.t('selected_label', ctx) : undefined },
@@ -986,15 +869,6 @@ class TicketSystem {
     });
   }
 
-  /**
-   * Fluxo genérico de "adicionar pergunta sequencial" — usado tanto no
-   * form do painel quanto no form embutido numa opção do select menu.
-   * Passos: 1) escolher o TIPO da pergunta → 2) checar limite do plano
-   * pro tipo escolhido → 3) modal com os campos certos pro tipo → 4) salva.
-   *
-   * @param {Function} locateTarget (guildDoc) => objeto com .seqQuestionsConfig (painel ou opção)
-   * @param {Function} onAdded      (modalInteraction) => tela pra voltar depois de salvar
-   */
   async _seqAddQuestionGeneric({ interaction, user, guildId, locateTarget, onAdded }) {
     const ctx = this._tctx(interaction);
     const typeSelect = this.client.interactions.createSelect({
@@ -1047,33 +921,12 @@ class TicketSystem {
       },
     });
 
-    // Precisa nascer em formato Components V2 (não "content" legado): essa
-    // mesma mensagem é convertida depois, via editOriginal()/cv2Payload(),
-    // quando o usuário termina o modal (ver seqFormMenu() chamado no fim do
-    // fluxo do select acima). Se ela começasse como `content` + action row
-    // comum, o PATCH pra Components V2 falharia com "The 'content' field
-    // cannot be used when using MessageFlags.IS_COMPONENTS_V2" — o content
-    // antigo continua salvo na mensagem até esse ponto, e um PATCH que só
-    // adiciona a flag 32768 sem tocar no content não é suficiente pro
-    // Discord aceitar a transição. Nascendo já em CV2, nunca existe content
-    // legado pra entrar em conflito.
-    //
-    // type: 7 (UPDATE_MESSAGE) — edita o painel original em vez de criar
-    // uma mensagem nova (type: 4). Era esse o bug real: com type 4, o
-    // select de tipo virava uma mensagem separada, e toda a cadeia
-    // seguinte (modal → salvar → seqFormMenu) ficava presa editando ESSA
-    // mensagem nova em vez de voltar pro painel visível — por isso parecia
-    // que o resultado final aparecia "de novo" como um followUp solto ao
-    // invés de atualizar o painel. O painel do formulário sequencial não é
-    // ephemeral (ephemeral: false em seqFormMenu), então mantemos o mesmo
-    // aqui — UPDATE_MESSAGE não pode mudar a visibilidade da mensagem.
     return this.client.interactions._callback(interaction, {
       type: 7,
       data: cv2Payload([cv2Text(this.t('flow_intermediate_title', ctx)), row(typeSelect)], { ephemeral: false }),
     });
   }
 
-  /** Monta e exibe o modal certo pro tipo de pergunta escolhido. */
   async _seqAddQuestionModal(interaction, user, tipo, onSubmit) {
     const ctx = this._tctx(interaction);
     const needsOptions = ['select', 'multiple', 'checkbox'].includes(tipo);
@@ -1105,9 +958,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════
-     AUTO-CARGO
-  ═══════════════════════════════════════ */
 
   async _autoRoleAskTipo(interaction, user, panelId, roleId) {
     const ctx = this._tctx(interaction);
@@ -1183,7 +1033,6 @@ class TicketSystem {
     const roleSel = this.client.interactions.createRoleSelect({
       user, data: { placeholder: this.t('autorole_add_role_placeholder', ctx) },
       funcao: async (i) => {
-        // Pede o tipo antes de salvar
         return this._autoRoleAskTipo(i, user, panelId, i.data.values[0]);
       }
     });
@@ -1218,9 +1067,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ═══════════════════════════════════════
-     TRANSCRIPT
-  ═══════════════════════════════════════ */
 
   async transcriptMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1281,14 +1127,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ═══════════════════════════════════════
-     MENSAGENS PERSONALIZADAS
-
-     Todas as mensagens do sistema de ticket (criado, fechar,
-     modal, form sequencial, transcript) podem ser customizadas
-     aqui. Variáveis disponíveis por campo são indicadas no texto
-     de ajuda de cada uma.
-  ═══════════════════════════════════════ */
 
   async mensagensMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1381,14 +1219,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════
-     SELECT MENU HUB
-
-     Cada opção do select carrega sua PRÓPRIA configuração
-     embutida (staff, nome do ticket, modal, form sequencial,
-     embed de boas-vindas) — SEM precisar criar outro painel.
-     Clicar numa opção abre um sub-painel só dela.
-  ═══════════════════════════════════════ */
 
   async selectHubMenu(interaction, user, panelId, opts = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1508,8 +1338,6 @@ class TicketSystem {
 
         await this.client.interactions._callback(mi, { type: 6 });
 
-        // Abre direto o sub-painel da opção recém-criada — sem
-        // precisar de outro painelId, exatamente como pedido.
         return this.selectOptionMenu(mi, user, panelId, optionId, {
           successMsg: this.t('option_created', { ...this._tctx(mi), label: fields.label.trim() })
         });
@@ -1519,11 +1347,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /**
-   * Sub-painel de UMA opção do select. Tudo aqui vive dentro do
-   * próprio objeto da opção (panel.selectMenuConfig.options[i]) —
-   * não existe "outro painel" por trás disso.
-   */
   async selectOptionMenu(interaction, user, panelId, optionId, opts = {}) {
     const doc    = await this._getGuildDoc(interaction.guild_id);
     const panel  = this._findPanel(doc, panelId);
@@ -1629,7 +1452,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-  /* ── Modal embutido na opção ── */
 
   async selectOptionModalMenu(interaction, user, panelId, optionId, opts = {}) {
     const doc    = await this._getGuildDoc(interaction.guild_id);
@@ -1733,7 +1555,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ── Form Sequencial embutido na opção (com tempo personalizável) ── */
 
   async selectOptionSeqFormMenu(interaction, user, panelId, optionId, opts = {}) {
     const doc    = await this._getGuildDoc(interaction.guild_id);
@@ -1863,11 +1684,7 @@ class TicketSystem {
     });
   }
 
-  /* ═══════════════════════════════════════
-     CRIAÇÃO DE TICKETS (runtime)
-  ═══════════════════════════════════════ */
 
-  /** Botão "Abrir Ticket" — painel sem select hub. */
   async createFromButton(interaction) {
     const data  = JSON.parse(interaction.data.custom_id);
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1877,7 +1694,6 @@ class TicketSystem {
     return this._startTicketFlow(interaction, doc, panel, null);
   }
 
-  /** Select Menu Hub — usuário escolheu uma opção. */
   async createFromSelect(interaction) {
     const data    = JSON.parse(interaction.data.custom_id);
     const doc     = await this._getGuildDoc(interaction.guild_id);
@@ -1891,12 +1707,6 @@ class TicketSystem {
     return this._startTicketFlow(interaction, doc, panel, option);
   }
 
-  /**
-   * Fluxo de criação compartilhado entre botão único e select hub.
-   * `option` é null quando vem do botão (usa config do painel raiz);
-   * quando vem do select, mescla: staff/nome/modal/form/embed da
-   * OPÇÃO, e canal/categoria/tipo do PAINEL raiz.
-   */
   async _startTicketFlow(interaction, doc, panel, option) {
     const modalCfg = option?.modalConfig?.enabled ? option.modalConfig : (panel.modalConfig?.enabled ? panel.modalConfig : null);
 
@@ -1922,9 +1732,6 @@ class TicketSystem {
         }]
       })),
       funcao: async (mi, _, fields) => {
-        // type 5 (defer de canal NOVO) — modal_submit não tem uma
-        // mensagem existente pra "atualizar" (type 6), é uma
-        // interação independente, igual um slash command.
         await DiscordRequest(
           `/interactions/${mi.id}/${mi.token}/callback`,
           { method: 'POST', body: { type: 5, data: { flags: 64 } } }
@@ -1940,19 +1747,12 @@ class TicketSystem {
     const guildId = interaction.guild_id;
     const userId  = interaction.member?.user?.id || interaction.user?.id;
 
-    // Recarrega do banco para evitar usar config desatualizada — o
-    // `panel` recebido como parâmetro foi capturado no início da
-    // interação e pode estar obsoleto se algo mudou nesse meio-tempo
-    // (ex: admin editando o painel enquanto o usuário preenchia o
-    // modal). A partir daqui, `fp` é a fonte de verdade.
     const fresh = await this._getGuildDoc(guildId);
     const fp    = this._findPanel(fresh, panel.panelId);
     fp.contadorTicket = (fp.contadorTicket || 0) + 1;
     const count = fp.contadorTicket;
     await fresh.save();
 
-    // Se veio de uma opção do select, busca a mesma opção dentro do
-    // documento fresh (para refletir eventuais edições recentes nela também)
     const fo = option ? fp.selectMenuConfig?.options?.find(o => o.optionId === option.optionId) : null;
 
     const nameTemplate = fo?.ticketChatName || fp.ticketChatName || 'ticket-{count}';
@@ -1973,23 +1773,16 @@ class TicketSystem {
         type: 0,
         parent_id: fp.categoriaId || undefined,
         permission_overwrites: permissionOverwrites,
-        // Guarda o panelId no tópico do canal — assim o custom_id do
-        // botão Fechar pode ficar só com o channelId (sempre curto e
-        // dentro do limite de 100 chars do Discord, já que panelId é
-        // uma string livre escolhida pelo usuário e pode ser longa).
         topic: `ticket:${panel.panelId}`,
       }
     });
 
-    // Auto-cargo (abrir) — fp.panelId é usado internamente para
-    // rastrear cargos "vinculados" (tipo 2) por ticket.
     if (fp.autoRoleConfig?.enabled) {
       await this.autoRoleManager.applyRoles({
         guildId, userId, ticketId: channel.id, panel: fp
       }).catch(err => console.error('[TicketSystem] Erro ao aplicar auto-cargo:', err));
     }
 
-    // Mensagem "Ticket Criado" — personalizada
     const ctx = this._tctx(interaction);
     const tituloCriado = resolveMsg(fp, 'ticketCriadoTitulo', this.t('default_ticket_created_title', ctx));
     const descCriado    = resolveMsg(fp, 'ticketCriadoDescricao',
@@ -2021,7 +1814,6 @@ class TicketSystem {
       }
     });
 
-    // Form sequencial — personalizado
     const seqCfg = fo?.seqQuestionsConfig?.enabled ? fo.seqQuestionsConfig : (fp.seqQuestionsConfig?.enabled ? fp.seqQuestionsConfig : null);
     if (seqCfg) {
       const seqManager = new SeqQuestionsManager(this.client);
@@ -2039,8 +1831,6 @@ class TicketSystem {
       }).catch(err => console.error('[TicketSystem] Erro no form sequencial:', err));
     }
 
-    // Evento Premium (Nova Estrela+) do Logic Script — best-effort, não
-    // bloqueia a criação do ticket se a checagem de plano falhar.
     if (await this._isPremiumEventsEnabled(guildId).catch(() => false)) {
       this._emitTicketUpdate(guildId, {
         TYPE: TICKET_UPDATE_TYPE.CRIADO,
@@ -2057,27 +1847,21 @@ class TicketSystem {
     const successMsg = this.t('ticket_created_success', { ...ctx, channelId: channel.id });
 
     if (isModalFlow) {
-      // Veio de modal_submit (defer type 5) — completa com PATCH @original.
       return DiscordRequest(
         `/webhooks/${this.client.clientId}/${interaction.token}/messages/@original`,
         { method: 'PATCH', body: { content: successMsg } }
       );
     }
 
-    // Veio de botão/select direto (defer type 6) — manda uma mensagem nova.
     return this.followUpEphemeral(interaction, { content: successMsg,flags:64});
   }
 
-  /* ─────────────────────────────────────── */
 
   async closeTicket(interaction) {
     const data      = JSON.parse(interaction.data.custom_id);
-    const closedBy  = interaction.member?.user?.id || interaction.user?.id; // quem clicou em fechar
-    const ownerId   = data.u || closedBy; // dono original do ticket (quem o abriu)
+    const closedBy  = interaction.member?.user?.id || interaction.user?.id; 
+    const ownerId   = data.u || closedBy; 
 
-    // O panelId não vai mais no custom_id (pode ser longo e estourar
-    // o limite de 100 chars do Discord) — recupera do tópico do canal,
-    // que foi gravado como "ticket:{panelId}" na criação.
     let panelId = null;
     try {
       const channelInfo = await DiscordRequest(`/channels/${data.ch}`);
@@ -2097,7 +1881,6 @@ class TicketSystem {
 
     await this.reply(interaction, { content: fechandoMsg });
 
-    // Transcript
     if (panel?.transcriptConfig?.enabled) {
       console.log('[DIAG-TRANSCRIPT] transcriptConfig.enabled=true, channelId:', panel.transcriptConfig.channelId, '— chamando generate()...');
       const transcriptManager = new TranscriptManager(this.client);
@@ -2116,15 +1899,12 @@ class TicketSystem {
       console.log('[DIAG-TRANSCRIPT] Transcript NÃO disparado — panel existe?', !!panel, '| enabled?', panel?.transcriptConfig?.enabled);
     }
 
-    // Auto-cargo (fechar) — remove cargos "vinculados" (tipo 2) do
-    // DONO do ticket, se não houver outro ticket ativo sustentando.
     if (panel?.autoRoleConfig?.enabled) {
       await this.autoRoleManager.handleTicketClose({
         guildId: interaction.guild_id, userId: ownerId, ticketId: data.ch
       }).catch(err => console.error('[TicketSystem] Erro ao processar auto-cargo no fechamento:', err));
     }
 
-    // Evento Premium (Nova Estrela+) do Logic Script — best-effort.
     if (await this._isPremiumEventsEnabled(interaction.guild_id).catch(() => false)) {
       this._emitTicketUpdate(interaction.guild_id, {
         TYPE: TICKET_UPDATE_TYPE.FECHADO,
@@ -2143,25 +1923,7 @@ class TicketSystem {
     }, 10_000);
   }
 
-  /* ─────────────────────────────────────── */
 
-  /**
-   * Abre um ticket de um painel JÁ CONFIGURADO sem depender de uma
-   * interação de botão/select do Discord — é o que a função global
-   * `abrirTicket(painelId, usuario?)` do Logic Script chama (ver
-   * Interpreter.js). Reaproveita o mesmo formato de canal/permissões/
-   * mensagem de `_createTicketChannel`, mas devolve dados simples em vez
-   * de responder uma interação (que não existe nesse fluxo).
-   *
-   * Recursos que dependem de uma interação real (modal de abertura,
-   * form sequencial pós-criação) não se aplicam aqui — script já decidiu
-   * abrir o ticket, não faz sentido pedir mais informação por modal.
-   *
-   * @param {string} guildId
-   * @param {string} panelId
-   * @param {{ userId: string }} opts — quem vai ser o dono do ticket
-   * @returns {Promise<{ id: string, channelId: string, panelId: string }>}
-   */
   async createTicketFromScript(guildId, panelId, { userId } = {}) {
     if (!userId) throw new Error('abrirTicket(): usuário não informado.');
 

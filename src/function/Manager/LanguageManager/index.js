@@ -1,4 +1,3 @@
-// src/functions/Managers/LanguageManager/index.js
 
 const path = require("node:path");
 
@@ -8,19 +7,11 @@ const { LanguageResolver }    = require("./LanguageResolver");
 const { LanguageSyncManager } = require("./LanguageSyncManager");
 
 class LanguageManager {
-  /**
-   * @param {object} options
-   * @param {string}  [options.systemsPath]      Caminho absoluto de /systems
-   * @param {string}  [options.fallbackLocale]   Locale padrão global
-   * @param {string}  [options.shardId]          ID do shard (para logs)
-   * @param {object}  [options.syncAdapter]      Adapter Redis/DB (opcional)
-   */
   constructor(options = {}) {
     this.systemsPath    = options.systemsPath ?? path.resolve(__dirname, "../../../systems");
     this.fallbackLocale = options.fallbackLocale ?? "pt-BR";
     this.shardId        = options.shardId ?? "local";
 
-    // ── Módulos internos (todos stateless entre shards) ──
     this.cache    = new LanguageCache();
     this.loader   = new LanguageLoader(this.systemsPath);
     this.resolver = new LanguageResolver(this.fallbackLocale);
@@ -29,11 +20,8 @@ class LanguageManager {
       shardId: this.shardId,
     });
 
-    // Registro local: systemId → version carregada
-    // NÃO é verdade global — é estado LOCAL deste shard
-    this._loadedSystems = new Map(); // systemId → version
+    this._loadedSystems = new Map(); 
 
-    // Escuta reloads de outros shards (quando adapter presente)
     this.sync.listenReloads((systemId, version) => {
       console.info(
         `[LanguageManager] 🔄 Shard ${this.shardId} recebeu reload: ` +
@@ -43,18 +31,7 @@ class LanguageManager {
     });
   }
 
-  // ─────────────────────────────────────────────────
-  // 🔑 API PÚBLICA
-  // ─────────────────────────────────────────────────
 
-  /**
-   * Resolve e renderiza um texto traduzido.
-   * Único ponto de entrada — nunca quebra o bot.
-   *
-   * @param {string} key  "system_id.entry_id"
-   * @param {object} ctx  Contexto padrão da Ayami
-   * @returns {string}
-   */
   translate(key, ctx = {}) {
     const { systemId, entryId } = this._parseKey(key);
 
@@ -68,11 +45,9 @@ class LanguageManager {
     const version = this._loadedSystems.get(systemId) ?? "0.0.0";
     const locale  = this.resolver.resolve(ctx);
 
-    // Tenta com locale resolvido
     const result = this._render(systemId, version, locale, entryId, ctx);
     if (result !== null) return result;
 
-    // Fallback em cadeia (es-ES → es → en-US)
     for (const fallback of this.resolver.resolveChain(locale)) {
       if (fallback === locale) continue;
       const fb = this._render(systemId, version, fallback, entryId, ctx);
@@ -82,16 +57,7 @@ class LanguageManager {
     return this._safe(key);
   }
 
-  // ─────────────────────────────────────────────────
-  // 🛠️  LIFECYCLE
-  // ─────────────────────────────────────────────────
 
-  /**
-   * Pré-carrega systems no boot do shard.
-   * Evita lazy-load durante eventos reais.
-   *
-   * @param {...string} systemIds
-   */
   preload(...systemIds) {
     for (const id of systemIds) {
       this._ensureLoaded(id);
@@ -102,13 +68,6 @@ class LanguageManager {
     );
   }
 
-  /**
-   * Reload controlado de um system.
-   * Invalida cache da versão antiga, carrega nova versão.
-   * Após reload, faz broadcast para outros shards.
-   *
-   * @param {string} systemId
-   */
   reload(systemId) {
     const oldVersion = this._loadedSystems.get(systemId);
 
@@ -121,7 +80,6 @@ class LanguageManager {
 
     const newVersion = this._loadedSystems.get(systemId) ?? "0.0.0";
 
-    // Broadcast para outros shards (se adapter estiver plugado)
     this.sync.broadcastReload(systemId, newVersion).catch(() => {});
     this.sync.registerVersion(systemId, newVersion).catch(() => {});
   }
@@ -137,9 +95,6 @@ class LanguageManager {
     };
   }
 
-  // ─────────────────────────────────────────────────
-  // 🔧 INTERNOS
-  // ─────────────────────────────────────────────────
 
   _ensureLoaded(systemId) {
     if (this._loadedSystems.has(systemId)) return;
@@ -154,7 +109,6 @@ class LanguageManager {
 
       this._loadedSystems.set(systemId, version);
 
-      // Registra versão no store global (async, não bloqueia)
       this.sync.registerVersion(systemId, version).catch(() => {});
 
       console.info(

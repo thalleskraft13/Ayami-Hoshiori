@@ -2,24 +2,6 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-/**
- * MemberVerification
- * ──────────────────────────────────────────────────────────────────────────
- * Verifica cada novo membro contra as regras configuradas (idade mínima
- * da conta, exigir avatar personalizado) assim que ele entra no servidor.
- *
- * Regra de ouro da especificação: SEMPRE informar exatamente qual regra
- * foi violada — nunca um veredito genérico de "membro suspeito". Por
- * isso cada verificação carrega um array `violations` com uma entrada
- * por regra quebrada, e é isso que vai tanto para o alerta no canal de
- * logs quanto para o histórico salvo no Mongo.
- *
- * Dois modos, configuráveis por servidor:
- *   - "log_only"    → só registra a violação (nunca pune).
- *   - "auto_punish" → registra E aplica a punição configurada.
- *
- * Punições: none | log | timeout | kick | ban | quarantine.
- */
 
 const RULE_LABEL = Object.freeze({
   minAccountAge:       'Idade mínima da conta',
@@ -47,11 +29,6 @@ class MemberVerification {
     this.security = security;
   }
 
-  /**
-   * Roda a verificação completa para um membro que acabou de entrar.
-   * Retorna `{ violations, punished, action }` ou `null` se nada violado
-   * / verificação desativada.
-   */
   async check(guild, guildId, sec, user) {
     const cfg = sec.verification;
     if (!cfg?.enabled) return null;
@@ -62,8 +39,6 @@ class MemberVerification {
     const punish = cfg.mode === 'auto_punish';
     const action = punish ? (cfg.punishment || 'none') : 'log';
 
-    // Registra sempre que há violação (mesmo em log_only, se logSuspicious
-    // estiver ativo — que é o padrão) — nunca aplica ação sem deixar rastro.
     if (cfg.logSuspicious !== false || punish) {
       this._recordHistory(sec, user, violations, action);
       await this._alert(guildId, user, violations, action, punish);

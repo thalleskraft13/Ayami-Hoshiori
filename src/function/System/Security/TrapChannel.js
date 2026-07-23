@@ -2,33 +2,13 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-/**
- * TrapChannel — "Canal Armadilha"
- * ──────────────────────────────────────────────────────────────────────────
- * Um canal escolhido pelo administrador onde NENHUM humano deveria enviar
- * mensagem. A Ayami fixa um aviso automático nele; qualquer mensagem que
- * chegue depois disso é tratada como sinal de self-bot/script (algo que
- * está reagindo/enviando em TODOS os canais do servidor, inclusive nesse).
- *
- * Regras de ouro da especificação:
- *   - Sempre registra o evento antes/junto de punir.
- *   - Sempre apaga a mensagem-gatilho no próprio canal armadilha.
- *   - Pode, opcionalmente, apagar mensagens RECENTES do mesmo autor em
- *     outros canais — nunca mensagens antigas. "Recente" é definido pela
- *     janela configurável (`recentMessagesWindowMinutes`), usando um
- *     rastreador em memória alimentado por toda mensagem do servidor.
- *   - Respeita exceções: administradores/staff, cargos imunes (herdados
- *     do módulo de Segurança), cargos específicos do Canal Armadilha,
- *     usuários específicos e bots autorizados.
- */
 
-const MAX_TRACK_WINDOW_MINUTES = 30; // nunca rastreamos/apagamos além disso, mesmo que configurado maior
+const MAX_TRACK_WINDOW_MINUTES = 30; 
 const MAX_ENTRIES_PER_USER     = 40;
 
 class TrapChannel {
   constructor(security) {
     this.security = security;
-    /** @type {Map<string, Array<{channelId: string, messageId: string, ts: number}>>} */
     this._recent = new Map();
   }
 
@@ -36,9 +16,6 @@ class TrapChannel {
     return `${guildId}:${userId}`;
   }
 
-  /** Alimentado por TODA mensagem do servidor (fora do canal armadilha também),
-   *  para permitir apagar mensagens recentes do autor em outros canais quando
-   *  ele cair na armadilha. Poda automaticamente entradas fora da janela máxima. */
   trackMessage(guildId, userId, channelId, messageId) {
     const key   = this._key(guildId, userId);
     const now   = Date.now();
@@ -53,7 +30,6 @@ class TrapChannel {
   _isIgnored(sec, userId, memberRoles, isBot) {
     const cfg = sec.trapChannel;
 
-    // Herda as exceções globais do módulo de Segurança (staff/imunes).
     if (sec.roles?.staff?.some(r => memberRoles.includes(r)))  return true;
     if (sec.roles?.immune?.some(r => memberRoles.includes(r))) return true;
 
@@ -64,11 +40,6 @@ class TrapChannel {
     return false;
   }
 
-  /** Deleta mensagens recentes do autor em OUTROS canais (nunca no armadilha,
-   *  já tratado à parte, e nunca fora da janela configurada). Retorna quantas
-   *  conseguiu apagar. Falhas de permissão por canal são silenciosamente
-   *  ignoradas (best-effort — o objetivo principal já foi cumprido: banir/
-   *  punir e limpar o canal armadilha). */
   async _deleteRecentElsewhere(guildId, userId, trapChannelId, windowMinutes) {
     const key  = this._key(guildId, userId);
     const list = this._recent.get(key) || [];
@@ -95,7 +66,7 @@ class TrapChannel {
   async _applyPunishment(guildId, userId, punishment) {
     if (punishment === "timeout") {
       if (!(await this.security._hasBotPerms(guildId, ["MODERATE_MEMBERS"]))) return { ok: false, missing: "MODERATE_MEMBERS" };
-      const until = new Date(Date.now() + 3_600_000).toISOString(); // 1h
+      const until = new Date(Date.now() + 3_600_000).toISOString(); 
       await DiscordRequest(`/guilds/${guildId}/members/${userId}`, {
         method: "PATCH", body: { communication_disabled_until: until }
       }).catch(() => {});
@@ -113,12 +84,9 @@ class TrapChannel {
       }).catch(() => {});
       return { ok: true };
     }
-    // "log" (ou desconhecido) → não pune, só registra.
     return { ok: true };
   }
 
-  /** Ponto de entrada chamado pelo SecuritySystem.handleMessage quando a
-   *  mensagem chegou no canal armadilha configurado. */
   async handle(guild, guildId, sec, data, memberRoles) {
     try {
       const cfg = sec.trapChannel;
@@ -126,9 +94,6 @@ class TrapChannel {
       const channelId = data.channel_id;
       const isBot     = !!data.author.bot;
 
-      // Sempre apagamos a mensagem-gatilho, mesmo para exceções — canal
-      // armadilha é "não enviar mensagens aqui" ponto final. Exceções só
-      // afetam se a punição/registro é aplicado.
       const hasDeletePerm = await this.security._hasBotPerms(guildId, ["MANAGE_MESSAGES"], channelId);
       if (hasDeletePerm) {
         await DiscordRequest(`/channels/${channelId}/messages/${data.id}`, { method: "DELETE" }).catch(() => {});
@@ -189,8 +154,6 @@ class TrapChannel {
     }).catch(() => {});
   }
 
-  /** Envia (ou reenvia) a mensagem fixa de aviso no canal armadilha.
-   *  Chamada ao definir/reativar o canal pelo painel de configuração. */
   async postWarningMessage(guildId, channelId) {
     const hasPerm = await this.security._hasBotPerms(guildId, ["SEND_MESSAGES", "EMBED_LINKS"], channelId);
     if (!hasPerm) return { ok: false, missing: "SEND_MESSAGES/EMBED_LINKS" };

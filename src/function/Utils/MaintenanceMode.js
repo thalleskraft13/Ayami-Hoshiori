@@ -1,24 +1,9 @@
 'use strict';
 
-/* ═══════════════════════════════════════════════════════════
-   MAINTENANCE MODE — "Atualização Programada"
-
-   Estado global (persistido no Mongo, singleton em botConfig.js) +
-   cache em memória por processo, atualizado instantaneamente via IPC
-   (parentPort/ClusterManager — o mesmo mecanismo já usado por
-   setPresenceAllClusters) sempre que a Staff ativa/desativa.
-
-   Toda checagem de interação passa por `isActive()`/`getMessage()`
-   deste módulo — centralizado aqui pra evitar duplicação (ver
-   DiscordGatewayClient.js#_onInteraction).
-   ═══════════════════════════════════════════════════════════ */
 
 const DEFAULT_MESSAGE =
   '⚠️ A Ayami entrará em atualização em breve. Alguns recursos poderão ficar temporariamente indisponíveis durante a manutenção.';
 
-// Cache local do processo — instantâneo pra quem ativou (mesmo cluster),
-// e atualizado via IPC assim que o ClusterManager repassa o broadcast
-// pros outros clusters (ver ClusterWorker.js / ClusterManager.js).
 let _state = {
   active:      false,
   message:     DEFAULT_MESSAGE,
@@ -28,7 +13,6 @@ let _state = {
 
 let _loadedFromDb = false;
 
-/** Aplica um novo estado ao cache local deste processo (sem tocar o Mongo). */
 function applyLocalState(partial) {
   _state = {
     active:      !!partial.active,
@@ -38,7 +22,6 @@ function applyLocalState(partial) {
   };
 }
 
-/** Carrega o estado persistido no boot de cada cluster (uma vez). */
 async function loadFromDb() {
   if (_loadedFromDb) return _state;
   _loadedFromDb = true;
@@ -50,7 +33,6 @@ async function loadFromDb() {
   return _state;
 }
 
-/** Checagem síncrona (cache em memória) — segura pra chamar em toda interação. */
 function isActive() {
   return _state.active;
 }
@@ -63,11 +45,6 @@ function getState() {
   return { ..._state };
 }
 
-/**
- * Ativa/desativa e persiste no Mongo + pede pro ClusterManager replicar
- * pra todos os clusters (broadcast via parentPort, igual setPresenceAllClusters).
- * `client` é o DiscordGatewayClient da instância que rodou o comando.
- */
 async function setActive(client, active, { staffId = null, message = null } = {}) {
   const BotConfig = require('../../Mongodb/botConfig.js');
 
@@ -84,8 +61,6 @@ async function setActive(client, active, { staffId = null, message = null } = {}
     { upsert: true }
   );
 
-  // Aplica localmente já-já (sem esperar o round-trip do IPC) e pede
-  // pro ClusterManager replicar pros OUTROS clusters imediatamente.
   applyLocalState(next);
   client?.broadcastMaintenanceMode?.(next);
 

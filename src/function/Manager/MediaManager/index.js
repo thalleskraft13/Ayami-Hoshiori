@@ -1,30 +1,13 @@
 'use strict';
 
-/**
- * MediaManager — Ayami's official media rendering engine.
- *
- * Exposes two namespaces:
- *   MediaManager.Render(...)         → image (PNG)
- *   MediaManager.Image.Render(...)   → image (PNG)
- *   MediaManager.Video.Render(...)   → video/gif (MP4, WebM, GIF)
- *
- * @example
- * await MediaManager.init();
- *
- * const png = await MediaManager.Render({ Template: 'wanted', avatarUrl: '…' });
- * const gif = await MediaManager.Video.Render({ Template: 'triggered', avatarUrl: '…' });
- */
 
 const path         = require('path');
 const ImageManager = require('./ImageManager');
 const VideoProcessManager = require('../VideoManager/VideoProcessManager');
 
-// ─── Singletons ───────────────────────────────────────────────────────────────
 
-/** @type {ImageManager} */
 let _image = null;
 
-/** @type {VideoProcessManager} */
 let _videoPool = null;
 
 function _getImage() {
@@ -43,21 +26,10 @@ function _getVideoPool() {
     return _videoPool;
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
 
 const MediaManager = {
 
-    // ── Lifecycle ────────────────────────────────────────────────────────────
 
-    /**
-     * Initialise both image and video engines.
-     * Call once at startup before any render.
-     *
-     * @param {object} [options]
-     * @param {string} [options.root]
-     * @param {number} [options.concurrency]
-     * @returns {Promise<void>}
-     */
     async init(options = {}) {
         if (options.root) {
             _image     = new ImageManager(options);
@@ -69,68 +41,27 @@ const MediaManager = {
         ]);
     },
 
-    // ── Image rendering ──────────────────────────────────────────────────────
 
-    /**
-     * Render an image template → PNG Buffer.
-     *
-     * @param {object} options
-     * @param {string} options.Template
-     * @returns {Promise<Buffer>}
-     */
     async Render(options) {
         return _getImage().render(options);
     },
 
     Image: {
-        /**
-         * @param {object} options
-         * @returns {Promise<Buffer>}
-         */
         async Render(options) {
             return _getImage().render(options);
         },
     },
 
-    // ── Video rendering ──────────────────────────────────────────────────────
 
     Video: {
-        /**
-         * Render a video/gif template → Buffer.
-         * Roda num processo filho isolado — não trava a thread principal
-         * do bot enquanto o vídeo está sendo gerado.
-         *
-         * @param {object} options
-         * @param {string} options.Template - Template name.
-         * @returns {Promise<Buffer>}
-         *
-         * @example
-         * const gif = await MediaManager.Video.Render({
-         *     Template:  'triggered',
-         *     avatarUrl: 'https://…',
-         * });
-         */
         async Render(options) {
             return _getVideoPool().render(options);
         },
 
-        /**
-         * Renderiza cada frame de um template e devolve o array de Buffers
-         * PNG (sem encodar em vídeo/gif) — pra editar/inspecionar frame a
-         * frame. Também roda num processo filho isolado, mas ainda assim
-         * mantém todos os frames de saída na RAM de uma vez (não tem como
-         * devolver um array sem isso) — use como ferramenta pontual, não
-         * como caminho principal de geração.
-         *
-         * @param {object} options
-         * @param {string} options.Template
-         * @returns {Promise<Buffer[]>}
-         */
         async renderFrames(options) {
             return _getVideoPool().renderFrames(options);
         },
 
-        /** @returns {Promise<string[]>} */
         async listTemplates() {
             return _getVideoPool().listTemplates();
         },
@@ -140,7 +71,6 @@ const MediaManager = {
         },
     },
 
-    // ── Utilities ────────────────────────────────────────────────────────────
 
     listTemplates() {
         return _getImage().listTemplates();

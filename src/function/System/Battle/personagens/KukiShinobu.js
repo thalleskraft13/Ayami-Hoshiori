@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * KukiShinobu
- * Elemento: Electro | Raridade: 4 estrelas
- * Role: Healer, Sub-DPS, Suporte
- *
- * Mecânicas únicas:
- * - Cura baseada em HP máximo
- * - Aplica Electro continuamente via anel de cura
- * - C6: Dano massivo quando HP cai abaixo de 25%
- */
 module.exports = {
     nome:     'KukiShinobu',
     raridade: '4',

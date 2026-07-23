@@ -5,12 +5,10 @@ const GetPerm            = require("../../function/Utils/GetPerm.js");
 const { sendMessage, editMessage, ensureWebhook } = require("../../function/Manager/WebhookManager.js");
 const { SavedMessageModel } = require("../../Mongodb/savedMessage.js");
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_EMBEDS       = 10;
 const IS_COMPONENTS_V2 = 1 << 15;
-const FLOWS_PER_PAGE   = 24; // máximo seguro para select (1 slot reservado para nav)
+const FLOWS_PER_PAGE   = 24; 
 
-// URL principal do site — o editor de Components V2 agora roda por lá.
 const SITE_URL = "https://ayami-hoshiori.discloud.app";
 
 const CTYPE = Object.freeze({
@@ -36,7 +34,6 @@ const PRESET_COLORS = [
   { label: "🎨 HEX Personalizado", value: "custom" }
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 async function replyEphemeral(interaction, content) {
   return DiscordRequest(
     `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -117,16 +114,6 @@ function createBlankEmbed(index) {
 
 function embedLabel(index) { return `Embed ${index + 1}`; }
 
-// ─── Paginação de fluxos ──────────────────────────────────────────────────────
-/**
- * Exibe um select paginado de fluxos filtrados por triggerType.
- * @param {object}   i            — interaction
- * @param {object}   client
- * @param {string}   authorId
- * @param {object[]} flows        — lista completa já filtrada
- * @param {number}   page         — página atual (0-based)
- * @param {Function} onSelect     — callback(interaction, flowId)
- */
 async function showFlowPageSelect(i, client, authorId, flows, page, onSelect) {
   const maxPage   = Math.max(0, Math.ceil(flows.length / FLOWS_PER_PAGE) - 1);
   const safePage  = Math.min(Math.max(0, page), maxPage);
@@ -138,7 +125,6 @@ async function showFlowPageSelect(i, client, authorId, flows, page, onSelect) {
     description: `Trigger: ${f.trigger?.type || "N/A"}`
   }));
 
-  // Botões de navegação apenas se houver mais de uma página
   const navComponents = [];
   if (maxPage > 0) {
     if (safePage > 0) {
@@ -193,7 +179,6 @@ async function showFlowPageSelect(i, client, authorId, flows, page, onSelect) {
   });
 }
 
-// ─── Busca mensagens salvas e exibe select para escolher ou criar nova ────────
 async function checkExistingAndPrompt(interaction, client, type) {
   const authorId = interaction.member.user.id;
   const guildId  = interaction.guild_id;
@@ -245,7 +230,6 @@ async function checkExistingAndPrompt(interaction, client, type) {
   });
 }
 
-// ─── Redireciona /criar componentsv2 para o editor no site ───────────────────
 async function redirectComponentsV2ToSite(interaction, client) {
   const guildId = interaction.guild_id;
 
@@ -267,7 +251,6 @@ async function redirectComponentsV2ToSite(interaction, client) {
   });
 }
 
-// ─── MODULE EXPORT ────────────────────────────────────────────────────────────
 module.exports = {
   data: {
     name       : "criar",
@@ -320,9 +303,6 @@ module.exports = {
   }
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  EDIT SAVED MESSAGE  (/criar editar)
-// ══════════════════════════════════════════════════════════════════════════════
 async function runEditSavedMessage(interaction, client) {
   const authorId = interaction.member.user.id;
   const guildId  = interaction.guild_id;
@@ -375,9 +355,6 @@ async function runEditSavedMessage(interaction, client) {
   return runComponentsV2Editor(interaction, client, doc);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  EMBED EDITOR
-// ══════════════════════════════════════════════════════════════════════════════
 async function runEmbedEditor(interaction, client, existingDoc = null) {
   const authorId = interaction.member.user.id;
   const guildId  = interaction.guild_id;
@@ -410,7 +387,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
       .filter(Boolean);
   }
 
-  // Serializa action rows de botões/selects para a embed
   function buildEmbedComponents() {
     return state.actionRows
       .map(row => {
@@ -475,7 +451,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
     return errors;
   }
 
-  // ── Salvar no banco ─────────────────────────────────────────────────────────
   async function persistState(channelId, messageId, webhook, usedFallback, sendError) {
     const data = {
       guildId,
@@ -502,7 +477,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
     return doc;
   }
 
-  // ── Enviar ──────────────────────────────────────────────────────────────────
   async function doSend(i, channelId) {
     const errors = validate();
     if (errors.length)
@@ -567,7 +541,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
     return doSend(i, channelId);
   }
 
-  // ── Componentes do editor ───────────────────────────────────────────────────
   const editorMenu = client.interactions.createSelect({
     user: authorId,
     data: {
@@ -642,7 +615,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
     }
   });
 
-  // ── Menu de botões/selects na embed ─────────────────────────────────────────
   const componentMenu = client.interactions.createSelect({
     user: authorId,
     data: {
@@ -768,7 +740,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
 
   async function openEmbedFlowButtonEditor(i, existing, onSave) {
     const { FlowModel } = require("../../Mongodb/flow.js");
-    // ── Filtro: apenas fluxos com trigger button_clicked ──
     const flows = await FlowModel.find({
       guildId,
       enabled           : true,
@@ -795,7 +766,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
     });
   }
 
-  // ── Botões do editor de embed ───────────────────────────────────────────────
   const colorBtn = client.interactions.createButton({
     user: authorId,
     data: { label: "🎨 Cor", style: 1 },
@@ -906,7 +876,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
     }
   });
 
-  // ── Botão SALVAR (salva no banco sem enviar) ────────────────────────────────
   const saveBtn = client.interactions.createButton({
     user: authorId,
     data: { label: "💾 Salvar", style: 2 },
@@ -1034,9 +1003,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
   });
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  COMPONENTS V2 EDITOR
-// ══════════════════════════════════════════════════════════════════════════════
 async function runComponentsV2Editor(interaction, client, existingDoc = null) {
   const authorId = interaction.member.user.id;
   const guildId  = interaction.guild_id;
@@ -1067,7 +1033,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
     }
   };
 
-  // ── Tree helpers ────────────────────────────────────────────────────────────
   function getBlockByPath(path) {
     if (!state.blocks.length) return null;
     let node = state.blocks[path[0]];
@@ -1100,7 +1065,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
     state.path = [state.blocks.length - 1];
   }
 
-  // ── Serializers ─────────────────────────────────────────────────────────────
   function serializeButton(btn) {
     if (btn.kind === "flow") {
       const out = { type: CTYPE.BUTTON, style: Number(btn.style) || 1, custom_id: JSON.stringify({ t: "flow_trigger", f: btn.flowId }) };
@@ -1255,7 +1219,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
     return doSend(i, channelId);
   }
 
-  // ── UI helpers ──────────────────────────────────────────────────────────────
   const KIND_ICON  = { text: "📝", gallery: "🖼️", section: "📐", separator: "➖", action_row: "🔘", container: "📦", select_menu: "📋" };
   const KIND_LABEL = { text: "Text Display", gallery: "Media Gallery", section: "Section", separator: "Separator", action_row: "Action Row", container: "Container", select_menu: "Select Menu" };
 
@@ -1468,7 +1431,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
       }
     });
 
-    // ── Botão SALVAR no CV2 ─────────────────────────────────────────────────
     const cv2SaveBtn = client.interactions.createButton({
       user: authorId, data: { label: "💾 Salvar", style: 2 },
       funcao: async (i) => {
@@ -1584,7 +1546,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
     ];
   }
 
-  // ── Block editors ───────────────────────────────────────────────────────────
   async function openBlockEditor(i, block) {
     const MAP = {
       text       : openTextDisplayEditor,
@@ -1782,7 +1743,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
 
   async function openFlowButtonEditor(i, existing, onSave) {
     const { FlowModel } = require("../../Mongodb/flow.js");
-    // ── Filtro: apenas fluxos com trigger button_clicked ──
     const flows = await FlowModel.find({
       guildId,
       enabled       : true,
@@ -1884,7 +1844,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
 
   async function openSelectMenuEditor(i, block) {
     const { FlowModel } = require("../../Mongodb/flow.js");
-    // ── Filtro: apenas fluxos com trigger select_used ──
     const flows = await FlowModel.find({
       guildId,
       enabled       : true,
@@ -1942,7 +1901,6 @@ async function runComponentsV2Editor(interaction, client, existingDoc = null) {
     });
   }
 
-  // ── Initial render ──────────────────────────────────────────────────────────
   await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
     method: "POST",
     body  : { content: buildStatusText(), embeds: [], components: buildEditorUI() }

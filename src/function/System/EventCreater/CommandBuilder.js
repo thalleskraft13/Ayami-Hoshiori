@@ -4,9 +4,6 @@ const DiscordRequest = require('../../DiscordRequest.js');
 const { CustomCommandModel, FlowModel } = require('../../../Mongodb/flow.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI (mesma paleta do Logic Builder)
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,
   dark:    0x243B7A,
@@ -14,12 +11,6 @@ const COLOR = {
   success: 0x57F287,
 };
 
-/**
- * CommandBuilder — Components V2
- *
- * Gerencia criação e edição de comandos de prefixo personalizados.
- * Cada comando aponta para um fluxo existente.
- */
 class CommandBuilder {
 
   constructor(client, ui) {
@@ -31,17 +22,12 @@ class CommandBuilder {
     return this.client?.emoji?.[name] ?? '';
   }
 
-  /** Helper de payload CV2 não-ephemeral (mensagem original visível). */
   _cv2(blocks, opts = {}) {
     return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
   }
 
-  /* ═══════════════════════════════════════════
-     CRIAR COMANDO
-     ═══════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
-    // Primeiro precisa existir pelo menos um fluxo com trigger "Comando executado"
     const flows = await FlowModel.find({
       guildId:        interaction.guild_id,
       'trigger.category': 'command',
@@ -54,16 +40,12 @@ class CommandBuilder {
       ]));
     }
 
-    // Passo 1: seleciona o fluxo que o comando vai executar
     const options = flows.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
       description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger)}`
     }));
 
-    // NÃO faz deferUpdate aqui — _createStep2 abre um modal em
-    // seguida, e showModal precisa de uma interação ainda não
-    // confirmada (deferUpdate antes causaria erro 40060).
     const sel = this.ui.select(user, options, '🔗 Selecione o fluxo do comando', async (i) => {
       return this._createStep2(i, user, i.data.values[0]);
     });
@@ -163,7 +145,6 @@ class CommandBuilder {
           );
         }
 
-        // Verifica duplicata
         const existing = await CustomCommandModel.findOne({
           guildId: modalInteraction.guild_id,
           name
@@ -217,9 +198,6 @@ class CommandBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════════
-     MENU DO COMANDO
-     ═══════════════════════════════════════════ */
 
   async commandMenu(interaction, user, commandId, { successMsg } = {}) {
     const guildId = interaction.guild_id;

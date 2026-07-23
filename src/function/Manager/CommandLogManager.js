@@ -7,10 +7,6 @@ const COLOR = 0x7C8FFF;
 
 class CommandLogManager {
 
-    /**
-     * Loga um comando executado — webhook em tempo real (fire-and-forget) +
-     * persistência no banco (também sem bloquear quem chamou).
-     */
     log(client, { commandName, subcommandName, options, guildId, guildName, userId, username }) {
         const fullName = subcommandName ? `/${commandName} ${subcommandName}` : `/${commandName}`;
         const optionsText = Object.keys(options ?? {}).length

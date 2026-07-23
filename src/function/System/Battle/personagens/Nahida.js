@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Nahida
- * Elemento: Dendro | Raridade: 5 estrelas
- * Role: Sub-DPS, suporte, off-field
- *
- * Mecânicas únicas:
- * - Karma Elemental: aplica marcas que explodem com reações
- * - Extremamente eficaz em campo (on e off-field)
- * - C1: Karma aumenta dano de Electro e Hydro do time
- */
 module.exports = {
     nome:     'Nahida',
     raridade: '5',
@@ -43,7 +33,6 @@ module.exports = {
         1: {
             nome:       'Aglomerado do Corpo Físico',
             bonusStats: { proficiencia: 200 },
-            // Karma aumenta dano de aliados com Electro/Hydro
             trigger: 'habilidade_aliada',
             efeitos: [
                 { tipo: 'buff', alvo: 'ativo', stat: 'atk', valor: 150, duracao: 2 },
@@ -172,7 +161,6 @@ module.exports = {
         {
             nome:    'Mente do Lótus',
             trigger: 'ataque_aliado',
-            // Off-field: Nahida aplica Dendro em ataques de aliados
             efeitos: [
                 {
                     tipo:     'dano',
@@ -198,7 +186,6 @@ module.exports = {
         {
             nome:    'Dharma Vigilante',
             trigger: 'fim_turno',
-            // Karma acumulado explode se ainda estiver no inimigo
             efeitos: [
                 {
                     tipo:     'dano',

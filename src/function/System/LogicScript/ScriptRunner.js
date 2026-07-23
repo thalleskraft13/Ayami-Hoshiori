@@ -1,15 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — SCRIPT RUNNER v2
-   Mudanças:
-   - Comandos por PREFIXO em messageCreate
-   - Carrega configuração (prefix) por guild do banco
-   - Cache de config separado do cache de handlers
-   - (patch) _loadModules normaliza o path do import
-     pra sempre bater com o padrão usado pelo site
-     (que sempre salva com barra na frente: "/x.logic")
-   ═══════════════════════════════════════════ */
 
 const { Lexer, LexerError }            = require('./Lexer.js');
 const { Parser, ParseError }            = require('./Parser.js');
@@ -18,23 +8,20 @@ const { db: lsDb }                      = require('./Database.js');
 const { LogicScriptModel, LogicRunLogModel } = require('../../../Mongodb/logicScript.js');
 const { LogicScriptConfig }             = require('../../../Mongodb/logicScriptConfig.js');
 
-const SCRIPT_CACHE_TTL  = 30_000;   // 30s
-const CONFIG_CACHE_TTL  = 60_000;   // 1min
+const SCRIPT_CACHE_TTL  = 30_000;   
+const CONFIG_CACHE_TTL  = 60_000;   
 
 class ScriptRunner {
   constructor(client) {
     this.client = client;
 
-    // Cache de handlers por guild
-    this._handlerCache  = new Map();  // guildId → Map<eventName, handler[]>
-    this._cacheExpiry   = new Map();  // guildId → timestamp
+    this._handlerCache  = new Map();  
+    this._cacheExpiry   = new Map();  
 
-    // Cache de configuração (prefix etc.)
-    this._configCache   = new Map();  // guildId → { prefix, enabled, … }
-    this._configExpiry  = new Map();  // guildId → timestamp
+    this._configCache   = new Map();  
+    this._configExpiry  = new Map();  
 
-    // Concorrência
-    this._concurrent    = new Map();  // guildId → number
+    this._concurrent    = new Map();  
     this._MAX_CONCURRENT = 20;
   }
 
@@ -42,9 +29,6 @@ class ScriptRunner {
     console.log('[LogicScript] ScriptRunner v2 iniciado (modo prefixo).');
   }
 
-  /* ══════════════════════════════════════
-     CONFIGURAÇÃO POR GUILD
-     ══════════════════════════════════════ */
   async _getConfig(guildId) {
     const expiry = this._configExpiry.get(guildId);
     if (expiry && Date.now() < expiry) return this._configCache.get(guildId);
@@ -57,9 +41,6 @@ class ScriptRunner {
     return cfg;
   }
 
-  /* ══════════════════════════════════════
-     GATEWAY HANDLER
-     ══════════════════════════════════════ */
   async handleGateway(payload) {
     const { t: event, d: data } = payload;
     if (!event || !data) return;
@@ -67,17 +48,14 @@ class ScriptRunner {
     const guildId = data.guild_id;
     if (!guildId) return;
 
-    // Verificar se o sistema está ativo para esta guild
     const config = await this._getConfig(guildId);
     if (!config.enabled) return;
 
-    // Ignorar bots
     if (config.ignoreBots && data.author?.bot) return;
 
     const ctx = this._buildContext(event, data, config);
     if (!ctx) return;
 
-    // Concorrência
     if ((this._concurrent.get(guildId) ?? 0) >= this._MAX_CONCURRENT) return;
 
     const handlers = await this._getEventHandlers(guildId);
@@ -94,9 +72,6 @@ class ScriptRunner {
     }
   }
 
-  /* ══════════════════════════════════════
-     MAPEAMENTO GATEWAY → EVENTOS LS
-     ══════════════════════════════════════ */
   _buildContext(event, data, config) {
     const guildId = data.guild_id;
     const ctx = { guildId, prefix: config.prefix ?? '!' };
@@ -108,7 +83,6 @@ class ScriptRunner {
         ctx.channelId = data.channel_id;
         ctx.userId    = data.author?.id ?? data.user_id;
         ctx.message   = data;
-        // Extrair comando e args do conteúdo da mensagem
         if (data.content) {
           const content = data.content.trim();
           if (content.startsWith(ctx.prefix)) {
@@ -149,10 +123,6 @@ class ScriptRunner {
       case 'CHANNEL_CREATE':
       case 'CHANNEL_DELETE':
         ctx.channelId   = data.id;
-        // Guardamos o payload bruto do gateway (não fazemos fetch via REST
-        // aqui): pra CHANNEL_DELETE o canal já não existe mais na API, e
-        // pra CHANNEL_CREATE evitamos uma chamada extra desnecessária —
-        // o gateway já manda name/type/parent_id no próprio evento.
         ctx.channelData = data;
         break;
 
@@ -173,7 +143,6 @@ class ScriptRunner {
     switch (event) {
       case 'MESSAGE_CREATE':
         events.push('messageCreate');
-        // Se a mensagem começa com o prefixo → também dispara 'command'
         if (ctx.commandName) events.push('command');
         break;
       case 'MESSAGE_UPDATE':       events.push('messageEdit');   break;
@@ -191,16 +160,6 @@ class ScriptRunner {
         events.push(data.channel_id ? 'voiceJoin' : 'voiceLeave'); break;
       case 'INTERACTION_CREATE':
         if (data.type === 3) {
-          // Não disparar buttonClick/selectMenu pra cliques que já são de
-          // outro dono: tickets, giveaway, flow_trigger, birthday, e os
-          // botões/menus TEMPORÁRIOS do próprio LogicScript (custom_id
-          // "temp_...", criados via Button().onClick()/SelectMenu().onClick()
-          // — esses já são resolvidos direto pelo InteractionManager, então
-          // dispatchar aqui de novo seria rodar a interação duas vezes).
-          // Sem esse filtro, TODO clique de botão/menu em QUALQUER lugar da
-          // guild disparava os handlers on(buttonClick)/on(selectMenu) de
-          // TODOS os scripts — esse era o bug: LogicScript "brigando" com o
-          // InteractionManager por cima da mesma interação.
           const customId = data.data?.custom_id;
           if (this.client.interactions?.isReservedCustomId(customId)) break;
           if (data.data?.component_type === 2) events.push('buttonClick');
@@ -214,15 +173,11 @@ class ScriptRunner {
 
   _eventMatches(lsEvent, handler, data, ctx) {
     if (lsEvent === 'command' && handler.commandName) {
-      // Comparar com o nome do comando extraído da mensagem
       if ((ctx.commandName ?? '') !== handler.commandName.toLowerCase()) return false;
     }
     return true;
   }
 
-  /* ══════════════════════════════════════
-     EXECUÇÃO DE HANDLER
-     ══════════════════════════════════════ */
   async _runHandler(handler, ctx, eventName) {
     const { guildId } = ctx;
     const startMs     = Date.now();
@@ -242,9 +197,6 @@ class ScriptRunner {
 
       const env      = interp._globals;
 
-      // Roda primeiro tudo que está fora do `on(...)` no mesmo arquivo
-      // (function, export function, let/const de topo, import) — é isso
-      // que faz `addCoins()` e afins existirem quando o handler roda.
       if (handler.setup?.length) await interp._execBlock(handler.setup, env);
 
       const eventArgs = this._buildEventArgs(eventName, ctx, interp);
@@ -273,9 +225,6 @@ class ScriptRunner {
     }).catch(() => {});
   }
 
-  /* ══════════════════════════════════════
-     ARGS DE EVENTO
-     ══════════════════════════════════════ */
   _buildEventArgs(eventName, ctx, interp) {
     const msg         = ctx.message;
     const interaction = ctx.interaction;
@@ -287,8 +236,6 @@ class ScriptRunner {
         return [interp._buildMessageObj(msg)];
 
       case 'command': {
-        // Montar objeto de args a partir do texto da mensagem
-        // ex: !ban 123456 spam  → args = { _: ["123456", "spam"], 0: "123456", 1: "spam" }
         const rawArgs = ctx.commandArgs ?? [];
         const argsObj = Object.fromEntries(rawArgs.map((a, i) => [String(i), a]));
         argsObj._ = rawArgs;
@@ -318,11 +265,6 @@ class ScriptRunner {
       case 'reactionRemove':
         return [ctx.emoji, { id: ctx.userId }, interp._buildMessageObj(msg)];
 
-      // ── Eventos internos (Premium — Nova Estrela+) ──
-      // Disparados via emitCustomEvent() por TicketSystem/ActivityAnalyticsSystem,
-      // não pelo gateway do Discord. O payload inteiro (incluindo o campo
-      // numérico TYPE) vem em ctx.customData — ver TicketSystem._emitTicketUpdate()
-      // e ActivityAnalyticsSystem._emitActivitySpike().
       case 'ticketUpdate':
       case 'activitySpike':
         return [ctx.customData ?? {}];
@@ -331,9 +273,6 @@ class ScriptRunner {
     }
   }
 
-  /* ══════════════════════════════════════
-     CARREGAR / COMPILAR SCRIPTS
-     ══════════════════════════════════════ */
   async _getEventHandlers(guildId) {
     const expiry = this._cacheExpiry.get(guildId);
     if (expiry && Date.now() < expiry) return this._handlerCache.get(guildId) ?? new Map();
@@ -346,11 +285,6 @@ class ScriptRunner {
         const ast     = this._compile(script.content, script.path);
         const imports = ast.body.filter(n => n.type === 'Import').map(n => n.source);
 
-        // Tudo que NÃO é um bloco `on(...)` — function/export function,
-        // let/const de topo, import — precisa rodar ANTES do corpo do
-        // evento, senão funções declaradas no mesmo arquivo (fora do
-        // `on`) não existem quando o handler dispara (cada evento roda
-        // num Interpreter/Environment novo, do zero).
         const setup = ast.body.filter(n => n.type !== 'OnEvent');
 
         for (const node of ast.body) {
@@ -377,15 +311,6 @@ class ScriptRunner {
     return handlers;
   }
 
-  /**
-   * Normaliza o path de um import pro mesmo padrão usado pelo site
-   * (routes/logicScriptApi.js): TODO path salvo no Mongo começa com "/"
-   * — é imposto pela regex `SAFE_PATH_RE = /^\/[a-zA-Z0-9 _\-./]*$/` no
-   * momento de salvar. Sem essa normalização, um `import ... from
-   * "economia.logic"` (sem barra) nunca batia com o `/economia.logic`
-   * salvo, o findOne voltava vazio, e o import falhava — antes, em
-   * silêncio (isso também foi corrigido no Interpreter.js).
-   */
   _normalizeImportPath(rawPath) {
     return rawPath.startsWith('/') ? rawPath : '/' + rawPath;
   }
@@ -414,23 +339,17 @@ class ScriptRunner {
     return new Parser(tokens).parse();
   }
 
-  /* ══════════════════════════════════════
-     API PÚBLICA
-     ══════════════════════════════════════ */
 
-  /** Invalida cache de handlers (após salvar script) */
   invalidateCache(guildId) {
     this._handlerCache.delete(guildId);
     this._cacheExpiry.delete(guildId);
   }
 
-  /** Invalida cache de config (após salvar prefix) */
   invalidateConfig(guildId) {
     this._configCache.delete(guildId);
     this._configExpiry.delete(guildId);
   }
 
-  /** Valida sintaxe sem executar */
   validate(source) {
     try {
       this._compile(source, '<validate>');
@@ -440,7 +359,6 @@ class ScriptRunner {
     }
   }
 
-  /** Executa manualmente (dashboard) */
   async runManual(guildId, scriptPath, discordCtx = {}) {
     const config = await this._getConfig(guildId);
     const script = await LogicScriptModel.findOne({ guildId, path: scriptPath }).lean();
@@ -459,12 +377,10 @@ class ScriptRunner {
       await interp.run(ast);
       return { ok: true, steps: interp._steps, logs: interp._printLog };
     } catch (err) {
-      // Inclui os prints que rodaram até o erro acontecer
       throw Object.assign(err, { logs: interp._printLog });
     }
   }
 
-  /** Dispara evento personalizado */
   async emitCustomEvent(guildId, eventName, discordCtx = {}) {
     const config   = await this._getConfig(guildId);
     const handlers = await this._getEventHandlers(guildId);

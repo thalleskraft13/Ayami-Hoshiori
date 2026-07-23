@@ -1,23 +1,19 @@
 "use strict";
 
 module.exports = [
-  // ── ConditionEvaluator — args ──
   { id: "arg_type_user_mention", render: () => "una mención de usuario (@Alguien)" },
   { id: "arg_type_channel_mention", render: () => "una mención de canal (#canal)" },
   { id: "arg_type_number", render: () => "un número" },
   { id: "arg_type_text", render: () => "un texto" },
 
-  // ── LogicEngine ──
   { id: "cooldown_warning", render: (ctx) => `⏳ ¡Todavía debes esperar **${ctx.time}** para poder usar esto de nuevo!` },
 
-  // ── LibraryManager ──
   { id: "update_available_title", render: () => "🔄 Actualización disponible" },
   { id: "update_available_desc", render: (ctx) =>
     `El sistema **${ctx.entryName}** se actualizó a **v${ctx.newVersion}**.\nEntra a la biblioteca para instalar la nueva versión.` },
   { id: "update_available_changelog", render: (ctx) => `\n\n📋 **Novedades:** ${ctx.changelog}` },
   { id: "library_footer", render: () => "Logic Builder • Biblioteca de Flujos" },
 
-  // ── LibraryManager — errores ──
   { id: "err_no_flows_to_publish", render: () => "No se encontró ningún flujo para publicar." },
   { id: "err_entry_not_found", render: () => "Entrada no encontrada." },
   { id: "err_no_permission", render: () => "Sin permiso." },
@@ -28,7 +24,6 @@ module.exports = [
   { id: "err_invalid_status", render: () => "Estado inválido." },
   { id: "installed_from_library_note", render: (ctx) => `_Instalado desde la biblioteca: ${ctx.entryName} v${ctx.version}_` },
 
-  // ── ActionRunner ──
   { id: "ar_click_here", render: () => "Haz clic aquí" },
   { id: "ar_choose_option", render: () => "Elige una opción" },
   { id: "ar_option_default_label", render: () => "Opción" },
@@ -46,13 +41,11 @@ module.exports = [
   { id: "ar_confirm_prompt_default", render: () => "❓ ¿Confirmar la operación?" },
   { id: "ar_confirm_timeout", render: (ctx) => `⏱️ Se acabó el tiempo. ${ctx.cancelMsg}` },
 
-  // ── Flow.js — general ──
   { id: "guide_button", render: () => "📖 Guía" },
   { id: "btn_back", render: () => "⬅️ Volver" },
   { id: "btn_cancel", render: () => "❌ Cancelar" },
   { id: "no_description", render: () => "Sin descripción" },
 
-  // ── Flow.js — inicio ──
   { id: "home_title", render: (ctx) =>
     `# ⚡ Logic Builder ${ctx.ayami}\n` +
     `¡Hola! Soy **Ayami** ${ctx.corao} y te voy a ayudar a crear automatizaciones increíbles!\n\n` +
@@ -68,7 +61,6 @@ module.exports = [
   { id: "commands_section", render: (ctx) =>
     `## 🔧 Comandos Personalizados\n\n        Total: **${ctx.count}** comando${ctx.count !== 1 ? 's' : ''} personalizado${ctx.count !== 1 ? 's' : ''}` },
 
-  // ── Flow.js — lista de flujos ──
   { id: "no_flows_title", render: (ctx) =>
     `# 📋 Flujos ${ctx.emburrada}\nTodavía no hay ningún flujo creado...\n\n${ctx.feliz} ¡Haz clic en **✨ Nuevo Flujo** para crear el primero! Es fácil, lo prometo!` },
   { id: "flow_status_active", render: () => "🟢 Activo" },
@@ -79,7 +71,6 @@ module.exports = [
   { id: "btn_prev", render: () => "⬅️ Anterior" },
   { id: "btn_next", render: () => "➡️ Siguiente" },
 
-  // ── Flow.js — menú del flujo ──
   { id: "flow_not_found", render: (ctx) => `❌ Flujo no encontrado. ${ctx.assustada}` },
   { id: "flow_status_paused", render: () => "🔴 Pausado" },
   { id: "btn_trigger", render: () => "🎯 Trigger" },
@@ -100,13 +91,11 @@ module.exports = [
   { id: "flow_executions_line", render: (ctx) =>
     `**📊 Ejecuciones:** ✅ ${ctx.ok}  ❌ ${ctx.fail}  (Total: ${ctx.total})` },
 
-  // ── Flow.js — eliminar flujo ──
   { id: "flow_deleted_success", render: (ctx) => `${ctx.chorando} Flujo **${ctx.name}** eliminado. Espero que no lo necesites de nuevo...` },
   { id: "btn_confirm_delete", render: () => "✅ Sí, eliminar" },
   { id: "flow_delete_confirm_title", render: (ctx) =>
     `# ⚠️ ¿Eliminar el flujo? ${ctx.assustada}\n¿Seguro que quieres eliminar el flujo **${ctx.name}**?\n\n**¡Esta acción no se puede deshacer!** ${ctx.brava}\nSe perderán todas sus configuraciones (trigger, condiciones, acciones, variables).` },
 
-  // ── Flow.js — lista de comandos ──
   { id: "btn_new_command", render: () => "✨ Nuevo Comando" },
   { id: "no_commands_title", render: (ctx) =>
     `# 🔧 Comandos Personalizados ${ctx.emburrada}\n¡Todavía no hay comandos creados!\n\n${ctx.feliz} ¡Haz clic en **✨ Nuevo Comando** para crear el primero!` },
@@ -115,7 +104,6 @@ module.exports = [
   { id: "commands_list_title", render: (ctx) =>
     `# 🔧 Comandos (${ctx.count}) ${ctx.pensando}\n¡Selecciona un comando abajo para gestionarlo!\n*(Página ${ctx.page}/${ctx.maxPage})*\n\n${ctx.list}` },
 
-  // ── Flow.js — labels de trigger ──
   { id: "trigger_not_configured", render: () => "No configurado" },
   { id: "trigger_message_created", render: () => "💬 Mensaje creado" },
   { id: "trigger_message_edited", render: () => "✏️ Mensaje editado" },
@@ -151,13 +139,11 @@ module.exports = [
   { id: "trigger_scheduled_trigger", render: () => "🕐 Hora programada" },
   { id: "trigger_command_executed", render: () => "🔧 Comando ejecutado" },
 
-  // ── Flow.js — modal helpers genéricos (sin ctx de interacción) ──
   { id: "modal_choose_option", render: () => "Elige una opción…" },
   { id: "modal_yes", render: () => "✅ Sí" },
   { id: "modal_no", render: () => "❌ No" },
   { id: "modal_yesno_placeholder", render: () => "¿Sí o no?" },
 
-  // ── CommandBuilder ──
   { id: "cb_no_flow_available_title", render: (ctx) =>
     `# ${ctx.emduvida} Ningún flujo disponible\nCrea al menos un flujo con el trigger **🔧 Comando ejecutado** antes de crear un comando personalizado.` },
   { id: "cb_flow_select_placeholder", render: () => "🔗 Selecciona el flujo del comando" },
@@ -218,7 +204,6 @@ module.exports = [
   { id: "cb_command_deleted", render: (ctx) => `${ctx.chorando} Comando **${ctx.name}** eliminado.` },
   { id: "cb_delete_title", render: (ctx) =>
     `# ⚠️ Eliminar Comando ${ctx.assustada}\n¿Seguro que quieres eliminar **${ctx.name}**?\n\n**¡Esta acción no se puede deshacer!** ${ctx.brava}` },
-  // ── FlowBuilder — Catálogo de Disparadores ──
   { id: "trg_cat_time_scheduled_trigger_label", render: () => "🕐 Hora programada" },
   { id: "trg_cat_time_scheduled_trigger_desc", render: () => "Se dispara a una hora específica cada día" },
   { id: "trg_cat_command_command_executed_label", render: () => "🔧 Comando ejecutado" },
@@ -294,7 +279,6 @@ module.exports = [
   { id: "trg_cat_internal_custom_event_label", render: () => "⚡ Evento personalizado" },
   { id: "trg_cat_internal_custom_event_desc", render: () => "Disparado por otro flujo" },
 
-  // ── FlowBuilder — Catálogo de Condiciones ──
   { id: "cnd_cat_user_has_role_label", render: () => "👤 Tiene rol" },
   { id: "cnd_cat_user_not_has_role_label", render: () => "👤 No tiene rol" },
   { id: "cnd_cat_user_is_bot_label", render: () => "🤖 Es un bot" },
@@ -337,7 +321,6 @@ module.exports = [
   { id: "cnd_cat_args_args_has_content_label", render: () => "📝 Los args tienen contenido" },
   { id: "cnd_cat_args_arg_is_type_label", render: () => "🔍 El arg X es de un tipo específico" },
 
-  // ── FlowBuilder — Catálogo de Acciones ──
   { id: "act_cat_message_send_message_label", render: () => "💬 Enviar mensaje" },
   { id: "act_cat_message_send_dm_label", render: () => "📩 Enviar MD" },
   { id: "act_cat_message_reply_message_label", render: () => "↩️ Responder mensaje" },
@@ -386,7 +369,6 @@ module.exports = [
   { id: "act_cat_system_cancel_flow_label", render: () => "🛑 Cancelar flujo" },
   { id: "act_cat_system_stop_execution_label", render: () => "⏹️ Detener ejecución" },
 
-  // ── FlowBuilder — Metadatos de categoría ──
   { id: "trgcatmeta_time_label", render: () => "🕐 Tiempo / Horario" },
   { id: "trgcatmeta_time_desc", render: () => "Disparadores programados" },
   { id: "trgcatmeta_command_label", render: () => "🔧 Comandos" },
@@ -444,7 +426,6 @@ module.exports = [
   { id: "actcatmeta_system_label", render: () => "⚙️ Sistema" },
   { id: "actcatmeta_system_desc", render: () => "Ejecutar/cancelar flujo, eventos" },
 
-  // ── FlowBuilder — general ──
   { id: "fb_create_flow_modal_title", render: () => "Crear nuevo Flujo ✨" },
   { id: "fb_field_flow_name_label", render: () => "Nombre del flujo" },
   { id: "fb_field_flow_name_placeholder", render: () => "Ej: Bienvenida, Anti-enlace, Daily..." },
@@ -466,7 +447,6 @@ module.exports = [
   { id: "fb_trigger_category_header", render: (ctx) => `# ${ctx.category} ${ctx.pensando}\n${ctx.description}\n\nElige el evento específico:` },
   { id: "fb_trigger_set_success", render: (ctx) => `${ctx.curtida} Trigger definido: **${ctx.trigger}**` },
 
-  // ── FlowBuilder — filtros de trigger (compartidos) ──
   { id: "fb_no_trigger_configured", render: (ctx) => `${ctx.assustada} ¡Configura el trigger primero!` },
   { id: "fb_filters_saved", render: (ctx) => `${ctx.curtida} ¡Filtros guardados!` },
   { id: "fb_no_configurable_filters", render: (ctx) => `${ctx.emduvida} Este trigger no tiene filtros configurables.` },
@@ -520,7 +500,6 @@ module.exports = [
   { id: "fb_filter_component_desc", render: (ctx) =>
     `El **Custom ID** es el identificador que le diste al ${ctx.typeLabel}.\nDéjalo vacío para disparar en cualquier ${ctx.typeLabel}.\n\n${ctx.lines}` },
 
-  // ── FlowBuilder — filtro de horario ──
   { id: "fb_day_sun", render: () => "Dom" },
   { id: "fb_day_mon", render: () => "Lun" },
   { id: "fb_day_tue", render: () => "Mar" },
@@ -555,7 +534,6 @@ module.exports = [
   { id: "fb_filter_time_desc", render: (ctx) =>
     `Configura a qué hora y días se disparará el trigger:\n\n${ctx.lines}\n\n${ctx.emduvida} La hora es obligatoria. Zona horaria: UTC.` },
 
-  // ── FlowBuilder — menú de condiciones ──
   { id: "fb_no_conditions", render: (ctx) => `_Sin condiciones — el flujo siempre se ejecuta ${ctx.feliz}_` },
   { id: "fb_cnd_negated_tag", render: () => " ~~negado~~" },
   { id: "fb_cnd_choose_category", render: () => "➕ 1️⃣ Categoría de la nueva condición" },
@@ -580,7 +558,6 @@ module.exports = [
   { id: "fb_negate_no_option", render: () => "➡️ No — mantiene el resultado normal" },
   { id: "fb_condition_modal_title", render: (ctx) => `${ctx.isEdit ? '✏️ Editar' : '➕'} Condición: ${ctx.label}` },
 
-  // ── FlowBuilder — labels/placeholders genéricos de parámetros ──
   { id: "param_content_label", render: () => "Contenido del mensaje" },
   { id: "param_channelId_label", render: () => "ID del canal" },
   { id: "param_roleId_label", render: () => "ID del rol" },
@@ -661,7 +638,6 @@ module.exports = [
   { id: "fb_no_params_to_edit", render: (ctx) => `${ctx.emduvida} ¡Esta condición no tiene parámetros para editar!` },
   { id: "fb_condition_updated", render: (ctx) => `${ctx.feliz} ¡Condición actualizada!` },
 
-  // ── FlowBuilder — menú de acciones ──
   { id: "fb_no_actions", render: (ctx) => `_Ninguna acción configurada ${ctx.emburrada}_` },
   { id: "fb_act_choose_category", render: () => "➕ 1️⃣ Categoría de la nueva acción" },
   { id: "fb_act_edit_existing", render: () => "✏️ Editar una acción ya añadida" },
@@ -674,7 +650,6 @@ module.exports = [
   { id: "fb_actions_add_hint", render: () => "**Añadir nueva acción** — elige la categoría:" },
   { id: "fb_act_choose_specific", render: (ctx) => `➕ 2️⃣ Acción — ${ctx.category}` },
 
-  // ── FlowBuilder — modal de acción y parámetros booleanos ──
   { id: "bp_ephemeral_label", render: () => "¿Mensaje visible solo para el usuario?" },
   { id: "bp_ephemeral_yes", render: () => "👁️ Sí — solo él/ella lo ve (ephemeral)" },
   { id: "bp_ephemeral_no", render: () => "📢 No — todos lo ven" },
@@ -690,7 +665,6 @@ module.exports = [
   { id: "fb_warn_role_hierarchy", render: (ctx) => `⚠️ El rol del bot es igual o menor que <@&${ctx.roleId}>. La acción puede fallar.` },
   { id: "fb_warn_missing_perm", render: (ctx) => `⚠️ El bot no tiene el permiso **${ctx.perm}** en este servidor.` },
 
-  // ── FlowBuilder — editor de embed integrado ──
   { id: "fb_embed_btn_edit", render: () => "✏️ Editar embed" },
   { id: "fb_embed_btn_create", render: () => "✨ Crear embed" },
   { id: "fb_embed_btn_remove", render: () => "🗑️ Quitar embed" },
@@ -704,7 +678,6 @@ module.exports = [
   { id: "fb_embed_field_inline_yes", render: () => "↔️ Sí — lado a lado" },
   { id: "fb_embed_field_inline_no", render: () => "⬇️ No — línea completa" },
 
-  // ── FlowBuilder — constructor de interacción (botón/select que dispara otro flujo) ──
   { id: "fb_int_btn_edit", render: () => "✏️ Editar interacción" },
   { id: "fb_int_btn_add", render: () => "⚡ Añadir interacción" },
   { id: "fb_int_btn_remove", render: () => "🗑️ Quitar interacción" },
@@ -752,7 +725,6 @@ module.exports = [
   { id: "fb_flow_picker_id_desc", render: (ctx) => `ID: ${ctx.id}` },
   { id: "fb_flow_picker_header", render: (ctx) => `# ⚡ Seleccionar Flujo ${ctx.pensando}\n¿Qué flujo se disparará? *(Página ${ctx.page}/${ctx.maxPage})*` },
 
-  // ── FlowBuilder — selección de canal/rol/permiso/argumento ──
   { id: "fb_select_channel_placeholder", render: (ctx) => `📌 Canal para: ${ctx.label}` },
   { id: "fb_select_channel_header", render: (ctx) => `# 📌 Seleccionar Canal ${ctx.emduvida}\n${ctx.pensando} Para la acción **${ctx.label}**, ¡selecciona el canal donde va a ocurrir!` },
   { id: "fb_select_role_placeholder", render: (ctx) => `🏷️ Rol para: ${ctx.label}` },
@@ -788,7 +760,6 @@ module.exports = [
   { id: "fb_btn_prev_small", render: () => "◀ Anterior" },
   { id: "fb_btn_next_small", render: () => "Siguiente ▶" },
 
-  // ── FlowBuilder — nombres de permisos de Discord ──
   { id: "permname_view_channel", render: () => "Ver Canales" },
   { id: "permname_send_messages", render: () => "Enviar Mensajes" },
   { id: "permname_send_messages_in_threads", render: () => "Enviar en Hilos" },
@@ -829,7 +800,6 @@ module.exports = [
   { id: "permname_create_instant_invite", render: () => "Crear Invitación" },
   { id: "permname_administrator", render: () => "Administrador" },
 
-  // ── FlowBuilder — menú de variables ──
   { id: "fb_var_scope_user_line", render: () => "por usuario" },
   { id: "fb_var_scope_flow_line", render: () => "del flujo" },
   { id: "fb_var_no_vars", render: (ctx) => `_Ninguna variable creada ${ctx.sonolenta}_` },
@@ -921,7 +891,6 @@ module.exports = [
   { id: "fb_var_default_boolean_desc", render: () => "`false`" },
   { id: "fb_var_default_list_desc", render: () => "`[]` (vacía)" },
 
-  // ── FlowBuilder — menú de configuración ──
   { id: "fb_settings_btn_cooldown", render: () => "⏱️ Cooldown" },
   { id: "fb_settings_mode_parallel", render: () => "🔀 Modo: Paralelo" },
   { id: "fb_settings_mode_sequential", render: () => "➡️ Modo: Secuencial" },
@@ -952,7 +921,6 @@ module.exports = [
   { id: "fb_logs_no_runs", render: (ctx) => `_Ninguna ejecución registrada todavía ${ctx.sonolenta}_` },
   { id: "fb_logs_header", render: (ctx) => `# 📊 Últimas Ejecuciones ${ctx.emduvida}\n${ctx.lines}\n\n*Los registros se conservan durante 7 días*` },
 
-  // ── Triggers Premium: Ticket y Pico de Actividad ──
   { id: "trgcatmeta_ticket_label", render: () => "🎫 Tickets" },
   { id: "trgcatmeta_ticket_desc", render: () => "Abiertos o cerrados — Premium 🌟" },
   { id: "trgcatmeta_activity_label", render: () => "📈 Actividad" },

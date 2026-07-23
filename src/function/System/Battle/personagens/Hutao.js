@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Hutao
- * Elemento: Pyro | Raridade: 5 estrelas
- * Role: DPS principal
- *
- * Mecânicas únicas:
- * - Guia das Almas: sacrifica HP para aumentar ATK massivamente
- * - Aplicação Pyro constante no ataque normal
- * - C1: Cargas de ataque ilimitadas durante habilidade
- */
 module.exports = {
     nome:     'Hutao',
     raridade: '5',

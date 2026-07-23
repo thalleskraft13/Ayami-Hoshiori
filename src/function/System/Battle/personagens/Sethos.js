@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Sethos
- * Elemento: Electro | Raridade: 4 estrelas
- * Role: DPS, Sub-DPS
- *
- * Mecânicas únicas:
- * - Consome energia para ampliar dano das flechas carregadas
- * - Altamente eficiente em equipes de Intensificação (Electro + Dendro)
- */
 module.exports = {
     nome:     'Sethos',
     raridade: '4',

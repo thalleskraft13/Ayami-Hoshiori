@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Lisa
- * Elemento: Electro | Raridade: 4 estrelas
- * Role: Sub-DPS, Debuffer
- *
- * Mecânicas únicas:
- * - Acumula cargas de Conduta nos inimigos
- * - Supremo reduz DEF dos inimigos massivamente
- */
 module.exports = {
     nome:     'Lisa',
     raridade: '4',

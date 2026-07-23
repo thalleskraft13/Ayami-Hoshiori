@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Barbara
- * Elemento: Hydro | Raridade: 4 estrelas
- * Role: Healer principal
- *
- * Mecânicas únicas:
- * - Melodia Idol: cura contínua enquanto ativa
- * - Aplica Hydro no time (cuidado com Cryo/Electro)
- * - C6: Revive um aliado automaticamente
- */
 module.exports = {
     nome:     'Barbara',
     raridade: '4',

@@ -1,32 +1,11 @@
 'use strict';
 
-/**
- * TTLCache — cache genérico em memória com expiração automática.
- *
- * DiscordGatewayClient tinha reinventado seu próprio cache (Map com
- * setInterval, objeto puro sem limpeza, etc). Esta classe padroniza isso:
- *
- *   - get/set/delete/has, com expiração automática por entrada (TTL em ms).
- *   - sweep periódico configurável (setInterval) que remove entradas
- *     expiradas sozinho, mesmo que nunca mais sejam lidas — resolve o
- *     vazamento de memória visto no `SecuritySystem._botPermCache`
- *     (objeto `{}` puro, só era limpo quando relido).
- *   - `destroy()` pra parar o sweep quando o processo for encerrado
- *     (evita manter o event loop vivo à toa em testes/scripts).
- */
 class TTLCache {
-    /**
-     * @param {object} [opts]
-     * @param {number} [opts.ttlMs=60000]              TTL padrão de cada entrada, em ms.
-     * @param {number} [opts.sweepIntervalMs=300000]   Intervalo do sweep automático (5min). `0`/`null` desativa o sweep.
-     * @param {number} [opts.maxSize]                  Limite opcional de entradas (LRU simples: remove a mais antiga ao estourar).
-     */
     constructor(opts = {}) {
         this.ttlMs           = opts.ttlMs ?? 60_000;
         this.sweepIntervalMs = opts.sweepIntervalMs ?? 5 * 60_000;
         this.maxSize         = opts.maxSize ?? null;
 
-        /** @type {Map<any, { value: any, expires: number }>} */
         this._store = new Map();
 
         this._sweepTimer = null;
@@ -66,7 +45,6 @@ class TTLCache {
         return this._store.delete(key);
     }
 
-    /** Remove todas as entradas cuja chave satisfaz `predicate(key)`. Útil pra invalidar tudo de uma guild, por ex. */
     deleteWhere(predicate) {
         let removed = 0;
         for (const key of this._store.keys()) {
@@ -86,7 +64,6 @@ class TTLCache {
         return this._store.size;
     }
 
-    /** Remove entradas expiradas. Chamado automaticamente pelo sweep, mas pode ser chamado manualmente também. */
     sweep() {
         const now = Date.now();
         let removed = 0;
@@ -101,11 +78,9 @@ class TTLCache {
 
     _startSweep() {
         this._sweepTimer = setInterval(() => this.sweep(), this.sweepIntervalMs);
-        // Não impede o processo de encerrar (worker threads/testes) por causa do timer.
         this._sweepTimer.unref?.();
     }
 
-    /** Para o sweep automático. Chamar ao desligar o subsistema, se necessário. */
     destroy() {
         if (this._sweepTimer) {
             clearInterval(this._sweepTimer);

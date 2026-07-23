@@ -2,9 +2,6 @@ const mongoose = require('mongoose');
 
 let isConnected = false;
 
-/**
- * Connect to MongoDB using Mongoose
- */
 async function connectMongo() {
 
     if (!process.env.MONGO_URI)

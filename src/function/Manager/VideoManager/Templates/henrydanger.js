@@ -5,7 +5,6 @@ const BaseVideo = require('../BaseVideo');
 const FFmpeg    = require('../FFmpeg');
 const { chromaKeyGreen } = require('../chromaKeyVideo');
 
-// ── Debug: mostra marcadores de posição nos frames ────────────────────────────
 const DEBUG = false;
 
 class HenryDangerTemplate extends BaseVideo {
@@ -21,9 +20,6 @@ class HenryDangerTemplate extends BaseVideo {
         const { canvas: canvasModule, loadImage } = context;
         const { avatarUrl1, avatarBuffer } = data;
 
-        // ── Frames do vídeo base ficam no disco, nunca todos na RAM ────────
-        // (antes: FFmpeg.extractFrames carregava ~360 PNGs como Buffers de
-        // uma vez só, o que causava o pico de memória no render de vídeo).
         if (!this._baseFramesDir) {
             const videoPath = context.assets.videos.get('henrydanger');
             if (!videoPath) throw new Error('[HenryDanger] Asset "henrydanger" não encontrado em videos/.');
@@ -52,7 +48,6 @@ class HenryDangerTemplate extends BaseVideo {
             if (DEBUG) _drawDebug(ctx, coords, slot, frameIndex);
         }
 
-        // Frame base + chroma key — carrega direto do disco, 1 frame por vez.
         const { dir, files } = this._baseFramesDir;
         const baseFramePath  = path.join(dir, files[frameIndex % files.length]);
         const baseFrame      = await loadImage(baseFramePath);
@@ -61,19 +56,17 @@ class HenryDangerTemplate extends BaseVideo {
         bgCtx.drawImage(baseFrame, 0, 0, W, H);
         chromaKeyGreen(bgCtx, W, H, 160, false);
         ctx.drawImage(bgCanvas, 0, 0);
-        _freeCanvas(bgCanvas); // já foi copiado pro canvas principal, libera logo
+        _freeCanvas(bgCanvas); 
 
         if (DEBUG && slot) {
             _drawDebugOver(ctx, _calcCoords(slot), slot, frameIndex);
         }
 
         const buffer = canvas.toBuffer('image/png');
-        _freeCanvas(canvas); // idem — já temos o Buffer, não precisa mais do canvas nativo
+        _freeCanvas(canvas); 
         return buffer;
     }
 
-    // Chamado automaticamente pelo VideoRenderer ao final do render
-    // (sucesso ou erro) — apaga o diretório de frames extraídos do disco.
     dispose() {
         FFmpeg.cleanupFrameDir(this._baseFramesDir?.dir);
         this._baseFramesDir = null;
@@ -84,7 +77,6 @@ class HenryDangerTemplate extends BaseVideo {
 
 function _getSlot(frameIndex) {
 
-    // ── Frame 33–39 ───────────────────────────────────────────────────────
     if (frameIndex > 31 && frameIndex < 40) return {
         x: 0, y: 0,   // posição do canto sup esquerdo
         w: 410, h: 300,  // largura e altura
@@ -92,7 +84,6 @@ function _getSlot(frameIndex) {
         skewY:  0.02,    // inclinação vertical
     };
 
-    // ── Frame 40–52 ───────────────────────────────────────────────────────
     if (frameIndex > 39 && frameIndex < 50) return {
         x: 0, y: 0,
         w: 530, h: 440,
@@ -100,7 +91,6 @@ function _getSlot(frameIndex) {
         skewY:  0.02,
     };
 
-    // ── Frame 53–55 ───────────────────────────────────────────────────────
     if (frameIndex > 49 && frameIndex < 56) return {
         x: 0, y: 0,
         w: 630, h: 520,
@@ -108,7 +98,6 @@ function _getSlot(frameIndex) {
         skewY:  0.00,
     };
 
-    // ── Frame 56–61 ───────────────────────────────────────────────────────
     if (frameIndex > 55 && frameIndex < 62) return {
         x: 0, y: 0,
         w: 630, h: 520,
@@ -116,7 +105,6 @@ function _getSlot(frameIndex) {
         skewY:  0.00,
     };
 
-    // ── Frame 62–77 ───────────────────────────────────────────────────────
     if (frameIndex > 61 && frameIndex < 78) return {
         x: 0, y: 0,
         w: 630, h: 525,
@@ -124,7 +112,6 @@ function _getSlot(frameIndex) {
         skewY:  0.00,
     };
 
-    // ── Frame 189–213 ─────────────────────────────────────────────────────
     if (frameIndex > 188 && frameIndex < 214) return {
         x: 150, y: 40,
          w: 380, h: 370,
@@ -132,7 +119,6 @@ function _getSlot(frameIndex) {
         skewY:  0.00,
     };
 
-    // ── Frame 234–242 ─────────────────────────────────────────────────────
     if (frameIndex > 233 && frameIndex < 255) return {
          x: 0, y: 0,
         w: 470, h: 380,
@@ -140,7 +126,6 @@ function _getSlot(frameIndex) {
         skewY:  0.00,
     };
 
-    // ── Frame 255–260 ─────────────────────────────────────────────────────
     if (frameIndex > 254 && frameIndex < 261) return {
         x: 0, y: 0,
         w: 760, h: 610,
@@ -148,7 +133,6 @@ function _getSlot(frameIndex) {
         skewY:  0.00,
     };
 
-    // ── Frame 261–275 ─────────────────────────────────────────────────────
     if (frameIndex > 260 && frameIndex < 276) return {
         x: 0, y: 0,
      w: 760, h: 610,
@@ -159,7 +143,6 @@ function _getSlot(frameIndex) {
     return null;
 }
 
-// ─── Calcula os 3 cantos a partir do slot ─────────────────────────────────────
 
 function _calcCoords({ x, y, w, h, skewX, skewY }) {
     return {
@@ -178,7 +161,6 @@ function _calcCoords({ x, y, w, h, skewX, skewY }) {
     };
 }
 
-// ─── Perspectiva ──────────────────────────────────────────────────────────────
 
 function _drawPerspective(ctx, canvasModule, img, { topoEsq, topDir, baixEsq }) {
     const tW = topDir.x  - topoEsq.x;
@@ -198,29 +180,16 @@ function _drawPerspective(ctx, canvasModule, img, { topoEsq, topDir, baixEsq }) 
     ctx.drawImage(tmp, 0, 0, tW, tH);
     ctx.restore();
 
-    // Libera a memória nativa do canvas temporário imediatamente. O V8 não
-    // sente pressão de heap por causa desse objeto (o wrapper JS é minúsculo,
-    // o buffer de pixels é nativo/Cairo), então sem isso ele fica esperando
-    // um GC que pode demorar — e com 1 canvas desses por frame, 360 frames
-    // seguidos acumulam memória nativa bem mais rápido do que o V8 percebe.
     _freeCanvas(tmp);
 }
 
-/**
- * Zera as dimensões do canvas para forçar o Cairo a liberar o buffer de
- * pixels nativo na hora, em vez de esperar o GC do V8 coletar o wrapper JS.
- *
- * @param {import('canvas').Canvas} canvas
- */
 function _freeCanvas(canvas) {
     if (!canvas) return;
     try { canvas.width = 0; canvas.height = 0; } catch {}
 }
 
-// ─── Debug ────────────────────────────────────────────────────────────────────
 
 function _drawDebug(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
-    // Linha do contorno
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,0,0.7)';
     ctx.lineWidth   = 1;
@@ -248,14 +217,11 @@ function _drawDebugOver(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
         ctx.fillStyle   = cor;
         ctx.lineWidth   = 2;
 
-        // Cruz
         ctx.beginPath(); ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8); ctx.stroke();
 
-        // Círculo
         ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fillStyle = cor; ctx.fill();
 
-        // Label
         ctx.font         = 'bold 11px Arial';
         ctx.fillStyle    = cor;
         ctx.strokeStyle  = '#000';
@@ -268,7 +234,6 @@ function _drawDebugOver(ctx, { topoEsq, topDir, baixEsq }, slot, frameIndex) {
         ctx.restore();
     }
 
-    // Slot info no canto
     ctx.save();
     ctx.font         = 'bold 12px Arial';
     ctx.fillStyle    = '#FFFF00';

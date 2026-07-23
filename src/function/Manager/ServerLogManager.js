@@ -8,18 +8,8 @@ const LOG_CHANNEL_ID = '1522177373792112860';
 const COLOR_JOIN  = 0x57F287;
 const COLOR_LEAVE = 0xED4245;
 
-/**
- * ServerLogManager
- *
- * Plugado no `GuildManager#handleDispatch` (que já trata GUILD_CREATE/
- * GUILD_DELETE). Quem decide se um GUILD_CREATE é entrada real ou
- * resync/reconexão é o próprio `GuildManager` (comparando com a lista de
- * guilds recebida no READY da sessão atual — ver `markSessionGuilds`);
- * aqui só chega quando já é certeza de entrada nova de verdade.
- */
 class ServerLogManager {
 
-    /** Chamado pelo GuildManager quando confirma que é um GUILD_CREATE de entrada nova. */
     async handleGuildCreate(data) {
         try {
             await GuildDb.findOneAndUpdate(
@@ -55,7 +45,6 @@ class ServerLogManager {
         }
     }
 
-    /** Chamado pelo GuildManager em GUILD_DELETE (só quando NÃO é `unavailable`, ou seja, saída real). */
     async handleGuildDelete(data) {
         try {
             await GuildEventLog.create({

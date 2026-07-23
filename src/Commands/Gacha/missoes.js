@@ -9,13 +9,9 @@ const COLORS = {
   event:    0xFFD966, // Dourado
   success:  0xFFB6C8, // Bochechas / Rosa
   danger:   0xFF6B8A, // Perigo suave
-  default:  0xC6CDD8  // Prata
+  default:  0xC6CDD8  
 };
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS COMPONENTS V2
-   (mesmo padrão usado no Logic Builder / Biblioteca)
-   ═══════════════════════════════════════════════════════════ */
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -49,9 +45,6 @@ function row(...components) {
   return { type: 1, components };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   COMANDO /missoes
-   ═══════════════════════════════════════════════════════════ */
 
 module.exports = {
   data: {
@@ -167,9 +160,6 @@ module.exports = {
   }
 };
 
-/* ═══════════════════════════════════════════════════════════
-   MISSÕES PESSOAIS
-   ═══════════════════════════════════════════════════════════ */
 
 async function _renderPersonal(interaction, client, userId, period) {
   const e           = client.emoji;
@@ -236,9 +226,6 @@ async function _renderPersonal(interaction, client, userId, period) {
   return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLORS.personal }));
 }
 
-/* ═══════════════════════════════════════════════════════════
-   GRUPO DE AVENTUREIROS
-   ═══════════════════════════════════════════════════════════ */
 
 async function _grupoCriar(interaction, client, userId) {
   const e     = client.emoji;
@@ -463,9 +450,6 @@ async function _renderGroupMissions(interaction, client, userId, group, missions
   return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLORS.group }));
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MISSÕES DE GUILDA
-   ═══════════════════════════════════════════════════════════ */
 
 async function _renderGuildMissions(interaction, client, userId, guildId, tab) {
   const doc = await client.missionManager.getGuildMissions(guildId);
@@ -630,10 +614,6 @@ async function _renderEventMission(interaction, client, userId, guildId, doc) {
   return _edit(interaction, client, cv2Payload(blocks, { accentColor: m.done ? COLORS.success : COLORS.event }));
 }
 
-/* ═══════════════════════════════════════════════════════════
-   NOTIFICAÇÃO DE CONVITE VIA DM
-   (mensagem normal — não é o painel principal, mantém embed)
-   ═══════════════════════════════════════════════════════════ */
 
 async function _notifyInvite(client, targetId, leaderId, groupId) {
   const e = client.emoji;
@@ -660,9 +640,6 @@ async function _notifyInvite(client, targetId, leaderId, groupId) {
   } catch {}
 }
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════════════════ */
 
 function _bar(current, goal) {
   const filled = Math.min(Math.round((current / goal) * 10), 10);

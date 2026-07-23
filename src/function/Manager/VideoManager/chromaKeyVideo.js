@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Remove pixels verdes de um canvas (chroma key).
- *
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} w
- * @param {number} h
- * @param {number} [threshold=80]
- * @param {boolean} [smooth=true] - true = bordas suaves (semi-transparência),
- *                                   false = corte definitivo (sem mistura).
- */
 function chromaKeyGreen(ctx, w, h, threshold = 80, smooth = true) {
     const imageData = ctx.getImageData(0, 0, w, h);
     const data       = imageData.data;

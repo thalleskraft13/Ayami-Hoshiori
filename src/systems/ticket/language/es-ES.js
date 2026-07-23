@@ -1,13 +1,11 @@
 "use strict";
 
 module.exports = [
-  // ── Inicio ──
   { id: "home_title", render: (ctx) =>
     `# 🎫 Sistema de Tickets ${ctx.animada}\n¡Hola! Soy Ayami ${ctx.corao} y te voy a ayudar a montar la atención de tu servidor!` },
   { id: "btn_panels", render: (ctx) => `📋 Paneles (${ctx.count})` },
   { id: "btn_new_panel", render: () => "✨ Nuevo Panel" },
 
-  // ── Lista de paneles ──
   { id: "no_panels_title", render: (ctx) => `# 📋 Tus Paneles ${ctx.emburrada}\nAún no hay paneles... ¿creamos el primero?` },
   { id: "panels_title", render: (ctx) => `# 📋 Tus Paneles (${ctx.count}) ${ctx.feliz}\n${ctx.list}` },
   { id: "select_which_panel", render: () => "✨ ¿Qué panel quieres ver?" },
@@ -16,14 +14,12 @@ module.exports = [
   { id: "panel_option_desc", render: (ctx) => `${ctx.staffCount} staff • ${ctx.hubLabel}` },
   { id: "btn_back", render: () => "⬅️ Volver" },
 
-  // ── Crear panel ──
   { id: "modal_create_panel_title", render: () => "Crear Panel de Ticket ✨" },
   { id: "modal_panel_id_label", render: () => "ID del panel (sin espacios)" },
   { id: "modal_panel_id_placeholder", render: () => "soporte, denuncias, colaboraciones..." },
   { id: "invalid_id", render: () => "❌ ¡ID inválido!" },
   { id: "panel_id_exists", render: (ctx) => `${ctx.emburrada} Ya existe un panel con ID **${ctx.panelId}**.` },
 
-  // ── Menú del panel ──
   { id: "panel_not_found", render: (ctx) => `# ${ctx.emduvida} No encontré ese panel...\n¡Puede que haya sido eliminado!` },
   { id: "opt_edit_embed", render: () => "🎨 Editar Embed" },
   { id: "opt_create_embed", render: () => "✨ Crear Embed" },
@@ -62,19 +58,16 @@ module.exports = [
   { id: "embed_removed", render: (ctx) => `${ctx.emduvida} Quité la embed.` },
   { id: "embed_title_prefix", render: (ctx) => `Embed — ${ctx.panelId}` },
 
-  // ── Eliminar panel ──
   { id: "confirm_delete_title", render: (ctx) => `# ${ctx.assustada} ¿Eliminar el panel?\n¿Seguro? Después no se puede deshacer...` },
   { id: "btn_confirm_delete", render: () => "✅ Sí, eliminar" },
   { id: "btn_cancel", render: () => "❌ Cancelar" },
 
-  // ── Publicar ──
   { id: "publish_no_channel", render: (ctx) => `${ctx.emduvida} Elige un canal primero, ¿vale?` },
   { id: "publish_no_embed", render: (ctx) => `${ctx.emduvida} ¡Aún te falta crear la embed!` },
   { id: "select_service_type_placeholder", render: () => "Selecciona el tipo de atención" },
   { id: "open_ticket_button", render: () => "🎫 Abrir Ticket" },
   { id: "publish_success", render: (ctx) => `${ctx.festa} ¡Listo! Publicado en <#${ctx.channelId}>~` },
 
-  // ── Canal y Categoría ──
   { id: "destino_channel_placeholder", render: () => "📌 Canal donde se enviará el panel" },
   { id: "destino_category_placeholder", render: () => "📂 Categoría donde se crearán los tickets" },
   { id: "destino_title", render: (ctx) =>
@@ -84,7 +77,6 @@ module.exports = [
   { id: "destino_none_channel", render: () => "ninguno todavía" },
   { id: "destino_none_category", render: () => "ninguna todavía" },
 
-  // ── Staff y Nombre ──
   { id: "staff_role_select_placeholder", render: () => "👥 Añadir rol de staff" },
   { id: "btn_clear_staff", render: () => "🧹 Limpiar Staff" },
   { id: "btn_ticket_name", render: () => "✏️ Nombre del Ticket" },
@@ -94,7 +86,6 @@ module.exports = [
     `> 🛡️ Staff: ${ctx.staffStatus}\n` +
     `> 🏷️ Nombre: \`${ctx.name}\`` },
 
-  // ── Tipo de Creación ──
   { id: "tipo_label_channel", render: () => "📁 Canal de Texto" },
   { id: "tipo_label_thread_public", render: () => "🧵 Hilo Público" },
   { id: "tipo_label_thread_private", render: () => "🔒 Hilo Privado" },
@@ -102,7 +93,6 @@ module.exports = [
   { id: "tipo_current_label", render: () => "✅ Actual" },
   { id: "tipo_title", render: (ctx) => `# ⚙️ Tipo de Creación ${ctx.feliz}\n¿Cómo se crea el ticket? Actual: ${ctx.current}` },
 
-  // ── Modal ──
   { id: "modal_no_fields", render: () => "_Ningún campo añadido_" },
   { id: "modal_field_short", render: () => "corto" },
   { id: "modal_field_paragraph", render: () => "párrafo" },
@@ -130,7 +120,6 @@ module.exports = [
   { id: "status_on", render: () => "🟢 Activo" },
   { id: "status_off", render: () => "🔴 Inactivo" },
 
-  // ── Añadir campo del modal ──
   { id: "add_field_modal_title", render: () => "Añadir Campo del Modal" },
   { id: "field_label_label", render: () => "Pregunta/etiqueta del campo" },
   { id: "field_placeholder_label", render: () => "Placeholder (opcional)" },
@@ -140,7 +129,6 @@ module.exports = [
   { id: "field_required_placeholder", render: () => "sí" },
   { id: "field_added", render: (ctx) => `${ctx.curtida} ¡Campo añadido!` },
 
-  // ── Formulario Secuencial ──
   { id: "seq_no_questions", render: () => "_Ninguna pregunta añadida_" },
   { id: "seq_question_required_tag", render: () => " *obligatoria*" },
   { id: "btn_toggle_form_off", render: () => "⏸️ Desactivar Formulario" },
@@ -179,7 +167,6 @@ module.exports = [
   { id: "seq_dest_own_ticket", render: () => "🎫 el propio ticket" },
   { id: "question_added", render: (ctx) => `${ctx.curtida} ¡Pregunta añadida!` },
 
-  // ── Añadir pregunta (genérico) ──
   { id: "question_type_select_placeholder", render: () => "¿Qué tipo de pregunta es?" },
   { id: "qtype_short_label", render: () => "📝 Texto corto" },
   { id: "qtype_short_desc", render: () => "Respuesta de hasta ~100 caracteres" },
@@ -210,7 +197,6 @@ module.exports = [
   { id: "flow_intermediate_title", render: () => "📋 ¿Qué tipo de pregunta es?" },
   { id: "infinity_symbol", render: () => "∞" },
 
-  // ── Modal de pregunta ──
   { id: "add_question_modal_title", render: () => "Añadir Pregunta" },
   { id: "question_text_label", render: () => "Texto de la pregunta" },
   { id: "question_options_label", render: () => "Opciones (separadas por comas)" },
@@ -218,7 +204,6 @@ module.exports = [
   { id: "question_required_label", render: () => "¿Obligatoria? (sí/no)" },
   { id: "question_required_placeholder", render: () => "sí" },
 
-  // ── Auto-rol ──
   { id: "role_type_select_label", render: (ctx) => `Tipo del rol <@&${ctx.roleId}>` },
   { id: "role_permanent_label", render: () => "♾️ Permanente" },
   { id: "role_permanent_desc", render: () => "El rol se queda para siempre" },
@@ -245,7 +230,6 @@ module.exports = [
     `> 🔗 Vinculado — desaparece cuando se cierra el ticket\n\n` +
     `**Roles:**\n${ctx.list}` },
 
-  // ── Transcripción ──
   { id: "transcript_channel_placeholder", render: () => "📌 Canal para guardar transcripciones" },
   { id: "btn_dm_toggle_off", render: () => "🔕 No enviar MD" },
   { id: "btn_dm_toggle_on", render: () => "🔔 Enviar MD al usuario" },
@@ -258,7 +242,6 @@ module.exports = [
   { id: "dm_yes", render: () => "✅ Sí" },
   { id: "dm_no", render: () => "❌ No" },
 
-  // ── Mensajes personalizados ──
   { id: "msg_field_ticket_title", render: () => "🎫 Ticket Creado — Título" },
   { id: "msg_field_ticket_desc", render: () => "🎫 Ticket Creado — Descripción" },
   { id: "msg_field_close_btn", render: () => "🔒 Texto del Botón Cerrar" },
@@ -281,11 +264,9 @@ module.exports = [
   { id: "msg_status_custom_icon", render: () => "✏️" },
   { id: "msg_status_default_icon", render: () => "⚪" },
 
-  // ── Editar mensaje ──
   { id: "edit_message_field_label", render: (ctx) => `Texto${ctx.vars ? ` (vars: ${ctx.vars})` : ''}` },
   { id: "edit_message_placeholder", render: () => "Déjalo vacío para usar el texto predeterminado de Ayami" },
 
-  // ── Select Hub ──
   { id: "btn_toggle_hub_off", render: () => "⏸️ Desactivar Menú de Selección" },
   { id: "btn_toggle_hub_on", render: () => "▶️ Activar Menú de Selección" },
   { id: "btn_select_text", render: () => "✏️ Texto del Select" },
@@ -303,14 +284,12 @@ module.exports = [
     `**Opciones (${ctx.count}/25):**\n${ctx.list}` },
   { id: "no_options", render: () => "_Ninguna opción creada_" },
 
-  // ── Añadir opción ──
   { id: "new_option_modal_title", render: () => "Nueva Opción del Select" },
   { id: "option_name_label", render: () => "Nombre de la opción" },
   { id: "option_desc_label", render: () => "Descripción (opcional)" },
   { id: "option_emoji_label", render: () => "Emoji (opcional)" },
   { id: "option_created", render: (ctx) => `${ctx.festa} ¡Opción **${ctx.label}** creada! Configúrala abajo.` },
 
-  // ── Sub-panel de la opción ──
   { id: "option_not_found", render: () => "❌ Opción no encontrada." },
   { id: "option_header", render: (ctx) =>
     `# ${ctx.optionEmoji} ${ctx.optionLabel} ${ctx.feliz}\n` +
@@ -328,7 +307,6 @@ module.exports = [
   { id: "btn_delete_option", render: () => "🗑️ Eliminar Opción" },
   { id: "option_deleted", render: (ctx) => `${ctx.chorando} Opción **${ctx.label}** eliminada.` },
 
-  // ── Creación de tickets (runtime) ──
   { id: "panel_not_found_short", render: () => "❌ Panel no encontrado." },
   { id: "modal_answer_title_default", render: () => "Formulario de Atención" },
   { id: "default_ticket_created_title", render: () => "🎫 Ticket Creado" },
@@ -343,12 +321,10 @@ module.exports = [
   { id: "default_seq_summary_title", render: () => "✅ Respuestas Recibidas" },
   { id: "ticket_created_success", render: (ctx) => `${ctx.feliz} ¡Ticket creado en <#${ctx.channelId}>!` },
 
-  // ── Cerrar ticket ──
   { id: "default_closing_message", render: () => "⛔ Este ticket se cerrará en 10 segundos..." },
   { id: "default_transcript_title", render: () => "📄 Transcripción" },
   { id: "default_transcript_dm_title", render: () => "📄 Tu Transcripción" },
   { id: "default_transcript_dm_desc", render: () => "¡Aquí está el historial de tu atención, {user}!" },
-  // ── Editor de Embed (EmbedBuilderUI) ──
   { id: "eb_default_title", render: () => "🎨 Editor de Embed" },
   { id: "eb_field_select_placeholder", render: () => "✏️ Editar campo de la embed…" },
   { id: "eb_field_title", render: () => "Título" },
@@ -393,7 +369,6 @@ module.exports = [
   { id: "eb_builder_content", render: (ctx) => `🎨 **${ctx.title}** — ¡la vista previa de abajo es exactamente cómo quedará la embed!` },
   { id: "eb_blank_placeholder", render: () => "*Embed en blanco — empieza eligiendo un campo para editar abajo* 👇" },
 
-  // ── SeqQuestionsManager (runtime) ──
   { id: "sq_answer_invalid", render: (ctx) => `⚠️ <@${ctx.userId}> Respuesta inválida. Inténtalo de nuevo.` },
   { id: "sq_attachment_prompt", render: () => "_Envía un archivo o imagen como respuesta._" },
   { id: "sq_attachment_required", render: (ctx) => `⚠️ <@${ctx.userId}> Envía un archivo/imagen como respuesta (o escribe \`cancelar\` para cancelar).` },
@@ -411,7 +386,6 @@ module.exports = [
   { id: "sq_hint_short", render: () => "_Respuesta corta (hasta 100 caracteres)_" },
   { id: "sq_attachment_link_label", render: () => "adjunto" },
 
-  // ── TranscriptManager (runtime) ──
   { id: "tr_locale_tag", render: () => "es-ES" },
   { id: "tr_summary_desc", render: (ctx) => `Canal: **${ctx.channelName}**\nCerrado por: <@${ctx.closedBy}>\nMensajes: **${ctx.count}**` },
   { id: "tr_dm_desc_default", render: (ctx) => `Tu ticket **#${ctx.channelName}** ha sido cerrado.\nAdjunto va la transcripción.` },

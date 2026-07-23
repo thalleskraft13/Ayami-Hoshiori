@@ -3,11 +3,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-/**
- * Análise de Atividade — contador acumulado por (guildId, channelId).
- * Alimenta "Chats Mais Utilizados", "Chats Menos Utilizados" e a lista
- * de canais mortos (sem mensagens há muito tempo).
- */
 const activityChannelStatSchema = new Schema({
   guildId:   { type: String, required: true },
   channelId: { type: String, required: true },

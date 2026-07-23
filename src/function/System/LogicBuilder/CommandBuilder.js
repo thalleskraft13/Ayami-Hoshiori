@@ -5,9 +5,6 @@ const { localeCtx }  = require('../../Utils/ctxLocale.js');
 const { CustomCommandModel, FlowModel } = require('../../../Mongodb/flow.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI (mesma paleta do Logic Builder)
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,
   dark:    0x243B7A,
@@ -15,12 +12,6 @@ const COLOR = {
   success: 0x57F287,
 };
 
-/**
- * CommandBuilder — Components V2
- *
- * Gerencia criação e edição de comandos de prefixo personalizados.
- * Cada comando aponta para um fluxo existente.
- */
 class CommandBuilder {
 
   constructor(client, ui) {
@@ -32,12 +23,10 @@ class CommandBuilder {
     return this.client?.emoji?.[name] ?? '';
   }
 
-  /** Atalho pra tradução de uma chave do sistema "logicbuilder". */
   t(key, ctx, extra = {}) {
     return this.client.t(`logicbuilder.${key}`, { ...ctx, ...extra });
   }
 
-  /** Contexto de locale + atalhos de emoji, a partir da interação. */
   _tctx(interaction, extra = {}) {
     return localeCtx(interaction, {
       animada:   this._e('animada'),
@@ -54,18 +43,13 @@ class CommandBuilder {
     });
   }
 
-  /** Helper de payload CV2 não-ephemeral (mensagem original visível). */
   _cv2(blocks, opts = {}) {
     return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
   }
 
-  /* ═══════════════════════════════════════════
-     CRIAR COMANDO
-     ═══════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
     const ctx = this._tctx(interaction);
-    // Primeiro precisa existir pelo menos um fluxo com trigger "Comando executado"
     const flows = await FlowModel.find({
       guildId:        interaction.guild_id,
       'trigger.category': 'command',
@@ -78,16 +62,12 @@ class CommandBuilder {
       ]));
     }
 
-    // Passo 1: seleciona o fluxo que o comando vai executar
     const options = flows.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
       description: `${f.enabled ? '🟢' : '🔴'} ${this.ui._triggerLabel(f.trigger, ctx)}`
     }));
 
-    // NÃO faz deferUpdate aqui — _createStep2 abre um modal em
-    // seguida, e showModal precisa de uma interação ainda não
-    // confirmada (deferUpdate antes causaria erro 40060).
     const sel = this.ui.select(user, options, this.t('cb_flow_select_placeholder', ctx), async (i) => {
       return this._createStep2(i, user, i.data.values[0]);
     });
@@ -185,7 +165,6 @@ class CommandBuilder {
           );
         }
 
-        // Verifica duplicata
         const existing = await CustomCommandModel.findOne({
           guildId: modalInteraction.guild_id,
           name
@@ -225,9 +204,6 @@ class CommandBuilder {
           cooldown:    cooldownMs
         });
 
-        // Sem isso, a tela "Lista de Comandos" (Flow.js#commandList) fica
-        // até 60s mostrando dados velhos (cache — ver Flow.js CACHE_TTL) —
-        // era exatamente o bug "a lista não carrega" reportado.
         this.ui.invalidateCache(modalInteraction.guild_id);
 
         await DiscordRequest(
@@ -244,9 +220,6 @@ class CommandBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════════
-     MENU DO COMANDO
-     ═══════════════════════════════════════════ */
 
   async commandMenu(interaction, user, commandId, { successMsg } = {}) {
     const guildId = interaction.guild_id;

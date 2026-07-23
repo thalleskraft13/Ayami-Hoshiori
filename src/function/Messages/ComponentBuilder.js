@@ -5,9 +5,6 @@ class ComponentBuilder {
         this.currentRow = null;
     }
 
-    /* =========================
-       Create New Action Row
-    ========================== */
     newRow() {
         this.currentRow = {
             type: 1,
@@ -18,15 +15,6 @@ class ComponentBuilder {
         return this;
     }
 
-    /* =========================
-       Add Button
-       style:
-       1 = Primary
-       2 = Secondary
-       3 = Success
-       4 = Danger
-       5 = Link
-    ========================== */
     addButton({
         label,
         customId,
@@ -59,9 +47,6 @@ class ComponentBuilder {
         return this;
     }
 
-    /* =========================
-       Add String Select Menu
-    ========================== */
     addSelectMenu({
         customId,
         placeholder,
@@ -92,9 +77,6 @@ class ComponentBuilder {
         return this;
     }
 
-    /* =========================
-       Add Modal (static helper)
-    ========================== */
     static createModal({
         customId,
         title,
@@ -123,9 +105,6 @@ class ComponentBuilder {
         };
     }
 
-    /* =========================
-       Return Only Components
-    ========================== */
     build() {
         return this.rows;
     }

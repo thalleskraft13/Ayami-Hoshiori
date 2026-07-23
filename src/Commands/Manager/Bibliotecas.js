@@ -4,9 +4,6 @@ const DiscordRequest = require('../../function/DiscordRequest.js');
 const getPerm        = require('../../function/Utils/GetPerm.js');
 const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
-/* ═══════════════════════════════════════════════════════════
-   CONSTANTES
-   ═══════════════════════════════════════════════════════════ */
 
 const CATEGORIES = [
   'Moderação','Economia','Automação','Logs','Tickets',
@@ -44,9 +41,6 @@ const CATEGORY_EMOJI = {
   'Outros':      '📦'
 };
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI (mesma paleta do Logic Builder)
-   ───────────────────────────────────────────── */
 const COLOR = {
   main:    0x7C8FFF,   // azul principal
   gold:    0xFFD966,   // dourado
@@ -61,16 +55,10 @@ const COLOR = {
 const SUPPORT_ANNOUNCE_CHANNEL = '1508910999753850910';
 const GUIDE_URL = 'https://ayami-hoshiori.discloud.app/logic-builder';
 
-/* ═══════════════════════════════════════════════════════════
-   MAPA DE CAMPOS QUE PRECISAM SER CONFIGURADOS NA INSTALAÇÃO
-   Chave: "category:type" → array de campos obrigatórios
-   ═══════════════════════════════════════════════════════════ */
 
 const INSTALL_REQUIRED_FIELDS = {
-  // Ações — mensagem
   'message:send_message':        [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_send_message_channel' }],
   'message:delete_bot_message':  [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_delete_bot_message_channel' }],
-  // Ações — canal
   'channel:delete_channel':      [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_delete_channel' }],
   'channel:rename_channel':      [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_rename_channel' }],
   'channel:lock_channel':        [
@@ -81,26 +69,19 @@ const INSTALL_REQUIRED_FIELDS = {
     { field: 'channelId', labelKey: 'field_channel', descKey: 'desc_unlock_channel' },
     { field: 'roleId',    labelKey: 'field_role',    descKey: 'desc_unlock_role' }
   ],
-  // Ações — usuário
   'user:give_role':              [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_give_role' }],
   'user:remove_role':            [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_remove_role' }],
   'user:give_temp_role':         [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_give_temp_role' }],
   'user:toggle_role':            [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_toggle_role' }],
-  // Condições — usuário
   'user:has_role':               [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_check_role' }],
   'user:not_has_role':           [{ field: 'roleId',    labelKey: 'field_role', descKey: 'desc_check_role' }],
-  // Condições — canal
   'channel:is_channel':          [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_is_channel' }],
   'channel:not_channel':         [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_not_channel' }],
-  // Trigger filters
   'trigger:message':             [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_message' }],
   'trigger:reaction':            [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_generic' }],
   'trigger:component':           [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_generic' }],
 };
 
-/* ═══════════════════════════════════════════════════════════
-   LABEL AMIGÁVEL PARA AÇÕES/CONDIÇÕES
-   ═══════════════════════════════════════════════════════════ */
 
 function _actionLabel(client, ctx, category, type) {
   const map = {
@@ -126,14 +107,6 @@ function _actionLabel(client, ctx, category, type) {
   return key ? client.t(`biblioteca.${key}`, ctx) : `${category}/${type}`;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   CONSTRUÇÃO DAS PERGUNTAS DE INSTALAÇÃO
-   — Varre CADA campo individualmente em ações, condições e
-     trigger.filters de TODOS os fluxos.
-   — SEMPRE pergunta, independente de ter valor hardcoded.
-   — Deduplicação por (flowName + category:type + field):
-     se dois fluxos diferentes têm a mesma ação, pergunta separado.
-   ═══════════════════════════════════════════════════════════ */
 
 function _buildInstallQuestions(entry, client, ctx) {
   const questions = [];
@@ -143,7 +116,6 @@ function _buildInstallQuestions(entry, client, ctx) {
     const flow     = flows[fi];
     const flowName = flow.name || client.t('biblioteca.unnamed_flow', { ...ctx, n: fi + 1 });
 
-    // ── Ações ──────────────────────────────────────────────
     for (let ai = 0; ai < (flow.actions || []).length; ai++) {
       const action  = flow.actions[ai];
       const key     = `${action.category}:${action.type}`;
@@ -167,7 +139,6 @@ function _buildInstallQuestions(entry, client, ctx) {
       }
     }
 
-    // ── Condições ──────────────────────────────────────────
     for (let ci = 0; ci < (flow.conditions || []).length; ci++) {
       const cond    = flow.conditions[ci];
       const key     = `${cond.category}:${cond.type}`;
@@ -191,7 +162,6 @@ function _buildInstallQuestions(entry, client, ctx) {
       }
     }
 
-    // ── Trigger filters ────────────────────────────────────
     if (flow.trigger?.filters) {
       const triggerKey = `trigger:${flow.trigger.category}`;
       const reqFields  = INSTALL_REQUIRED_FIELDS[triggerKey];
@@ -218,11 +188,6 @@ function _buildInstallQuestions(entry, client, ctx) {
   return questions;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   APLICAÇÃO DOS VALORES COLETADOS NOS FLUXOS
-   — Substitui cada campo individualmente usando o storeKey,
-     ao invés de uma substituição global por tipo.
-   ═══════════════════════════════════════════════════════════ */
 
 function _applyCollectedValues(flows, questions, collected) {
   const cloned = JSON.parse(JSON.stringify(flows));
@@ -260,9 +225,6 @@ function _applyCollectedValues(flows, questions, collected) {
   return cloned;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS DE INTERACTION (REST)
-   ═══════════════════════════════════════════════════════════ */
 
 async function _defer(interaction) {
   return DiscordRequest(
@@ -285,14 +247,6 @@ async function _reply(interaction, data) {
   );
 }
 
-/**
- * Edita a "mensagem original" do painel. Normalmente relativo a
- * @original do token da interação atual — mas se a interação foi
- * marcada com `__rootOverride` (acontece depois de fluxos que rodam
- * em followUp com token próprio, como o wizard de instalação por
- * mensagens no canal), edita a mensagem raiz real via REST puro por
- * channelId+messageId. Mesma estratégia usada no Logic Builder.
- */
 async function _edit(interaction, client, data) {
   if (interaction.__rootOverride) {
     const { channelId, messageId } = interaction.__rootOverride;
@@ -304,7 +258,6 @@ async function _edit(interaction, client, data) {
   );
 }
 
-/** Edita qualquer mensagem do bot via REST puro (canal + messageId), sem depender de token. */
 async function _editMessageById(client, channelId, messageId, data) {
   return DiscordRequest(
     `/channels/${channelId}/messages/${messageId}`,
@@ -330,22 +283,15 @@ async function _deleteFollowUp(interaction, client, messageId) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS COMPONENTS V2
-   (mesmo padrão usado no Logic Builder)
-   ═══════════════════════════════════════════════════════════ */
 
-/** Text Display (type 10) */
 function cv2Text(content) {
   return { type: 10, content };
 }
 
-/** Separator (type 14) */
 function cv2Divider(spacing = 1) {
   return { type: 14, divider: true, spacing };
 }
 
-/** Section (type 9) — texto + botão acessório ao lado. */
 function cv2Section(content, button) {
   return {
     type:      9,
@@ -354,7 +300,6 @@ function cv2Section(content, button) {
   };
 }
 
-/** Media Gallery (type 12) — imagem decorativa. */
 function cv2Gallery(urls) {
   const list = Array.isArray(urls) ? urls : [urls];
   return {
@@ -363,7 +308,6 @@ function cv2Gallery(urls) {
   };
 }
 
-/** Container raiz (type 17). */
 function cv2Container(blocks, opts = {}) {
   return {
     type:         17,
@@ -373,12 +317,10 @@ function cv2Container(blocks, opts = {}) {
   };
 }
 
-/** Flags para respostas CV2. IS_COMPONENTS_V2 = 1<<15 = 32768  EPHEMERAL = 1<<6 = 64 */
 function cv2Flags(ephemeral = false) {
   return ephemeral ? 32768 | 64 : 32768;
 }
 
-/** Payload completo { flags, components: [container] } pronto para _edit/_followUp/_reply. */
 function cv2Payload(blocks, opts = {}) {
   return {
     flags:      cv2Flags(opts.ephemeral ?? false),
@@ -390,7 +332,6 @@ function row(...components) {
   return { type: 1, components };
 }
 
-/** Botão simples — wrapper de client.interactions.createButton. */
 function btn(client, user, label, style, func, opts = {}) {
   return client.interactions.createButton({
     user,
@@ -409,23 +350,18 @@ function select(client, user, options, placeholder, func, opts = {}) {
 
 const GUIDE_BUTTON = { type: 2, style: 5, label: '📖 Guia', url: GUIDE_URL };
 
-/* ── helper de paginação (mesmo padrão do Logic Builder) ── */
 function _clampPage(page, total, perPage = 8) {
   const maxPage  = Math.max(0, Math.ceil(total / perPage) - 1);
   const safePage = Math.min(Math.max(0, page), maxPage);
   return { page: safePage, maxPage };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   WIZARD DE INSTALAÇÃO
-   ═══════════════════════════════════════════════════════════ */
 
 async function _startInstallWizard(interaction, client, lib, entry, userId, guildId, e) {
   guildId = guildId || interaction.guild_id;
   const channelId = interaction.channel_id;
   const ctx = localeCtx(interaction);
 
-  // Verifica permissão
   let perms = [];
   try {
     perms = await getPerm({ guildId, id: userId, client });
@@ -441,26 +377,19 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
 
   const questions = _buildInstallQuestions(entry, client, ctx);
 
-  // Sem perguntas — instala direto
   if (!questions.length) {
     return _executeInstall(interaction, client, lib, entry, userId, guildId, [], {}, null, e);
   }
 
-  // Captura channelId + messageId REAIS da mensagem raiz, ANTES de
-  // qualquer mensagem nova ser enviada no canal pelo wizard. Isso
-  // permite editar a mensagem certa ao final, mesmo que o wizard
-  // tenha rodado fora do ciclo de token da interação atual.
   const rootChannelId = interaction.channel_id || interaction.channel?.id;
   let rootMessageId   = interaction.message?.id;
   if (!rootMessageId) {
-    // Quando vem de /instalar direto (sem clique de botão), busca o @original.
     const original = await DiscordRequest(
       `/webhooks/${client.clientId}/${interaction.token}/messages/@original`
     ).catch(() => null);
     rootMessageId = original?.id;
   }
 
-  // Mostra resumo das perguntas antes de começar
   const summaryLines = questions.map((q, i) => `\`${i + 1}.\` **${q.label}** — _${q.actionLabel}_`).slice(0, 25).join('\n');
 
   await _edit(interaction, client, cv2Payload([
@@ -475,8 +404,6 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
     const q        = questions[i];
     const progress = `(${i + 1}/${questions.length})`;
 
-    // Envia a pergunta no canal (mensagem normal, não-CV2, para não
-    // conflitar com o painel raiz)
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body: {
@@ -493,7 +420,6 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
       }
     });
 
-    // Aguarda resposta
     let msg;
     try {
       msg = await client.NextMessageCollector.wait({ channelId, userId, time: 120_000 });
@@ -530,16 +456,11 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
     collected[q.storeKey] = content;
   }
 
-  // Marca a interação com o override de destino, para que o
-  // resumo final (_executeInstall) edite a mensagem raiz de verdade.
   interaction.__rootOverride = { channelId: rootChannelId, messageId: rootMessageId };
 
   return _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId, e);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   EXECUÇÃO DA INSTALAÇÃO
-   ═══════════════════════════════════════════════════════════ */
 
 async function _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId = null, e) {
   try {
@@ -587,9 +508,6 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
   }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DEFINIÇÃO DO COMANDO
-   ═══════════════════════════════════════════════════════════ */
 
 module.exports = {
   data: {
@@ -776,9 +694,6 @@ module.exports = {
   }
 };
 
-/* ═══════════════════════════════════════════════════════════
-   HELPER — resolve nome de autor
-   ═══════════════════════════════════════════════════════════ */
 
 async function _resolveAuthorName(lib, authorId, client, ctx, fallback = null) {
   if (fallback && fallback !== authorId) return fallback;
@@ -821,9 +736,6 @@ function _triggerLabel(client, ctx, trigger) {
   return key ? client.t(`biblioteca.${key}`, ctx) : `${trigger.category}/${trigger.type}`;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SUBCOMANDOS
-   ═══════════════════════════════════════════════════════════ */
 
 async function _pesquisar(interaction, client, lib, opts, userId, e) {
   const { results } = await lib.search({

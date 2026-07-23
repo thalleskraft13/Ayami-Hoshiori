@@ -1,56 +1,37 @@
 'use strict';
 
-/**
- * BattleCharacter
- *
- * Envolve os dados estáticos de um personagem (exportados do arquivo de personagem)
- * com estado dinâmico de batalha: HP atual, energia, cooldowns, buffs, debuffs, escudos.
- *
- * A engine nunca acessa dados de personagem diretamente — apenas via esta classe.
- */
 class BattleCharacter {
-    /**
-     * @param {object} dados      - Dados exportados do arquivo do personagem (ex: Arlecchino.js)
-     * @param {object} registroDB - Registro do personagem no banco (constelação, nível, amizade)
-     */
     constructor(dados, registroDB = {}) {
         this.dados     = dados;
         this.registroDB = registroDB;
 
-        // Identidade
         this.nome      = dados.nome;
         this.elemento  = dados.elemento;
         this.raridade  = dados.raridade;
         this.roles     = dados.roles ?? [];
         this.modoCombate = dados.modoCombate ?? { principal: true, offField: false };
 
-        // Constelação aplicada (do banco de dados)
         this.constelacao = Math.min(registroDB.constelacao ?? 0, 6);
 
-        // Stats finais (base + bônus de constelação)
         this.stats = this._calcularStats();
 
-        // Estado dinâmico de batalha
         this.hpAtual      = this.stats.hp;
         this.energiaAtual = 0;
         this.vivo         = true;
         this.ativo        = false;
 
-        // Coleções de estado temporário
-        this.buffs    = []; // { stat, valor, duracao, fonte, id }
-        this.debuffs  = []; // { tipo, valor, duracao, fonte, id }
-        this.escudos  = []; // { valor, elemento, duracao, fonte }
-        this.marcas   = []; // { tipo, valor, duracao, dados }
-        this.auras    = new Set(); // elementos aplicados no personagem
+        this.buffs    = []; 
+        this.debuffs  = []; 
+        this.escudos  = []; 
+        this.marcas   = []; 
+        this.auras    = new Set(); 
 
-        // Cooldowns individuais
         this.cooldowns = {
             ataqueNormal:      0,
             habilidadeElemental: 0,
             supremo:           0,
         };
 
-        // Estatísticas da batalha atual
         this.estatisticas = {
             danoTotal:  0,
             curaTotal:  0,
@@ -58,11 +39,7 @@ class BattleCharacter {
         };
     }
 
-    // ─── Stats ────────────────────────────────────────────────────────────────
 
-    /**
-     * Calcula os stats finais somando bônus das constelações ativas.
-     */
     _calcularStats() {
         const base = { ...this.dados.stats };
         const cons = this.dados.constelacoes ?? {};
@@ -79,11 +56,6 @@ class BattleCharacter {
         return base;
     }
 
-    /**
-     * Retorna o valor atual de um stat somando buffs/debuffs ativos.
-     * @param {string} stat
-     * @returns {number}
-     */
     getStat(stat) {
         let valor = this.stats[stat] ?? 0;
 
@@ -98,20 +70,12 @@ class BattleCharacter {
         return Math.max(0, valor);
     }
 
-    // ─── HP ───────────────────────────────────────────────────────────────────
 
-    /**
-     * Recebe dano. Escudos absorvem primeiro.
-     * @param {number} valor
-     * @param {string} [fonte]
-     * @returns {number} dano real sofrido
-     */
     receberDano(valor, fonte = 'desconhecido') {
         if (!this.vivo) return 0;
 
         let danoRestante = valor;
 
-        // Escudos absorvem primeiro
         for (const escudo of [...this.escudos]) {
             if (danoRestante <= 0) break;
             if (escudo.valor >= danoRestante) {
@@ -123,7 +87,6 @@ class BattleCharacter {
             }
         }
 
-        // Remove escudos quebrados
         this.escudos = this.escudos.filter(e => e.valor > 0);
 
         this.hpAtual = Math.max(0, this.hpAtual - danoRestante);
@@ -136,11 +99,6 @@ class BattleCharacter {
         return danoRestante;
     }
 
-    /**
-     * Recebe cura.
-     * @param {number} valor
-     * @returns {number} cura real aplicada
-     */
     receberCura(valor) {
         if (!this.vivo) return 0;
         const hpAntes = this.hpAtual;
@@ -150,16 +108,11 @@ class BattleCharacter {
         return curaReal;
     }
 
-    /**
-     * Revive o personagem com HP especificado.
-     * @param {number} hp
-     */
     reviver(hp) {
         this.vivo    = true;
         this.hpAtual = Math.min(this.stats.hp, Math.max(1, hp));
     }
 
-    // ─── Energia ──────────────────────────────────────────────────────────────
 
     adicionarEnergia(valor) {
         this.energiaAtual = Math.min(this.stats.energiaMax, this.energiaAtual + valor);
@@ -173,10 +126,8 @@ class BattleCharacter {
         return this.energiaAtual >= (this.dados.supremo?.energiaNecessaria ?? 100);
     }
 
-    // ─── Buffs / Debuffs / Escudos / Marcas ───────────────────────────────────
 
     aplicarBuff(buff) {
-        // Substitui buff do mesmo stat e fonte se já existir
         this.buffs = this.buffs.filter(b => !(b.stat === buff.stat && b.fonte === buff.fonte));
         this.buffs.push({ id: Date.now() + Math.random(), ...buff });
     }
@@ -195,7 +146,6 @@ class BattleCharacter {
         this.marcas.push({ id: Date.now() + Math.random(), ...marca });
     }
 
-    // ─── Cooldowns ────────────────────────────────────────────────────────────
 
     setCooldown(acao, turnos) {
         this.cooldowns[acao] = turnos;
@@ -215,12 +165,7 @@ class BattleCharacter {
         }
     }
 
-    // ─── Duração de efeitos ───────────────────────────────────────────────────
 
-    /**
-     * Reduz a duração de buffs, debuffs, escudos e marcas.
-     * Remove os que expiraram.
-     */
     reduzirDuracoes() {
         this.buffs    = this.buffs.filter(b => { b.duracao--; return b.duracao > 0; });
         this.debuffs  = this.debuffs.filter(d => { d.duracao--; return d.duracao > 0; });
@@ -228,7 +173,6 @@ class BattleCharacter {
         this.marcas   = this.marcas.filter(m => { m.duracao--; return m.duracao > 0; });
     }
 
-    // ─── Auras Elementais ─────────────────────────────────────────────────────
 
     aplicarAura(elemento) {
         this.auras.add(elemento);
@@ -242,13 +186,11 @@ class BattleCharacter {
         return this.auras.has(elemento);
     }
 
-    // ─── Off-Field ────────────────────────────────────────────────────────────
 
     podeAtorOffField() {
         return this.vivo && this.modoCombate.offField === true;
     }
 
-    // ─── Habilidades disponíveis ──────────────────────────────────────────────
 
     getAcoesDisponiveis() {
         const acoes = [];
@@ -268,12 +210,7 @@ class BattleCharacter {
         return acoes;
     }
 
-    // ─── Constelações ─────────────────────────────────────────────────────────
 
-    /**
-     * Verifica se uma constelação específica está ativa.
-     * @param {number} nivel
-     */
     temConstelacao(nivel) {
         return this.constelacao >= nivel;
     }
@@ -282,7 +219,6 @@ class BattleCharacter {
         return this.dados.constelacoes?.[nivel] ?? null;
     }
 
-    // ─── Snapshot para embed ──────────────────────────────────────────────────
 
     toSnapshot() {
         return {

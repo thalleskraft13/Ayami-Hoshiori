@@ -6,17 +6,12 @@ const UserGlobalDb    = require("../../Mongodb/userglobal.js");
 const {GuildDb}         = require("../../Mongodb/guild.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
-/* ─────────────────────────────────────────────
-   CORES DA AYAMI
-   ───────────────────────────────────────────── */
 const COLOR = {
   main: 0x7C8FFF,
 };
 
-/** Imagem fixa exibida no topo do painel via Media Gallery. */
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1439343766505783407/1517179361545945118/148_Sem_Titulo_20260618114843.png?ex=6a3556e3&is=6a340563&hm=cb8bd3e08f7412a656f3d1c0031489c3e8dac0d9e74691c38c5fc1b55270f281';
 
-/** Versões do sistema atual — categoria "Versões". */
 const SYSTEM_VERSIONS = [
   { label: 'Ayami',         value: '3.0' },
   { label: 'Logic Builder', value: '2.0' },
@@ -25,10 +20,6 @@ const SYSTEM_VERSIONS = [
   { label: 'Discord API',   value: 'V10' },
 ];
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS COMPONENTS V2
-   (mesmo padrão usado no Logic Builder / Biblioteca)
-   ═══════════════════════════════════════════════════════════ */
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -38,7 +29,6 @@ function cv2Divider(spacing = 1) {
   return { type: 14, divider: true, spacing };
 }
 
-/** Media Gallery (type 12) — banner/imagem decorativa. */
 function cv2Gallery(urls) {
   const list = Array.isArray(urls) ? urls : [urls];
   return {
@@ -98,10 +88,6 @@ module.exports = {
       return `${d}d ${h}h ${m}m ${s}s`;
     };
 
-    // antes usava DiscordRequest("/users/@me/guilds"), que só
-    // devolve as guilds visíveis PRA ESSE TOKEN dentro da página default da
-    // API (paginado, até 200 por chamada) — não reflete o total real do bot
-    // multi-cluster. Agora agrega o cache real de cada cluster via IPC.
     const guilds = await client.getAllGuilds();
     const totalGuilds = guilds.length;
 
@@ -272,14 +258,6 @@ module.exports = {
       }
     });
 
-    /**
-     * Monta o payload CV2 completo de uma página: conteúdo + select +
-     * botões de link. Components V2 substitui a mensagem inteira a
-     * cada resposta — não há "merge" com o que já estava lá — então
-     * TODO update precisa remontar o select e os botões, ou eles
-     * desaparecem (era o bug: o callback do select mandava só o
-     * `blocks` da página, sem o próprio select).
-     */
     const buildFullPayload = (blocks) => cv2Payload(
       [...blocks, cv2Divider(), row(select), row(btnAdd, btnServer)],
       { accentColor: COLOR.main }

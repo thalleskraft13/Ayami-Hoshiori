@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Noelle
- * Elemento: Geo | Raridade: 4 estrelas
- * Role: Tank, Shielder, Healer, DPS (com C6)
- *
- * Mecânicas únicas:
- * - Breastplate: escudo que cura ao atacar
- * - Sweeping Time: infunde Geo e aumenta ATK + área de ataque
- * - C6: ATK sobe massivamente com DEF
- */
 module.exports = {
     nome:     'Noelle',
     raridade: '4',
@@ -71,7 +61,6 @@ module.exports = {
         6: {
             nome:       'Must Be Spotless',
             bonusStats: { def: 400 },
-            // C6: Sweeping Time converte DEF em ATK adicional
             trigger: 'supremo_aliado',
             efeitos: [
                 { tipo: 'buff', alvo: 'self', stat: 'atk', valor: 600, duracao: 4 },

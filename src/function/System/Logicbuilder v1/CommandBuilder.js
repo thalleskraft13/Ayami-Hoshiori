@@ -4,12 +4,6 @@ const DiscordRequest = require('../../DiscordRequest.js');
 const { CustomCommandModel, FlowModel } = require('../../../Mongodb/flow.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
-/**
- * CommandBuilder
- *
- * Gerencia criação e edição de comandos de prefixo personalizados.
- * Cada comando aponta para um fluxo existente.
- */
 class CommandBuilder {
 
   constructor(client, ui) {
@@ -17,12 +11,8 @@ class CommandBuilder {
     this.ui     = ui;
   }
 
-  /* ═══════════════════════════════════════════
-     CRIAR COMANDO
-     ═══════════════════════════════════════════ */
 
   async startCreate(interaction, user) {
-    // Primeiro precisa existir pelo menos um fluxo com trigger "Comando executado"
     const flows = await FlowModel.find({
       guildId:        interaction.guild_id,
       'trigger.category': 'command',
@@ -35,7 +25,6 @@ class CommandBuilder {
       });
     }
 
-    // Passo 1: seleciona o fluxo que o comando vai executar
     const options = flows.slice(0, 25).map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
@@ -43,7 +32,6 @@ class CommandBuilder {
     }));
 
     const sel = this.ui.select(user, options, 'Selecione o fluxo do comando', async (i) => {
-     // await this.ui.deferUpdate(i);
       return this._createStep2(i, user, i.data.values[0]);
     });
 
@@ -137,7 +125,6 @@ class CommandBuilder {
           );
         }
 
-        // Verifica duplicata
         const existing = await CustomCommandModel.findOne({
           guildId: modalInteraction.guild_id,
           name
@@ -193,9 +180,6 @@ class CommandBuilder {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-  /* ═══════════════════════════════════════════
-     MENU DO COMANDO
-     ═══════════════════════════════════════════ */
 
   async commandMenu(interaction, user, commandId) {
     const guildId = interaction.guild_id;

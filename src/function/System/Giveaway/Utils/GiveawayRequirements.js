@@ -3,18 +3,6 @@
 const DiscordRequest   = require('../../../DiscordRequest.js');
 const AuthorizationDb  = require('../../../../Mongodb/giveawayAuthorization.js');
 
-/**
- * GiveawayRequirements
- *
- * Verifica se um participante cumpre todos os requisitos definidos
- * no sorteio. Chamado exclusivamente durante o sorteio (não na entrada).
- *
- * Retorna: { ok: boolean, reason: string | null }
- *
- * Os "reason" aparecem no relatório público de encerramento (histórico
- * do sorteio) — não há um usuário específico assistindo nesse momento,
- * então traduzimos via client.t() com fallback automático em pt-BR.
- */
 class GiveawayRequirements {
 
   static _t(client, key, extra = {}) {
@@ -22,11 +10,6 @@ class GiveawayRequirements {
     return key;
   }
 
-  /**
-   * @param {object} participant  Objeto do participante (userId, guildId)
-   * @param {object} doc          Documento do sorteio
-   * @param {object} client       Instância do cliente Discord
-   */
   static async verify(participant, doc, client) {
 
     if (!doc.requirements?.length) return { ok: true, reason: null };
@@ -39,9 +22,6 @@ class GiveawayRequirements {
     return { ok: true, reason: null };
   }
 
-  /* ─────────────────────────────────────────
-     DISPATCHER
-  ───────────────────────────────────────── */
 
   static async _check(req, participant, doc, client) {
 
@@ -67,7 +47,6 @@ class GiveawayRequirements {
         case 'IN_SERVER':
           return this._checkInServer(req, participant, client);
 
-        // Premium — servidor externo
         case 'REQUIRED_ROLE_IN_SERVER':
           return this._checkRequiredRoleInServer(req, participant, client);
 
@@ -101,14 +80,10 @@ class GiveawayRequirements {
 
     } catch (err) {
       console.error(`[GiveawayRequirements] Erro ao verificar ${req.type}:`, err);
-      // Em caso de erro de API, não desclassificar (benefício da dúvida)
       return { ok: true, reason: null };
     }
   }
 
-  /* ─────────────────────────────────────────
-     VERIFICAÇÕES — SERVIDOR ATUAL
-  ───────────────────────────────────────── */
 
   static async _checkRequiredRole(req, participant, guildId, client) {
 
@@ -139,7 +114,6 @@ class GiveawayRequirements {
     const minMsg = parseInt(req.value) || 0;
 
     try {
-      // Usa o GiveawayMessageTracker registrado em client.giveaway.messageTracker
       const count = await client.giveaway?.messageTracker?.getCount(participant.userId, guildId) ?? 0;
       return {
         ok: count >= minMsg,
@@ -172,7 +146,6 @@ class GiveawayRequirements {
 
     const minDays = parseInt(req.value) || 0;
 
-    // Calcular idade da conta a partir do userId (Snowflake)
     const snowflake = BigInt(participant.userId);
     const createdAt = new Date(Number((snowflake >> 22n) + 1420070400000n));
     const days      = Math.floor((Date.now() - createdAt.getTime()) / 864e5);
@@ -185,9 +158,6 @@ class GiveawayRequirements {
     };
   }
 
-  /* ─────────────────────────────────────────
-     VERIFICAÇÕES — OUTRO SERVIDOR (GRATUITO)
-  ───────────────────────────────────────── */
 
   static async _checkInServer(req, participant, client) {
 
@@ -198,9 +168,6 @@ class GiveawayRequirements {
     };
   }
 
-  /* ─────────────────────────────────────────
-     VERIFICAÇÕES — OUTRO SERVIDOR (PREMIUM)
-  ───────────────────────────────────────── */
 
   static async _checkRequiredRoleInServer(req, participant, client) {
 
@@ -330,10 +297,6 @@ class GiveawayRequirements {
 
   static async _checkSupporter(req, participant, client) {
 
-    /*
-      "Cargo Apoiador" depende da definição do seu bot.
-      Adapte para o sistema de apoiador que você utiliza.
-    */
     try {
       const isSupporter = await client.supporter?.check?.(participant.userId, req.guildId);
       return {
@@ -345,9 +308,6 @@ class GiveawayRequirements {
     }
   }
 
-  /* ─────────────────────────────────────────
-     HELPER — BUSCAR MEMBRO
-  ───────────────────────────────────────── */
 
   static async _getMember(guildId, userId) {
     try {

@@ -81,9 +81,6 @@ module.exports = {
       "3": "Asia Server"
     };
 
-    // ──────────────────────────────────────────
-    //  SALVAR
-    // ──────────────────────────────────────────
     if (subcommand.name === "salvar") {
 
       const uid = subcommand.options?.[0]?.value;
@@ -129,9 +126,6 @@ module.exports = {
       });
     }
 
-    // ──────────────────────────────────────────
-    //  VER
-    // ──────────────────────────────────────────
     if (subcommand.name === "ver") {
 
       const userID = subcommand.options?.[0]?.value;
@@ -148,7 +142,6 @@ module.exports = {
       const userName = user.global_name || user.username;
       const userUrl = `https://discord.com/users/${userID}`;
 
-      // ── Sem UID ──
       if (!userdb.uidGenshin || userdb.uidGenshin === 0) {
 
         const ctxNotFound = localeCtx(interaction, {
@@ -179,7 +172,6 @@ module.exports = {
         );
       }
 
-      // ── Com UID ──
       const ctxFound = localeCtx(interaction, {
         eFeliz: emoji.feliz,
         eCurtida: emoji.curtida,

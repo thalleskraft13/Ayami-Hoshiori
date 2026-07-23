@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Xingqiu
- * Elemento: Hydro | Raridade: 4 estrelas
- * Role: Sub-DPS off-field, suporte, redutor de dano
- *
- * Mecânicas únicas:
- * - Espadas de Chuva: ataques coordenados massivos off-field
- * - Escudo de Redução de Dano via espadas
- * - C6: Espadas de Chuva aplicam Hydro continuamente
- */
 module.exports = {
     nome:     'Xingqiu',
     raridade: '4',
@@ -47,7 +37,6 @@ module.exports = {
         2: {
             nome:       'Chuva Consoladora',
             bonusStats: { atk: 50 },
-            // C2: Espadas de Chuva reduzem dano recebido pelo aliado ativo
             trigger: 'ataque_aliado',
             efeitos: [
                 { tipo: 'escudo', alvo: 'ativo', valor: 300, duracao: 1 },
@@ -68,7 +57,6 @@ module.exports = {
         6: {
             nome:       'Orvalho da Madrugada',
             bonusStats: { atk: 150, proficiencia: 100 },
-            // C6: Espadas de Chuva sempre aplicam Hydro
             trigger: 'ataque_aliado',
             efeitos: [
                 { tipo: 'dano', alvo: 'proximo_ativo', elemento: 'hydro', valor: 0.6 },
@@ -154,7 +142,6 @@ module.exports = {
         {
             nome:    'Espadas de Chuva',
             trigger: 'ataque_aliado',
-            // Ativação off-field: toda vez que o aliado ativo ataca, Xingqiu responde
             efeitos: [
                 {
                     tipo:     'dano',
@@ -183,7 +170,6 @@ module.exports = {
         {
             nome:    'Véu de Chuva',
             trigger: 'troca_personagem',
-            // Quando troca para campo, cria escudo temporário
             efeitos: [
                 {
                     tipo:   'escudo',

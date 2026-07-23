@@ -12,7 +12,6 @@ if (isMainThread) {
         clientOptions: { intents: 53608191 },
     });
 
-    // Expõe globalmente para o IPC funcionar via require
     global.__clusterManager = manager;
 
     manager.launch().catch(console.error);

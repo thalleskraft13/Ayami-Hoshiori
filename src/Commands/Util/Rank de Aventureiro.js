@@ -49,9 +49,6 @@ module.exports = {
     const authorId = interaction.member.user.id;
     const emoji = client.emoji;
 
-    // ──────────────────────────────────────────
-    //  VER
-    // ──────────────────────────────────────────
     if (subcommand.name === "ver") {
 
       const mentionedUser = subcommand.options?.[0]?.value;
@@ -135,9 +132,6 @@ module.exports = {
       );
     }
 
-    // ──────────────────────────────────────────
-    //  PLACAR
-    // ──────────────────────────────────────────
     if (subcommand.name === "placar") {
 
       const pageSize = 10;
@@ -284,9 +278,6 @@ module.exports = {
   }
 };
 
-// ──────────────────────────────────────────
-//  HELPER
-// ──────────────────────────────────────────
 
 function getAvatarURL(user) {
   if (!user.avatar)

@@ -1,13 +1,5 @@
 'use strict';
 
-/**
- * ReactionManager
- *
- * Processa reações elementais baseado nas auras existentes no alvo.
- * Totalmente separado da engine — recebe alvo, atacante e retorna resultado.
- *
- * Para adicionar nova reação: adicione uma entrada em REACOES e implemente o método.
- */
 
 const ELEMENTOS = Object.freeze({
     PYRO:    'pyro',
@@ -19,46 +11,33 @@ const ELEMENTOS = Object.freeze({
     GEO:     'geo',
 });
 
-/**
- * Tabela de reações: chave = `${elementoAplicado}+${auraExistente}`
- * Cada entrada define o tipo de reação.
- */
 const TABELA_REACOES = {
-    // Vaporização
     [`${ELEMENTOS.PYRO}+${ELEMENTOS.HYDRO}`]:    'vaporizacao_pyro',
     [`${ELEMENTOS.HYDRO}+${ELEMENTOS.PYRO}`]:    'vaporizacao_hydro',
 
-    // Derretimento
     [`${ELEMENTOS.PYRO}+${ELEMENTOS.CRYO}`]:     'derretimento_pyro',
     [`${ELEMENTOS.CRYO}+${ELEMENTOS.PYRO}`]:     'derretimento_cryo',
 
-    // Eletricamente Carregado
     [`${ELEMENTOS.ELECTRO}+${ELEMENTOS.HYDRO}`]: 'eletricamenteCarregado',
     [`${ELEMENTOS.HYDRO}+${ELEMENTOS.ELECTRO}`]: 'eletricamenteCarregado',
 
-    // Sobrecarga
     [`${ELEMENTOS.ELECTRO}+${ELEMENTOS.PYRO}`]:  'sobrecarga',
     [`${ELEMENTOS.PYRO}+${ELEMENTOS.ELECTRO}`]:  'sobrecarga',
 
-    // Supercondutor
     [`${ELEMENTOS.ELECTRO}+${ELEMENTOS.CRYO}`]:  'supercondutor',
     [`${ELEMENTOS.CRYO}+${ELEMENTOS.ELECTRO}`]:  'supercondutor',
 
-    // Florescimento
     [`${ELEMENTOS.HYDRO}+${ELEMENTOS.DENDRO}`]:  'florescimento',
     [`${ELEMENTOS.DENDRO}+${ELEMENTOS.HYDRO}`]:  'florescimento',
 
-    // Intensificação
     [`${ELEMENTOS.ELECTRO}+${ELEMENTOS.DENDRO}`]:'intensificacao',
     [`${ELEMENTOS.DENDRO}+${ELEMENTOS.ELECTRO}`]:'intensificacao',
 
-    // Redução (Anemo)
     [`${ELEMENTOS.ANEMO}+${ELEMENTOS.PYRO}`]:    'reducao_pyro',
     [`${ELEMENTOS.ANEMO}+${ELEMENTOS.HYDRO}`]:   'reducao_hydro',
     [`${ELEMENTOS.ANEMO}+${ELEMENTOS.ELECTRO}`]: 'reducao_electro',
     [`${ELEMENTOS.ANEMO}+${ELEMENTOS.CRYO}`]:    'reducao_cryo',
 
-    // Cristalização (Geo)
     [`${ELEMENTOS.GEO}+${ELEMENTOS.PYRO}`]:      'cristalizacao',
     [`${ELEMENTOS.GEO}+${ELEMENTOS.HYDRO}`]:     'cristalizacao',
     [`${ELEMENTOS.GEO}+${ELEMENTOS.ELECTRO}`]:   'cristalizacao',
@@ -66,16 +45,6 @@ const TABELA_REACOES = {
 };
 
 class ReactionManager {
-    /**
-     * Verifica se há reação entre o elemento aplicado e as auras do alvo.
-     * Retorna um objeto de resultado ou null se não houver reação.
-     *
-     * @param {string} elementoAplicado
-     * @param {BattleCharacter} alvo
-     * @param {number} danoBase
-     * @param {number} proficiencia - Proficiência elemental do atacante
-     * @returns {object|null}
-     */
     processar(elementoAplicado, alvo, danoBase, proficiencia = 0) {
         for (const aura of alvo.auras) {
             const chave   = `${elementoAplicado}+${aura}`;
@@ -84,13 +53,11 @@ class ReactionManager {
 
             const resultado = this._executarReacao(reacao, alvo, danoBase, proficiencia, aura, elementoAplicado);
             if (resultado) {
-                // Consome a aura usada na reação (exceto intensificação que mantém)
                 if (reacao !== 'intensificacao') alvo.removerAura(aura);
                 return { reacao, ...resultado };
             }
         }
 
-        // Sem reação: aplica/sobrepõe aura (exceto Anemo e Geo que não deixam aura)
         if (elementoAplicado !== ELEMENTOS.ANEMO && elementoAplicado !== ELEMENTOS.GEO) {
             alvo.aplicarAura(elementoAplicado);
         }
@@ -142,7 +109,6 @@ class ReactionManager {
         }
     }
 
-    // ─── Implementações das reações ───────────────────────────────────────────
 
     _vaporizacao(danoBase, multiplicador, proficiencia, nome) {
         const bonus      = 2.78 * proficiencia / (proficiencia + 1400);
@@ -177,7 +143,7 @@ class ReactionManager {
     }
 
     _supercondutor(alvo, proficiencia) {
-        const reducaoDef = 40; // % redução de defesa
+        const reducaoDef = 40; 
         alvo.aplicarDebuff({ tipo: 'def', valor: reducaoDef, duracao: 2, fonte: 'supercondutor' });
         return {
             nome: 'Supercondutor',
@@ -188,7 +154,6 @@ class ReactionManager {
     }
 
     _florescimento(proficiencia) {
-        // Cria um núcleo Dendro que explode no próximo turno
         const danoNucleo = Math.round(100 + 5 * proficiencia / (proficiencia + 200));
         return {
             nome: 'Florescimento',
@@ -208,9 +173,8 @@ class ReactionManager {
     }
 
     _reducao(alvo, elemento, proficiencia) {
-        const reducaoRes = 40; // % redução de resistência ao elemento
+        const reducaoRes = 40; 
         alvo.aplicarDebuff({ tipo: `res_${elemento}`, valor: reducaoRes, duracao: 2, fonte: 'reducao' });
-        // Espalha o elemento para outros inimigos (lógica na engine)
         return {
             nome: `Redução (${elemento})`,
             danoAdicional: 0,
@@ -229,14 +193,7 @@ class ReactionManager {
         };
     }
 
-    // ─── Germinação e Fulguração (reações secundárias de Florescimento) ────────
 
-    /**
-     * Processa reação secundária sobre núcleo Dendro existente.
-     * @param {string} elemento
-     * @param {object} nucleo - { valor }
-     * @param {number} proficiencia
-     */
     processarNucleoSecundario(elemento, nucleo, proficiencia) {
         if (elemento === ELEMENTOS.ELECTRO) {
             const dano = Math.round(nucleo.valor * 1.25 + proficiencia * 0.1);

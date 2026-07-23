@@ -2,40 +2,7 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-/**
- * RaidIntelligence
- * ──────────────────────────────────────────────────────────────────────────
- * Motor de detecção de raid MULTI-FATOR. Substitui a antiga lógica de
- * "contar joins/minuto e comparar com um limite", que dependia de um
- * único evento e gerava falsos positivos (ex: um servidor grande com
- * evento de divulgação legítimo).
- *
- * Como funciona:
- *   A cada join ou mensagem, a Ayami atualiza janelas deslizantes em
- *   memória (por servidor) e recalcula um "score de risco" (0-100),
- *   combinando vários fatores independentes:
- *
- *     - joinRate          → muitas contas entrando por minuto
- *     - newAccounts       → % de contas recém-criadas entre quem entrou
- *     - duplicateMessages → mensagens ~idênticas vindas de usuários diferentes
- *     - coordinatedSpam   → muitos usuários distintos postando no mesmo burst
- *     - massMentions      → volume de menções acima do normal na janela
- *     - massInvites       → vários convites postados por usuários diferentes
- *
- *   REGRA DE OURO: nunca aciona a resposta de raid com base em um único
- *   fator isolado. Mesmo que um fator bata 100/100 sozinho, ele só soma
- *   ao score contribuindo com seu peso — a resposta automática exige o
- *   score final >= riskThreshold E pelo menos 2 fatores distintos tendo
- *   contribuído (ver `_isCorroborated`). Isso é o que minimiza falsos
- *   positivos pedido na especificação.
- *
- *   Estado em memória é reconstruído do zero a cada restart do bot (é
- *   apenas uma janela de poucos minutos, não precisa persistir); o que É
- *   persistido no Mongo é o HISTÓRICO de detecções e o estado de
- *   emergência ativa (para sobreviver a um restart durante um ataque).
- */
 
-// Pesos de cada fator no score final (somam 100)
 const WEIGHTS = Object.freeze({
   joinRate:          25,
   newAccounts:        20,
@@ -54,39 +21,34 @@ const FACTOR_LABEL = Object.freeze({
   massInvites:         'Convites em massa',
 });
 
-const JOIN_WINDOW_MS    = 60_000;   // 1 min — usado tanto p/ joinRate quanto newAccounts
-const MSG_WINDOW_MS     = 30_000;   // 30s — janela para sinais baseados em mensagem
-const CALM_CHECK_MS     = 60_000;   // frequência do relógio de auto-restore
+const JOIN_WINDOW_MS    = 60_000;   
+const MSG_WINDOW_MS     = 30_000;   
+const CALM_CHECK_MS     = 60_000;   
 const INVITE_REGEX      = /(discord\.gg\/|discord(?:app)?\.com\/invite\/)[a-z0-9-]+/i;
 
 function normalizeContent(content) {
   return (content || '')
     .toLowerCase()
-    .replace(/<a?:\w+:\d+>/g, '')      // remove emojis customizados
-    .replace(/https?:\/\/\S+/g, '')    // remove links (senão cada msg vira "única")
+    .replace(/<a?:\w+:\d+>/g, '')      
+    .replace(/https?:\/\/\S+/g, '')    
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/** Extrai o timestamp de criação de um snowflake do Discord. */
 function snowflakeToTimestamp(id) {
   try {
     const DISCORD_EPOCH = 1420070400000n;
     return Number((BigInt(id) >> 22n) + DISCORD_EPOCH);
   } catch {
-    return Date.now(); // fallback conservador: trata como conta "nova agora"
+    return Date.now(); 
   }
 }
 
 class RaidIntelligence {
-  /**
-   * @param {object} security - instância de SecuritySystem (usada como
-   *   ponte para persistência, alertas, permissões e ações de emergência).
-   */
   constructor(security) {
     this.security = security;
-    this._state = {}; // guildId -> { joins:[], messages:[] }
+    this._state = {}; 
     this._calmTimer = setInterval(() => this._checkAutoRestoreAll().catch(() => {}), CALM_CHECK_MS);
     this._calmTimer.unref?.();
   }
@@ -103,9 +65,7 @@ class RaidIntelligence {
     return st;
   }
 
-  /* ═══════════════════════ ENTRADA DE DADOS ═══════════════════════ */
 
-  /** Chamado pelo SecuritySystem em GUILD_MEMBER_ADD. */
   async registerJoin(guild, guildId, sec, userId) {
     const now = Date.now();
     const st  = this._prune(guildId, now);
@@ -113,7 +73,6 @@ class RaidIntelligence {
     return this._evaluate(guild, guildId, sec, now);
   }
 
-  /** Chamado pelo SecuritySystem em MESSAGE_CREATE (fora do fluxo de automod, não bloqueia nada). */
   async registerMessage(guild, guildId, sec, { userId, content, mentionCount }) {
     const now = Date.now();
     const st  = this._prune(guildId, now);
@@ -124,13 +83,10 @@ class RaidIntelligence {
       mentionCount: mentionCount || 0,
       hasInvite: INVITE_REGEX.test(content || ''),
     });
-    // Sinais de mensagem só valem a pena recalcular o score quando há
-    // volume mínimo — evita recomputar em servidores calmos a cada msg.
     if (st.messages.length < 3) return null;
     return this._evaluate(guild, guildId, sec, now);
   }
 
-  /* ═══════════════════════ CÁLCULO DE RISCO ═══════════════════════ */
 
   _scoreJoinRate(st, cfg) {
     if (!cfg?.enabled) return null;
@@ -199,10 +155,6 @@ class RaidIntelligence {
     return { score, detail: `${distinctUsers} usuários diferentes postando convites` };
   }
 
-  /**
-   * Combina todos os fatores num score final e decide se a resposta
-   * automática deve ser acionada. Retorna null se nada relevante mudou.
-   */
   async _evaluate(guild, guildId, sec, now) {
     const raid = sec.raid;
     if (!raid?.enabled) return null;
@@ -218,7 +170,6 @@ class RaidIntelligence {
       massInvites:       this._scoreMassInvites(st, f.massInvites),
     };
 
-    // Fatores que efetivamente contribuíram (ativos e com sinal > 0)
     const active = Object.entries(results).filter(([, r]) => r && r.score > 0);
     if (active.length === 0) return null;
 
@@ -230,17 +181,11 @@ class RaidIntelligence {
     }
     const score = weightSum > 0 ? Math.round(weighted / weightSum) : 0;
 
-    // Corroboração: pelo menos 2 fatores distintos precisam estar
-    // "acesos" (score >= 40) para a Ayami considerar isso um ataque real,
-    // nunca um evento isolado — exceção: joinRate sozinho pode dobrar de
-    // peso implicitamente já que é o fator mais barato de forjar, então
-    // mantemos a regra igual para ele também.
     const litFactors = active.filter(([, r]) => r.score >= 40);
     const corroborated = litFactors.length >= 2;
 
     const threshold = raid.riskThreshold ?? 60;
 
-    // Early alert em 70% do threshold, mesmo sem corroboração — é um aviso, não uma ação.
     if (raid.earlyAlerts && score >= threshold * 0.7 && score < threshold) {
       await this._maybeAlert(guildId, `⚠️ **Alerta antecipado de risco:** score ${score}/100 (abaixo do limite de ${threshold}).\n` +
         active.map(([k, r]) => `└ ${FACTOR_LABEL[k]}: ${r.score}/100 — ${r.detail}`).join('\n'));
@@ -251,13 +196,10 @@ class RaidIntelligence {
     return this._trigger(guild, guildId, sec, score, active, now);
   }
 
-  /* ═══════════════════════ RESPOSTA AUTOMÁTICA ═══════════════════════ */
 
   async _trigger(guild, guildId, sec, score, active, now) {
     const raid = sec.raid;
 
-    // Debounce: não dispara de novo se já disparou há menos de 30s (evita
-    // reagir a cada mensagem/join durante o mesmo ataque contínuo).
     if (raid.state?.lastHighRiskAt && now - raid.state.lastHighRiskAt < 30_000) {
       raid.state.lastHighRiskAt = now;
       guild.markModified('security');
@@ -308,8 +250,6 @@ class RaidIntelligence {
 
     if (action === 'nothing') return;
 
-    // Pune quem entrou durante a janela de risco (os "suspeitos" reais do
-    // pico atual), não o servidor inteiro.
     const targets = this._stateFor(guildId).joins.map(j => j.userId);
     if (!targets.length && action !== 'lockdown') return;
 
@@ -333,13 +273,7 @@ class RaidIntelligence {
     try { await this.security.sendSecurityAlert(guildId, message); } catch { /* noop */ }
   }
 
-  /* ═══════════════════════ AUTO-RESTORE ═══════════════════════ */
 
-  /**
-   * Roda periodicamente para todos os servidores com emergência ativa por
-   * causa de um raid: se o servidor ficou calmo (score baixo) pelo tempo
-   * configurado, restaura os canais e desativa a emergência sozinho.
-   */
   async _checkAutoRestoreAll() {
     for (const guildId of Object.keys(this._state)) {
       try { await this._checkAutoRestore(guildId); } catch (err) { console.error('[RaidIntelligence] autoRestore:', err); }

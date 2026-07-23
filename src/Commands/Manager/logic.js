@@ -1,12 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════════════════════
-   /logic — comando unificado para o sistema Logic
-   Substitui o antigo /logicbuilder (removido).
-
-   /logic builder → abre o Logic Builder (mesma experiência de antes)
-   /logic script  → painel informativo do Logic Script (sem código-fonte)
-   ═══════════════════════════════════════════════════════════ */
 
 const getPerm         = require('../../function/Utils/GetPerm.js');
 const DiscordRequest  = require('../../function/DiscordRequest.js');
@@ -17,9 +10,6 @@ const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
 const DASHBOARD_BASE_URL = 'https://ayami-hoshiori.discloud.app';
 
-/* ─────────────────────────────────────────────
-   HELPERS COMPONENTS V2 (mesmo padrão do /premium)
-   ───────────────────────────────────────────── */
 function cv2Text(content)          { return { type: 10, content }; }
 function cv2Divider(spacing = 1)   { return { type: 14, divider: true, spacing }; }
 function cv2Container(blocks, opts = {}) {
@@ -33,7 +23,6 @@ function linkButton(label, url, emoji) {
   return { type: 2, style: 5, label, url, ...(emoji ? { emoji: { name: emoji } } : {}) };
 }
 
-/** Conta declarações de função num script (aproximação simples, sem AST — só pra exibição). */
 function countFunctions(content) {
   return (String(content).match(/\bfunction\s+\w+\s*\(/g) || []).length;
 }
@@ -116,9 +105,6 @@ module.exports = {
     if (sub === 'script')  return this._script(interaction, client, guildId);
   },
 
-  /* ═══════════════════════════════════════
-     /logic builder
-     ═══════════════════════════════════════ */
   async _builder(interaction, client) {
     await DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -127,11 +113,6 @@ module.exports = {
     return client.logicUI.open(interaction);
   },
 
-  /* ═══════════════════════════════════════
-     /logic script — painel informativo
-     (nunca mostra código-fonte; só estatísticas
-     e mensagens amigáveis, sem stack traces)
-     ═══════════════════════════════════════ */
   async _script(interaction, client, guildId) {
     await DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -149,7 +130,6 @@ module.exports = {
     try {
       blocks = await this._buildScriptPanel(guildId, client, ctx);
     } catch (err) {
-      // Mensagem amigável — nunca stack trace nem detalhe interno
       blocks = [
         cv2Text(client.t('logic.script_load_error', ctx)),
       ];
@@ -160,35 +140,27 @@ module.exports = {
   },
 
   async _buildScriptPanel(guildId, client, ctx) {
-    // Plano premium da guild
     const premium = await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }));
     const plan    = premium.status ? premium.plan : require('../../function/Utils/PremiumPlans.js').getPlan(null);
 
-    // Arquivos
     const scripts = await LogicScriptModel.find({ guildId, isFolder: false }).lean();
     const fileCount = scripts.length;
     const fileLimit = plan.logicScriptFileLimit;
 
-    // Funções (aproximação — soma de todos os arquivos)
     const functionCount = scripts.reduce((sum, s) => sum + countFunctions(s.content), 0);
     const perFileFnLimit = plan.logicScript?.maxFunctionsPerFile ?? Infinity;
 
-    // Status do sistema (config por guild)
     const cfg = await LogicScriptConfig.findOne({ guildId }).lean();
     const enabled = cfg ? cfg.enabled : true;
     const prefix  = cfg?.prefix ?? '!';
 
-    // Erros de sintaxe salvos nos próprios arquivos
     const scriptsWithError = scripts.filter(s => s.hasError);
 
-    // Execuções (LogicRunLogModel tem TTL de 7 dias — a contagem é
-    // naturalmente "últimos 7 dias")
     const totalRuns = await LogicRunLogModel.countDocuments({ guildId });
     const lastRun    = await LogicRunLogModel.findOne({ guildId }).sort({ createdAt: -1 }).lean();
     const recentErrors = await LogicRunLogModel.find({ guildId, status: { $in: ['error', 'timeout'] } })
       .sort({ createdAt: -1 }).limit(3).lean();
 
-    // Recursos disponíveis / bloqueados pelo plano
     const featureLines = [
       `${plan.logicScript?.httpAccess    ? '✅' : '🔒'} ${client.t('logic.feature_http', ctx)}`,
       `${plan.logicScript?.webhookAccess  ? '✅' : '🔒'} ${client.t('logic.feature_webhooks', ctx)}`,

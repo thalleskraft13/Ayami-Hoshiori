@@ -5,75 +5,25 @@ const { fork }  = require('child_process');
 const Queue     = require('../MediaManager/Queue');
 const VideoManager = require('./VideoManager');
 
-/**
- * Roda cada render de vídeo em um `child_process` isolado, em vez de na
- * própria thread que o chama.
- *
- * Por quê: o render (canvas por frame + chroma key + ffmpeg) é síncrono e
- * pesado. Se rodar na mesma thread que atende o gateway/comandos do
- * Discord, o bot inteiro fica sem responder durante os 20-40s+ que um
- * vídeo leva pra gerar. Isolando num processo separado, a thread principal
- * nunca trava — e quando o processo filho termina, o sistema operacional
- * devolve toda a memória usada de forma imediata (sem depender do GC do V8
- * decidir liberar depois, que era o motivo do RSS "não baixar" após cada
- * render pesado).
- *
- * A concorrência de quantos renders acontecem ao mesmo tempo continua
- * controlada por uma `Queue` — só que agora cada "slot" da fila é um
- * processo filho inteiro, não mais uma Promise rodando in-process.
- *
- * @example
- * const pool = new VideoProcessManager({ root: __dirname });
- * const buffer = await pool.render({ Template: 'henrydanger', avatarUrl: '…' });
- */
 class VideoProcessManager {
-    /**
-     * @param {object} [options]
-     * @param {string} [options.root]          - Project root (mesmo passado ao VideoManager).
-     * @param {number} [options.concurrency=1] - Max de processos filhos de render simultâneos.
-     * @param {number} [options.timeout=240000] - Timeout (ms) por render antes de matar o processo filho.
-     *   Padrão de 4min: alguns templates levam de 1 a 3min dependendo do vídeo
-     *   base e da carga do host — o timeout precisa de margem acima disso,
-     *   ou vai matar renders legítimos que só estavam demorando mais.
-     */
     constructor(options = {}) {
         this._root        = options.root ?? process.cwd();
         this._concurrency = options.concurrency ?? 1;
         this._timeoutMs   = options.timeout ?? 480_000;
         this._workerPath  = path.join(__dirname, 'VideoWorkerProcess.js');
 
-        // Timeout da Queue fica um pouco acima do timeout do processo filho:
-        // ele é só um backstop — quem garante o kill do processo é o timer
-        // interno de `_renderInChildProcess`, não a Queue.
         this._queue = new Queue({ concurrency: this._concurrency, timeout: this._timeoutMs + 15_000 });
 
-        /**
-         * Instância leve do VideoManager original, usada só pra metadata
-         * (listar templates). Nunca é usada pra renderizar de fato — isso
-         * sempre acontece no processo filho.
-         * @type {VideoManager|null}
-         */
         this._meta = null;
     }
 
-    // ─── Public API ───────────────────────────────────────────────────────────
 
-    /**
-     * Renderiza um template de vídeo/gif num processo filho isolado.
-     *
-     * @param {object} options
-     * @param {string} options.Template - Nome do template (case-insensitive).
-     * @returns {Promise<Buffer>}
-     */
     async render(options) {
         const { Template, ...data } = options;
         if (!Template) throw new Error('[VideoProcessManager] options.Template is required.');
 
         const name = Template.toLowerCase();
 
-        // Valida o template ANTES de gastar o custo de criar um processo
-        // filho (fork tem overhead — não vale pagar isso só pra descobrir
-        // que o nome do template está errado).
         const available = await this.listTemplates();
         if (!available.includes(name)) {
             throw new Error(
@@ -85,23 +35,6 @@ class VideoProcessManager {
         return this._queue.add(() => this._runInChildProcess('render', name, data));
     }
 
-    /**
-     * Renderiza cada frame de um template e retorna o array de Buffers PNG
-     * (sem encodar em vídeo/gif) — útil pra editar/inspecionar frame a
-     * frame. Roda no mesmo processo filho isolado que `render()`, então
-     * não trava a thread principal nem deixa a memória usada por esse
-     * modo debug presa no processo do bot depois.
-     *
-     * ⚠️ Diferente de `render()`, este método devolve TODOS os frames de
-     * uma vez — não tem como retornar um array sem manter todos eles na
-     * memória do processo filho (e depois na sua, ao receber). Para vídeos
-     * longos isso ainda pode ser um Buffer grande; use com moderação /
-     * pontualmente, não como caminho principal de geração.
-     *
-     * @param {object} options
-     * @param {string} options.Template
-     * @returns {Promise<Buffer[]>}
-     */
     async renderFrames(options) {
         const { Template, ...data } = options;
         if (!Template) throw new Error('[VideoProcessManager] options.Template is required.');
@@ -119,7 +52,6 @@ class VideoProcessManager {
         return this._queue.add(() => this._runInChildProcess('renderFrames', name, data));
     }
 
-    /** @returns {Promise<string[]>} */
     async listTemplates() {
         const meta = await this._getMeta();
         return meta.listTemplates();
@@ -129,7 +61,6 @@ class VideoProcessManager {
         return { queue: this._queue.stats() };
     }
 
-    // ─── Private ─────────────────────────────────────────────────────────────
 
     async _getMeta() {
         if (!this._meta) {
@@ -139,15 +70,6 @@ class VideoProcessManager {
         return this._meta;
     }
 
-    /**
-     * Faz o fork, manda os dados, espera a resposta via IPC, e garante que
-     * o processo filho sempre morra — mesmo em caso de timeout ou erro.
-     *
-     * @param {'render'|'renderFrames'} mode
-     * @param {string} Template
-     * @param {object} data
-     * @returns {Promise<Buffer|Buffer[]>}
-     */
     _runInChildProcess(mode, Template, data) {
         return new Promise((resolve, reject) => {
             const child = fork(this._workerPath, [], {

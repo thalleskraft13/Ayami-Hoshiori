@@ -3,11 +3,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-/**
- * Log de comandos (seção 4) — persistido pra permitir consulta histórica
- * depois (ex: "tudo que o usuário X rodou"). TTL de 30 dias: depois disso
- * o Mongo apaga o documento sozinho (não precisa de cron/job manual).
- */
 const commandLogSchema = new Schema({
   commandName:    { type: String, required: true, index: true },
   subcommandName: { type: String, default: null },

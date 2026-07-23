@@ -1,13 +1,11 @@
 "use strict";
 
 module.exports = [
-  // ── Home ──
   { id: "home_title", render: (ctx) =>
     `# 🎫 Ticket System ${ctx.animada}\nHiya! I'm Ayami ${ctx.corao} and I'll help you set up support on your server!` },
   { id: "btn_panels", render: (ctx) => `📋 Panels (${ctx.count})` },
   { id: "btn_new_panel", render: () => "✨ New Panel" },
 
-  // ── Panel list ──
   { id: "no_panels_title", render: (ctx) => `# 📋 Your Panels ${ctx.emburrada}\nNo panels yet... shall we create the first one?` },
   { id: "panels_title", render: (ctx) => `# 📋 Your Panels (${ctx.count}) ${ctx.feliz}\n${ctx.list}` },
   { id: "select_which_panel", render: () => "✨ Which panel do you want to see?" },
@@ -16,14 +14,12 @@ module.exports = [
   { id: "panel_option_desc", render: (ctx) => `${ctx.staffCount} staff • ${ctx.hubLabel}` },
   { id: "btn_back", render: () => "⬅️ Back" },
 
-  // ── Create panel ──
   { id: "modal_create_panel_title", render: () => "Create Ticket Panel ✨" },
   { id: "modal_panel_id_label", render: () => "Panel ID (no spaces)" },
   { id: "modal_panel_id_placeholder", render: () => "support, reports, partnerships..." },
   { id: "invalid_id", render: () => "❌ Invalid ID!" },
   { id: "panel_id_exists", render: (ctx) => `${ctx.emburrada} A panel with ID **${ctx.panelId}** already exists.` },
 
-  // ── Panel menu ──
   { id: "panel_not_found", render: (ctx) => `# ${ctx.emduvida} I couldn't find that panel...\nIt might have been deleted!` },
   { id: "opt_edit_embed", render: () => "🎨 Edit Embed" },
   { id: "opt_create_embed", render: () => "✨ Create Embed" },
@@ -62,19 +58,16 @@ module.exports = [
   { id: "embed_removed", render: (ctx) => `${ctx.emduvida} Removed the embed.` },
   { id: "embed_title_prefix", render: (ctx) => `Embed — ${ctx.panelId}` },
 
-  // ── Delete panel ──
   { id: "confirm_delete_title", render: (ctx) => `# ${ctx.assustada} Delete this panel?\nAre you sure? This can't be undone...` },
   { id: "btn_confirm_delete", render: () => "✅ Yes, delete" },
   { id: "btn_cancel", render: () => "❌ Cancel" },
 
-  // ── Publish ──
   { id: "publish_no_channel", render: (ctx) => `${ctx.emduvida} Pick a channel first, yeah?` },
   { id: "publish_no_embed", render: (ctx) => `${ctx.emduvida} You still need to create the embed!` },
   { id: "select_service_type_placeholder", render: () => "Select the type of support" },
   { id: "open_ticket_button", render: () => "🎫 Open Ticket" },
   { id: "publish_success", render: (ctx) => `${ctx.festa} All set! Published in <#${ctx.channelId}>~` },
 
-  // ── Channel & Category ──
   { id: "destino_channel_placeholder", render: () => "📌 Channel where the panel will be sent" },
   { id: "destino_category_placeholder", render: () => "📂 Category where tickets will be created" },
   { id: "destino_title", render: (ctx) =>
@@ -84,7 +77,6 @@ module.exports = [
   { id: "destino_none_channel", render: () => "none yet" },
   { id: "destino_none_category", render: () => "none yet" },
 
-  // ── Staff & Name ──
   { id: "staff_role_select_placeholder", render: () => "👥 Add staff role" },
   { id: "btn_clear_staff", render: () => "🧹 Clear Staff" },
   { id: "btn_ticket_name", render: () => "✏️ Ticket Name" },
@@ -94,7 +86,6 @@ module.exports = [
     `> 🛡️ Staff: ${ctx.staffStatus}\n` +
     `> 🏷️ Name: \`${ctx.name}\`` },
 
-  // ── Creation Type ──
   { id: "tipo_label_channel", render: () => "📁 Text Channel" },
   { id: "tipo_label_thread_public", render: () => "🧵 Public Thread" },
   { id: "tipo_label_thread_private", render: () => "🔒 Private Thread" },
@@ -102,7 +93,6 @@ module.exports = [
   { id: "tipo_current_label", render: () => "✅ Current" },
   { id: "tipo_title", render: (ctx) => `# ⚙️ Creation Type ${ctx.feliz}\nHow is the ticket created? Current: ${ctx.current}` },
 
-  // ── Modal ──
   { id: "modal_no_fields", render: () => "_No fields added_" },
   { id: "modal_field_short", render: () => "short" },
   { id: "modal_field_paragraph", render: () => "paragraph" },
@@ -130,7 +120,6 @@ module.exports = [
   { id: "status_on", render: () => "🟢 Active" },
   { id: "status_off", render: () => "🔴 Inactive" },
 
-  // ── Add modal field ──
   { id: "add_field_modal_title", render: () => "Add Modal Field" },
   { id: "field_label_label", render: () => "Field question/label" },
   { id: "field_placeholder_label", render: () => "Placeholder (optional)" },
@@ -140,7 +129,6 @@ module.exports = [
   { id: "field_required_placeholder", render: () => "yes" },
   { id: "field_added", render: (ctx) => `${ctx.curtida} Field added!` },
 
-  // ── Sequential Form ──
   { id: "seq_no_questions", render: () => "_No questions added_" },
   { id: "seq_question_required_tag", render: () => " *required*" },
   { id: "btn_toggle_form_off", render: () => "⏸️ Disable Form" },
@@ -179,7 +167,6 @@ module.exports = [
   { id: "seq_dest_own_ticket", render: () => "🎫 the ticket itself" },
   { id: "question_added", render: (ctx) => `${ctx.curtida} Question added!` },
 
-  // ── Add question (generic) ──
   { id: "question_type_select_placeholder", render: () => "What type is this question?" },
   { id: "qtype_short_label", render: () => "📝 Short text" },
   { id: "qtype_short_desc", render: () => "Answer up to ~100 characters" },
@@ -210,7 +197,6 @@ module.exports = [
   { id: "flow_intermediate_title", render: () => "📋 What type is this question?" },
   { id: "infinity_symbol", render: () => "∞" },
 
-  // ── Question modal ──
   { id: "add_question_modal_title", render: () => "Add Question" },
   { id: "question_text_label", render: () => "Question text" },
   { id: "question_options_label", render: () => "Options (comma-separated)" },
@@ -218,7 +204,6 @@ module.exports = [
   { id: "question_required_label", render: () => "Required? (yes/no)" },
   { id: "question_required_placeholder", render: () => "yes" },
 
-  // ── Auto-role ──
   { id: "role_type_select_label", render: (ctx) => `Type for the <@&${ctx.roleId}> role` },
   { id: "role_permanent_label", render: () => "♾️ Permanent" },
   { id: "role_permanent_desc", render: () => "The role stays forever" },
@@ -245,7 +230,6 @@ module.exports = [
     `> 🔗 Linked — removed when the ticket closes\n\n` +
     `**Roles:**\n${ctx.list}` },
 
-  // ── Transcript ──
   { id: "transcript_channel_placeholder", render: () => "📌 Channel to save transcripts" },
   { id: "btn_dm_toggle_off", render: () => "🔕 Don't send DM" },
   { id: "btn_dm_toggle_on", render: () => "🔔 Send DM to user" },
@@ -258,7 +242,6 @@ module.exports = [
   { id: "dm_yes", render: () => "✅ Yes" },
   { id: "dm_no", render: () => "❌ No" },
 
-  // ── Custom messages ──
   { id: "msg_field_ticket_title", render: () => "🎫 Ticket Created — Title" },
   { id: "msg_field_ticket_desc", render: () => "🎫 Ticket Created — Description" },
   { id: "msg_field_close_btn", render: () => "🔒 Close Button Text" },
@@ -281,11 +264,9 @@ module.exports = [
   { id: "msg_status_custom_icon", render: () => "✏️" },
   { id: "msg_status_default_icon", render: () => "⚪" },
 
-  // ── Edit message ──
   { id: "edit_message_field_label", render: (ctx) => `Text${ctx.vars ? ` (vars: ${ctx.vars})` : ''}` },
   { id: "edit_message_placeholder", render: () => "Leave empty to use Ayami's default text" },
 
-  // ── Select Hub ──
   { id: "btn_toggle_hub_off", render: () => "⏸️ Disable Select Hub" },
   { id: "btn_toggle_hub_on", render: () => "▶️ Enable Select Hub" },
   { id: "btn_select_text", render: () => "✏️ Select Text" },
@@ -303,14 +284,12 @@ module.exports = [
     `**Options (${ctx.count}/25):**\n${ctx.list}` },
   { id: "no_options", render: () => "_No options created_" },
 
-  // ── Add option ──
   { id: "new_option_modal_title", render: () => "New Select Option" },
   { id: "option_name_label", render: () => "Option name" },
   { id: "option_desc_label", render: () => "Description (optional)" },
   { id: "option_emoji_label", render: () => "Emoji (optional)" },
   { id: "option_created", render: (ctx) => `${ctx.festa} Option **${ctx.label}** created! Set it up below.` },
 
-  // ── Option sub-panel ──
   { id: "option_not_found", render: () => "❌ Option not found." },
   { id: "option_header", render: (ctx) =>
     `# ${ctx.optionEmoji} ${ctx.optionLabel} ${ctx.feliz}\n` +
@@ -328,7 +307,6 @@ module.exports = [
   { id: "btn_delete_option", render: () => "🗑️ Delete Option" },
   { id: "option_deleted", render: (ctx) => `${ctx.chorando} Option **${ctx.label}** deleted.` },
 
-  // ── Ticket creation (runtime) ──
   { id: "panel_not_found_short", render: () => "❌ Panel not found." },
   { id: "modal_answer_title_default", render: () => "Support Form" },
   { id: "default_ticket_created_title", render: () => "🎫 Ticket Created" },
@@ -343,12 +321,10 @@ module.exports = [
   { id: "default_seq_summary_title", render: () => "✅ Answers Received" },
   { id: "ticket_created_success", render: (ctx) => `${ctx.feliz} Ticket created in <#${ctx.channelId}>!` },
 
-  // ── Close ticket ──
   { id: "default_closing_message", render: () => "⛔ This ticket will close in 10 seconds..." },
   { id: "default_transcript_title", render: () => "📄 Transcript" },
   { id: "default_transcript_dm_title", render: () => "📄 Your Transcript" },
   { id: "default_transcript_dm_desc", render: () => "Here's the history of your support chat, {user}!" },
-  // ── Embed Editor (EmbedBuilderUI) ──
   { id: "eb_default_title", render: () => "🎨 Embed Editor" },
   { id: "eb_field_select_placeholder", render: () => "✏️ Edit embed field…" },
   { id: "eb_field_title", render: () => "Title" },
@@ -393,7 +369,6 @@ module.exports = [
   { id: "eb_builder_content", render: (ctx) => `🎨 **${ctx.title}** — the preview below is exactly how the embed will look!` },
   { id: "eb_blank_placeholder", render: () => "*Blank embed — start by picking a field to edit below* 👇" },
 
-  // ── SeqQuestionsManager (runtime) ──
   { id: "sq_answer_invalid", render: (ctx) => `⚠️ <@${ctx.userId}> Invalid answer. Please try again.` },
   { id: "sq_attachment_prompt", render: () => "_Send a file or image as your answer._" },
   { id: "sq_attachment_required", render: (ctx) => `⚠️ <@${ctx.userId}> Send a file/image as your answer (or type \`cancelar\` to cancel).` },
@@ -411,7 +386,6 @@ module.exports = [
   { id: "sq_hint_short", render: () => "_Short answer (up to 100 characters)_" },
   { id: "sq_attachment_link_label", render: () => "attachment" },
 
-  // ── TranscriptManager (runtime) ──
   { id: "tr_locale_tag", render: () => "en-GB" },
   { id: "tr_summary_desc", render: (ctx) => `Channel: **${ctx.channelName}**\nClosed by: <@${ctx.closedBy}>\nMessages: **${ctx.count}**` },
   { id: "tr_dm_desc_default", render: (ctx) => `Your ticket **#${ctx.channelName}** has been closed.\nThe transcript is attached.` },

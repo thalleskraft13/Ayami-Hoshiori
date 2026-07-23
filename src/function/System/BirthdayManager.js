@@ -6,7 +6,6 @@ const DiscordRequest = require("../DiscordRequest.js");
 const PremiumManager = require("../Utils/PremiumManager.js");
 const getPerm        = require("../Utils/GetPerm.js");
 
-/* ID fixo do botão — nunca expira */
 const BIRTHDAY_BTN_ID = 'birthday_register_btn';
 
 class BirthdayManager {
@@ -15,9 +14,6 @@ class BirthdayManager {
     this.client = client;
   }
 
-  /* ═══════════════════════════════════════════
-     CHECK ALL  —  chamado pelo TaskManager
-     ═══════════════════════════════════════════ */
 
   async checkAll(guildId) {
     try {
@@ -42,9 +38,6 @@ class BirthdayManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     PROCESS GUILD
-     ═══════════════════════════════════════════ */
 
   async _processGuild(guild, guildId, day, month) {
     console.log(`[BirthdayManager] Buscando — guildId: "${guildId}" | day: ${day} | month: ${month}`);
@@ -66,22 +59,17 @@ class BirthdayManager {
       );
     }
 
-    /* Após enviar todos os parabéns, remandar o botão fixo */
     if (guild.birthdayConfig?.pinMessage) {
       await this._repostFixedButton(guildId, guild.birthdayConfig.channel);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     SEND BIRTHDAY MESSAGE
-     ═══════════════════════════════════════════ */
 
   async _sendBirthdayMessage(guild, member) {
     const cfg     = guild.birthdayConfig;
     const guildId = guild.guildId ?? member.guildId;
     const userId  = member.userId;
 
-    /* Apaga o botão fixo antes de enviar a msg de parabéns */
     if (cfg.pinMessage && cfg._pinMsgId) {
       await DiscordRequest(
         `/channels/${cfg.channel}/messages/${cfg._pinMsgId}`,
@@ -89,10 +77,8 @@ class BirthdayManager {
       ).catch(() => {});
     }
 
-    /* Ping */
     const ping = cfg.ping && cfg.ping !== "0" ? `<@&${cfg.ping}> ` : "";
 
-    /* Idade */
     const age = member.birthday?.year
       ? new Date().getFullYear() - member.birthday.year
       : null;
@@ -104,7 +90,6 @@ class BirthdayManager {
 
     const content = ping + texto;
 
-    /* Cargo temporário de aniversariante */
     if (cfg.birthdayRole && cfg.birthdayRole !== "0") {
       await DiscordRequest(
         `/guilds/${guildId}/members/${userId}/roles/${cfg.birthdayRole}`,
@@ -122,7 +107,6 @@ class BirthdayManager {
       }).catch(() => {});
     }
 
-    /* Busca o username para o nome do tópico */
     let memberName = `<@${userId}>`;
     if (cfg.birthdayThread) {
       const memberData = await DiscordRequest(
@@ -137,7 +121,6 @@ class BirthdayManager {
 
     let sentMsg = null;
 
-    /* Webhook (Premium) */
     if (cfg.webhook) {
       const webhookName   = cfg.webhookName   || "🎂 Aniversários";
       const webhookAvatar = cfg.webhookAvatar || null;
@@ -158,7 +141,6 @@ class BirthdayManager {
       }
     }
 
-    /* Mensagem normal */
     if (!sentMsg) {
       sentMsg = await DiscordRequest(
         `/channels/${cfg.channel}/messages`,
@@ -176,7 +158,6 @@ class BirthdayManager {
       ).catch(() => null);
     }
 
-    /* Tópico público (Premium) */
     if (cfg.birthdayThread && sentMsg?.id) {
       await DiscordRequest(
         `/channels/${cfg.channel}/messages/${sentMsg.id}/threads`,
@@ -184,16 +165,13 @@ class BirthdayManager {
           method: 'POST',
           body: {
             name:                  `🎂 Feliz aniversário, ${memberName}!`,
-            auto_archive_duration: 1440 // fecha após 24h sem atividade
+            auto_archive_duration: 1440 
           }
         }
       ).catch(() => {});
     }
   }
 
-  /* ═══════════════════════════════════════════
-     REGISTER / REMOVE BIRTHDAY
-     ═══════════════════════════════════════════ */
 
   async registerBirthday(guildId, userId, day, month, year = null) {
     if (day < 1 || day > 31 || month < 1 || month > 12) {
@@ -228,9 +206,6 @@ class BirthdayManager {
     );
   }
 
-  /* ═══════════════════════════════════════════
-     SETUP PANEL
-     ═══════════════════════════════════════════ */
 
   async startSetup(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -285,7 +260,6 @@ class BirthdayManager {
     });
   }
 
-  /* ── TOGGLE SYSTEM ── */
 
   async toggleSystem(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -316,7 +290,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── SET CHANNEL ── */
 
   async setChannel(interaction) {
     await this.followUpEphemeral(interaction, {
@@ -365,7 +338,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── SET PING ── */
 
   async setPing(interaction) {
     await this.followUpEphemeral(interaction, {
@@ -406,7 +378,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── SET MENSAGEM ── */
 
   async setMensagem(interaction) {
     await this.followUpEphemeral(interaction, {
@@ -438,7 +409,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── SET HORÁRIO ── */
 
   async setHorario(interaction) {
     await this.followUpEphemeral(interaction, {
@@ -493,7 +463,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── TOGGLE WEBHOOK ── */
 
   async toggleWebhook(interaction) {
     const premium = await this._isPremium(interaction.guild_id);
@@ -537,7 +506,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── TOGGLE BUTTON MODE ── */
 
   async toggleButtonMode(interaction) {
     const premium = await this._isPremium(interaction.guild_id);
@@ -581,7 +549,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── TOGGLE BIRTHDAY THREAD ── */
 
   async toggleBirthdayThread(interaction) {
     const premium = await this._isPremium(interaction.guild_id);
@@ -605,7 +572,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-  /* ── CONFIG WEBHOOK (nome + foto) ── */
 
   async setupWebhookConfig(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -653,7 +619,6 @@ class BirthdayManager {
     guild.birthdayConfig.webhookName = msg.content.slice(0, 80);
     await guild.save();
 
-    /* Recria o webhook com o novo nome */
     if (guild.birthdayConfig.channel && guild.birthdayConfig.channel !== "0") {
       await this._deleteOldWebhook(guild.birthdayConfig.channel);
     }
@@ -705,9 +670,6 @@ class BirthdayManager {
     return this.setupWebhookConfig(interaction);
   }
 
-  /* ═══════════════════════════════════════════
-     BOTÃO FIXO  —  custom_id permanente
-     ═══════════════════════════════════════════ */
 
   async _postFixedButton(channelId) {
     const msg = await DiscordRequest(
@@ -726,7 +688,7 @@ class BirthdayManager {
               type:      2,
               style:     1,
               label:     "🎂 Cadastrar meu Aniversário",
-              custom_id: BIRTHDAY_BTN_ID   // ID fixo, nunca expira
+              custom_id: BIRTHDAY_BTN_ID   
             }]
           }]
         }
@@ -736,10 +698,6 @@ class BirthdayManager {
     return msg.id;
   }
 
-  /**
-   * Apaga o botão antigo e remanда um novo no final do canal.
-   * Chamado após o envio das mensagens de parabéns.
-   */
   async _repostFixedButton(guildId, channelId) {
     const guild = await GuildDb.findOne({ guildId });
     if (!guild) return;
@@ -747,7 +705,6 @@ class BirthdayManager {
     const cfg = guild.birthdayConfig;
     if (!cfg.pinMessage) return;
 
-    /* Apaga o antigo */
     if (cfg._pinMsgId) {
       await DiscordRequest(
         `/channels/${channelId}/messages/${cfg._pinMsgId}`,
@@ -755,23 +712,17 @@ class BirthdayManager {
       ).catch(() => {});
     }
 
-    /* Posta um novo */
     const newMsgId = await this._postFixedButton(channelId);
     guild.birthdayConfig._pinMsgId = newMsgId;
     await guild.save();
   }
 
-  /**
-   * Mantém o botão fixo sempre no final do canal.
-   * Chame no seu MESSAGE_CREATE quando a msg vier do canal configurado.
-   */
   async refreshFixedButton(guildId, channelId) {
     const guild = await GuildDb.findOne({ guildId }).lean();
     const cfg   = guild?.birthdayConfig;
 
     if (!cfg?.pinMessage || cfg.channel !== channelId) return;
 
-    /* Busca doc editável */
     const guildDoc = await GuildDb.findOne({ guildId });
 
     if (cfg._pinMsgId) {
@@ -786,11 +737,6 @@ class BirthdayManager {
     await guildDoc.save();
   }
 
-  /* ═══════════════════════════════════════════
-     HANDLER DO BOTÃO FIXO  —  abre modal
-     Chamado pelo InteractionManager quando
-     custom_id === BIRTHDAY_BTN_ID
-     ═══════════════════════════════════════════ */
 
   async handleButtonRegister(interaction) {
     const userId = interaction.member.user.id;
@@ -882,9 +828,6 @@ class BirthdayManager {
     await this.client.interactions.showModal(interaction, modalData);
   }
 
-  /* ═══════════════════════════════════════════
-     HANDLER DO COMANDO  /aniversario
-     ═══════════════════════════════════════════ */
 
   async handleCommand(interaction) {
     const opts  = this._getOptions(interaction);
@@ -908,9 +851,6 @@ class BirthdayManager {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     TASK MANAGER INTEGRATION
-     ═══════════════════════════════════════════ */
 
   async _ensureTask(guild) {
     console.log(`[BirthdayManager] _ensureTask chamado — guild: ${guild.guildId}`);
@@ -947,9 +887,6 @@ class BirthdayManager {
     );
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS INTERNOS
-     ═══════════════════════════════════════════ */
 
   async _getOrCreateWebhook(channelId, name = "🎂 Aniversários") {
     try {
@@ -1012,9 +949,6 @@ class BirthdayManager {
     };
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS DE INTERAÇÃO
-     ═══════════════════════════════════════════ */
 
   async reply(interaction, data) {
     return DiscordRequest(

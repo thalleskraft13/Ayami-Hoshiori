@@ -14,8 +14,6 @@ class ExecutionContext {
     this._userVars   = new Map();
     this._persistent = new Map();
 
-    // Cache de dados ricos buscados via API (guild, user, member, channel)
-    // — evita requisições repetidas dentro da mesma execução do fluxo
     this._guildData   = null;
     this._userData    = null;
     this._memberData  = null;
@@ -31,10 +29,6 @@ class ExecutionContext {
     this.lastChannelId = discordCtx.channelId || null;
   }
 
-  /**
-   * Busca (com cache) os dados completos da guild via GET /guilds/{id}.
-   * Retorna null silenciosamente em caso de erro (bot fora do servidor, etc).
-   */
   async _fetchGuild() {
     if (this._guildData !== null) return this._guildData;
     if (!this.discord.guildId) return null;
@@ -42,9 +36,6 @@ class ExecutionContext {
     return this._guildData;
   }
 
-  /**
-   * Busca (com cache) os dados completos do usuário via GET /users/{id}.
-   */
   async _fetchUser() {
     if (this._userData !== null) return this._userData;
     if (!this.discord.userId) return null;
@@ -52,10 +43,6 @@ class ExecutionContext {
     return this._userData;
   }
 
-  /**
-   * Busca (com cache) os dados do member (inclui nickname, roles, avatar de servidor)
-   * via GET /guilds/{guildId}/members/{userId}.
-   */
   async _fetchMember() {
     if (this._memberData !== null) return this._memberData;
     if (!this.discord.guildId || !this.discord.userId) return null;
@@ -65,9 +52,6 @@ class ExecutionContext {
     return this._memberData;
   }
 
-  /**
-   * Busca (com cache) os dados do canal via GET /channels/{id}.
-   */
   async _fetchChannel() {
     if (this._channelData !== null) return this._channelData;
     if (!this.discord.channelId) return null;
@@ -75,7 +59,6 @@ class ExecutionContext {
     return this._channelData;
   }
 
-  /** Monta a URL do avatar de um usuário (CDN do Discord), com fallback pro avatar padrão. */
   _avatarUrl(userId, avatarHash, discriminator = '0') {
     if (!avatarHash) {
       const idx = discriminator && discriminator !== '0'
@@ -87,14 +70,12 @@ class ExecutionContext {
     return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=1024`;
   }
 
-  /** Monta a URL do ícone de uma guild, ou null se não houver. */
   _guildIconUrl(guildId, iconHash) {
     if (!iconHash) return null;
     const ext = iconHash.startsWith('a_') ? 'gif' : 'png';
     return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.${ext}?size=1024`;
   }
 
-  /** Monta a URL do banner de uma guild, ou null se não houver. */
   _guildBannerUrl(guildId, bannerHash) {
     if (!bannerHash) return null;
     return `https://cdn.discordapp.com/banners/${guildId}/${bannerHash}.png?size=1024`;
@@ -104,7 +85,6 @@ class ExecutionContext {
     const { PersistentVarModel, UserVarModel } = require('../../../Mongodb/flow.js');
     const defs = this.flow.variables || [];
 
-    // variáveis de fluxo persistentes
     const flowDefs = defs.filter(v => v.persistent && v.scope === 'flow');
     if (flowDefs.length) {
       const docs = await PersistentVarModel.find({
@@ -117,7 +97,6 @@ class ExecutionContext {
       }
     }
 
-    // variáveis de usuário
     const userDefs = defs.filter(v => v.scope === 'user');
     if (userDefs.length && this.discord.userId) {
       const docs = await UserVarModel.find({
@@ -136,7 +115,6 @@ class ExecutionContext {
     const { PersistentVarModel, UserVarModel } = require('../../../Mongodb/flow.js');
     const defs = this.flow.variables || [];
 
-    // salva variáveis de fluxo persistentes
     for (const def of defs.filter(v => v.persistent && v.scope === 'flow')) {
       const current = this._vars.get(def.name);
       if (current === this._persistent.get(def.name)) continue;
@@ -148,7 +126,6 @@ class ExecutionContext {
       this._persistent.set(def.name, current);
     }
 
-    // salva variáveis de usuário
     if (!this.discord.userId) return;
     for (const def of defs.filter(v => v.scope === 'user')) {
       const current = this._vars.get(def.name);
@@ -225,11 +202,6 @@ randomFromVar(name) {
   return current[Math.floor(Math.random() * current.length)];
 }
 
-  /**
-   * Resolve um targetUserId vindo dos params de uma ação.
-   * Aceita: ID puro, menção <@id>/<@!id>, vazio/undefined.
-   * Se vazio ou inválido, retorna o ID do autor que disparou o fluxo.
-   */
   resolveTargetUserId(rawTargetUserId) {
     let id = (rawTargetUserId ?? '').toString().trim();
     const mentionMatch = id.match(/^<@!?(\d{17,20})>$/);
@@ -238,18 +210,6 @@ randomFromVar(name) {
     return id;
   }
 
-  /**
-   * Versão "com alvo" das operações de variável.
-   * Se a variável for de escopo 'user' E um targetUserId diferente do autor
-   * for informado, opera DIRETO no banco (UserVarModel) — não usa o cache
-   * em memória, pois esse é exclusivo do autor da execução atual.
-   * Se for escopo 'flow', ou o targetUserId resolver para o próprio autor,
-   * usa o caminho normal em memória (mais rápido, sincroniza no final).
-   *
-   * @param {string} name           Nome da variável
-   * @param {string} rawTargetUserId Valor bruto do param targetUserId (pode ser '')
-   * @param {(current: any) => any} mutate Função que recebe o valor atual e retorna o novo valor
-   */
   async withTargetVar(name, rawTargetUserId, mutate) {
     const targetUserId = this.resolveTargetUserId(rawTargetUserId);
     const varDef = (this.flow.variables || []).find(v => v.name === name);
@@ -257,14 +217,12 @@ randomFromVar(name) {
     const isOtherUser = isUserScope && targetUserId && targetUserId !== this.discord.userId;
 
     if (!isOtherUser) {
-      // Caminho padrão — opera no cache em memória do autor atual
       const current = this._vars.has(name) ? this._vars.get(name) : (varDef?.defaultValue ?? null);
       const updated = mutate(current);
       this._vars.set(name, updated);
       return updated;
     }
 
-    // Alvo é outro usuário — lê e escreve direto no banco
     const { UserVarModel } = require('../../../Mongodb/flow.js');
     const guildId = this.discord.guildId;
 
@@ -281,15 +239,9 @@ randomFromVar(name) {
     return updated;
   }
 
-  /**
-   * Monta o dicionário de variáveis de sistema disponíveis em qualquer texto do fluxo.
-   * Busca dados ricos (nome da guild, avatares, etc.) via API quando necessário,
-   * com cache para não repetir requisições na mesma execução.
-   */
   async _systemVars() {
     const d = this.discord;
 
-    // Dispara as buscas em paralelo — só requisita o que ainda não tem
     const [guild, user, member, channel] = await Promise.all([
       this._fetchGuild(),
       this._fetchUser(),
@@ -316,7 +268,6 @@ randomFromVar(name) {
     const channelTopic = channel?.topic || '';
 
     return {
-      // ── Usuário ──────────────────────────────────────────
       '{user}':              username,
       '{user_id}':           d.userId || '',
       '{user_mention}':      d.userId ? `<@${d.userId}>` : '',
@@ -326,7 +277,6 @@ randomFromVar(name) {
       '{user_avatar}':       userAvatarUrl,
       '{user_created_at}':   d.userId ? new Date(Number((BigInt(d.userId) >> 22n) + 1420070400000n)).toLocaleDateString('pt-BR') : '',
 
-      // ── Servidor (guild) ─────────────────────────────────
       '{guild}':             guildName,
       '{guild_id}':          d.guildId || '',
       '{guild_icon}':        guildIcon || '',
@@ -336,30 +286,25 @@ randomFromVar(name) {
       '{guild_boost_count}': String(boostCount),
       '{guild_owner_id}':    ownerId,
 
-      // ── Canal ────────────────────────────────────────────
       '{channel}':           channelName ? `#${channelName}` : (d.channelId ? `<#${d.channelId}>` : ''),
       '{channel_id}':        d.channelId || '',
       '{channel_name}':      channelName,
       '{channel_topic}':     channelTopic,
       '{channel_mention}':   d.channelId ? `<#${d.channelId}>` : '',
 
-      // ── Mensagem ─────────────────────────────────────────
       '{message}':           d.message?.content || '',
       '{message_id}':        d.message?.id || '',
 
-      // ── Cargo ────────────────────────────────────────────
       '{role}':               d.role?.name || '',
       '{role_id}':             d.role?.id || '',
       '{role_mention}':        d.role?.id ? `<@&${d.role.id}>` : '',
 
-      // ── Diversos ─────────────────────────────────────────
       '{count}':              String(d.customData?.count || 0),
       '{timestamp}':           String(Date.now()),
       '{date}':                new Date().toLocaleDateString('pt-BR'),
       '{time}':                new Date().toLocaleTimeString('pt-BR'),
       '{aleatorio}':           '',
 
-      // ── Argumentos de comando ────────────────────────────
       '{args}':  d.customData?.args?.join(' ') || '',
       '{arg0}':  d.customData?.args?.[0]       || '',
       '{arg1}':  d.customData?.args?.[1]       || '',
@@ -375,22 +320,17 @@ randomFromVar(name) {
   const sysVars = await this._systemVars();
   let result = template;
 
-  // 1. resolve variáveis de sistema ({user_id}, {arg0}, etc.)
   for (const [key, value] of Object.entries(sysVars)) {
     result = result.replaceAll(key, value ?? '');
   }
 
-  // 2. coleta todas as referências {var:nome:qualquercoisa} para buscar no banco
   const userVarMatches = [];
   result.replace(/\{var:([^:}]+):([^}]*)\}/g, (_, name, rawPart) => {
-    // ignora :aleatorio e índices numéricos puros
     if (rawPart === 'aleatorio' || /^\d+$/.test(rawPart)) return;
 
-    // extrai ID de menção <@123> ou <@!123>
     const mentionMatch = rawPart.match(/^<@!?(\d{17,20})>$/);
     let userId = mentionMatch ? mentionMatch[1] : rawPart.trim();
 
-    // se vazio ou inválido, usa o authorId de quem disparou
     if (!userId || !/^\d{17,20}$/.test(userId)) {
       userId = this.discord.userId || '';
     }
@@ -400,7 +340,6 @@ randomFromVar(name) {
     }
   });
 
-  // busca todas no banco em paralelo
   if (userVarMatches.length) {
     const { UserVarModel } = require('../../../Mongodb/flow.js');
     const results = await Promise.all(
@@ -414,10 +353,8 @@ randomFromVar(name) {
     });
   }
 
-  // 3. resolve {var:...} restantes (locais, user, persistent)
   result = result.replace(/\{var:([^}]+)\}/g, (_, expr) => {
 
-    // {var:nome:aleatorio} — aleatório de lista
     if (expr.endsWith(':aleatorio')) {
       const name = expr.slice(0, -10);
       const val  = this._vars.get(name) ?? this._userVars.get(name) ?? this._persistent.get(name);
@@ -425,7 +362,6 @@ randomFromVar(name) {
       return '';
     }
 
-    // {var:nome:N} — índice específico da lista
     const parts = expr.split(':');
     if (parts.length === 2 && !isNaN(parts[1])) {
       const name  = parts[0];
@@ -435,19 +371,16 @@ randomFromVar(name) {
       return '';
     }
 
-    // {var:nome} — valor normal
     const val = this._vars.get(expr) ?? this._userVars.get(expr) ?? this._persistent.get(expr);
     return val !== null && val !== undefined ? String(val) : '';
   });
 
-  // 4. {aleatorio:a,b,c}
   result = result.replace(/\{aleatorio:([^}]+)\}/g, (_, content) => {
     const options = content.split(',').map(v => v.trim()).filter(Boolean);
     if (!options.length) return '';
     return options[Math.floor(Math.random() * options.length)];
   });
 
-  // 5. {aleatorio:MIN-MAX}
   result = result.replace(/\{aleatorio:(\d+)-(\d+)\}/g, (_, min, max) => {
     const n = Math.floor(Math.random() * (Number(max) - Number(min) + 1)) + Number(min);
     return String(n);

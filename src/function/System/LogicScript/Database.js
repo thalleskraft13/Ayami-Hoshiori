@@ -1,14 +1,8 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — DATABASE
-   Banco de dados persistente por guild.
-   Integrado ao MongoDB do bot via Mongoose.
-   ═══════════════════════════════════════════ */
 
 const { Schema, model } = require('mongoose');
 
-/* ─── Schema ─── */
 const lsVarSchema = new Schema({
   guildId: { type: String, required: true, index: true },
   scope:   { type: String, enum: ['global', 'user', 'guild'], default: 'global' },
@@ -21,10 +15,8 @@ lsVarSchema.index({ guildId: 1, scope: 1, ownerId: 1, key: 1 }, { unique: true }
 
 const LSVariable = model('LogicScriptVar', lsVarSchema);
 
-/* ─── LogicScriptDB ─── */
 class LogicScriptDB {
 
-  /* ═══ GLOBAL ═══ */
 
   async setGlobal(guildId, key, value) {
     await LSVariable.findOneAndUpdate(
@@ -47,7 +39,6 @@ class LogicScriptDB {
     await LSVariable.deleteOne({ guildId, scope: 'global', ownerId: null, key });
   }
 
-  /* ═══ USER ═══ */
 
   async setUser(guildId, userId, key, value) {
     await LSVariable.findOneAndUpdate(
@@ -73,7 +64,6 @@ class LogicScriptDB {
     return next;
   }
 
-  /* ═══ GUILD ═══ */
 
   async setGuild(guildId, key, value) {
     await LSVariable.findOneAndUpdate(
@@ -88,9 +78,7 @@ class LogicScriptDB {
     return doc?.value ?? null;
   }
 
-  /* ═══ ADMIN ═══ */
 
-  /** Lista todas as variáveis de uma guild (para o dashboard). */
   async listAll(guildId, opts = {}) {
     const query = { guildId };
     if (opts.scope) query.scope = opts.scope;
@@ -98,12 +86,10 @@ class LogicScriptDB {
     return LSVariable.find(query).lean();
   }
 
-  /** Limpa todas as variáveis de uma guild (reset). */
   async clearGuild(guildId) {
     await LSVariable.deleteMany({ guildId });
   }
 
-  /** Exclui uma variável específica por ID (admin do dashboard). */
   async deleteById(id) {
     await LSVariable.deleteOne({ _id: id });
   }

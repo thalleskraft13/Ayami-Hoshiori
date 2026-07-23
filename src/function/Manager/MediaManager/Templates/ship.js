@@ -5,20 +5,6 @@ const Canvas    = require('../Canvas');
 const Effects   = require('../Effects');
 const Text      = require('../Text');
 
-/**
- * Ship template — compatibilidade entre dois usuários.
- * Design: dark romantic, rosa/roxo, partículas de coração, barra de progresso.
- *
- * @example
- * const buffer = await MediaManager.Render({
- *     Template:      'ship',
- *     avatarUrl1:    '…',
- *     avatarUrl2:    '…',
- *     username1:     'João',
- *     username2:     'Maria',
- *     porcentagem:   85,
- * });
- */
 class ShipTemplate extends BaseImage {
 
     static get templateName() { return 'ship'; }
@@ -40,16 +26,12 @@ class ShipTemplate extends BaseImage {
 
         const pct = porcentagem ?? Math.floor(Math.random() * 101);
 
-        // ── 1. Fundo ──────────────────────────────────────────────────────
         this._drawBackground(ctx, W, H);
 
-        // ── 2. Partículas decorativas ─────────────────────────────────────
         this._drawParticles(ctx, W, H);
 
-        // ── 3. Linha de conexão ───────────────────────────────────────────
         this._drawConnectionLine(ctx, W, H);
 
-        // ── 4. Avatares ───────────────────────────────────────────────────
         const AVATAR_SIZE = 130;
         const avatarY     = (H - AVATAR_SIZE) / 2 - 15;
 
@@ -59,13 +41,10 @@ class ShipTemplate extends BaseImage {
         this._drawAvatar(ctx, img1, 40, avatarY, AVATAR_SIZE, pct);
         this._drawAvatar(ctx, img2, W - 40 - AVATAR_SIZE, avatarY, AVATAR_SIZE, pct);
 
-        // ── 5. Coração central ────────────────────────────────────────────
         this._drawHeart(ctx, W / 2, H / 2 - 28, 36, pct);
 
-        // ── 6. Barra de progresso ─────────────────────────────────────────
         this._drawProgressBar(ctx, W, H, pct);
 
-        // ── 7. Porcentagem ────────────────────────────────────────────────
         Text.draw(ctx, {
             text:   `${pct}%`,
             x:      W / 2,
@@ -76,7 +55,6 @@ class ShipTemplate extends BaseImage {
             shadow: { color: 'rgba(0,0,0,0.8)', blur: 8, offsetX: 0, offsetY: 0 },
         });
 
-        // ── 8. Mensagem ───────────────────────────────────────────────────
         Text.draw(ctx, {
             text:  this._message(pct),
             x:     W / 2,
@@ -86,7 +64,6 @@ class ShipTemplate extends BaseImage {
             align: 'center',
         });
 
-        // ── 9. Nomes ──────────────────────────────────────────────────────
         const nameY = avatarY + AVATAR_SIZE + 14;
 
         Text.draw(ctx, {
@@ -118,7 +95,6 @@ class ShipTemplate extends BaseImage {
         return Canvas.toBuffer(canvas);
     }
 
-    // ─── Métodos de desenho ───────────────────────────────────────────────────
 
     _drawBackground(ctx, W, H) {
         const grad = ctx.createLinearGradient(0, 0, W, H);
@@ -129,7 +105,6 @@ class ShipTemplate extends BaseImage {
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
 
-        // Brilho central suave
         const glow = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 200);
         glow.addColorStop(0,   'rgba(180,0,120,0.18)');
         glow.addColorStop(0.5, 'rgba(120,0,180,0.08)');
@@ -137,7 +112,6 @@ class ShipTemplate extends BaseImage {
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, W, H);
 
-        // Borda interna
         ctx.strokeStyle = 'rgba(255,100,200,0.12)';
         ctx.lineWidth   = 1;
         ctx.strokeRect(6, 6, W - 12, H - 12);
@@ -184,7 +158,6 @@ class ShipTemplate extends BaseImage {
         const cy = y + size / 2;
         const r  = size / 2;
 
-        // Anel externo colorido
         const ringGrad = ctx.createLinearGradient(x, y, x + size, y + size);
         ringGrad.addColorStop(0, this._pctColor(pct));
         ringGrad.addColorStop(1, 'rgba(255,255,255,0.2)');
@@ -196,7 +169,6 @@ class ShipTemplate extends BaseImage {
         ctx.stroke();
         ctx.restore();
 
-        // Glow atrás do avatar
         ctx.save();
         Effects.glow(ctx, this._pctColor(pct), 18);
         ctx.beginPath();
@@ -206,7 +178,6 @@ class ShipTemplate extends BaseImage {
         Effects.clearShadow(ctx);
         ctx.restore();
 
-        // Clip circular + imagem
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -255,10 +226,8 @@ class ShipTemplate extends BaseImage {
         const barY = H / 2 + 16;
         const barR = barH / 2;
 
-        // Fundo
         Canvas.fillRoundRect(ctx, barX, barY, barW, barH, barR, 'rgba(255,255,255,0.08)');
 
-        // Fill colorido
         const fillW    = Math.max(barR * 2, (pct / 100) * barW);
         const fillGrad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
         fillGrad.addColorStop(0, '#ff4da6');
@@ -279,7 +248,6 @@ class ShipTemplate extends BaseImage {
         ctx.restore();
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
 
     async _resolveImage(context, url, buffer, size) {
         if (buffer) return context.loadImage(buffer);

@@ -24,17 +24,7 @@ class TaskManager {
     this.batchSize = 10;
   }
 
-  /* ═══════════════════════════════════════════
-     LOG HELPER
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Envia um embed de log pro canal de tarefas. Fire-and-forget — nunca
-   * lança erro, nunca atrasa quem chamou (LogChannelManager já cuida disso).
-   * @param {string} stage  'criada' | 'iniciada' | 'sucesso' | 'erro' | 'finalizada'
-   * @param {object} task   Documento da task (precisa de taskId e tipo)
-   * @param {object} [extraFields]  Campos extras do embed (ex: erro, agendamento)
-   */
   _logTask(stage, task, extraFields = []) {
     const titles = {
       criada:     '🆕 Task criada',
@@ -58,9 +48,6 @@ class TaskManager {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     START / STOP
-     ═══════════════════════════════════════════ */
 
   async start() {
     if (this.interval) return;
@@ -79,9 +66,6 @@ class TaskManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     TICK
-     ═══════════════════════════════════════════ */
 
   async _tick() {
     try {
@@ -108,9 +92,6 @@ class TaskManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     RUN
-     ═══════════════════════════════════════════ */
 
   async run(task) {
     this._logTask('iniciada', task);
@@ -125,22 +106,16 @@ class TaskManager {
         return;
       }
 
-      // guild_mission_reset se reagenda dentro do execute
       if (task.tipo === 'guild_mission_reset') {
         await task.save();
         return;
       }
 
-      // birthday_check se reagenda dentro do execute
       if (task.tipo === 'birthday_check') {
         await task.save();
         return;
       }
 
-      // schedule("HH:MM", ..., { recorrente: true }) do LogicScript —
-      // já recalculou executeAt/status pra amanhã dentro do execute()
-      // acima. "a cada X" (dailyAt ausente) continua caindo no repeat/
-      // repeatDelay genérico logo abaixo, normalmente.
       if (task.tipo === 'logicscript_message' && task.dados?.dailyAt) {
         await task.save();
         return;
@@ -172,9 +147,6 @@ class TaskManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     EXECUTE
-     ═══════════════════════════════════════════ */
 
   async execute(task) {
     switch (task.tipo) {
@@ -187,7 +159,6 @@ class TaskManager {
         await this.handleScheduledTrigger(task);
         break;
 
-      // schedule()/scheduleDaily do LogicScript — ver Interpreter.js
       case 'logicscript_message': {
         const { channelId, texto, dailyAt } = task.dados;
         await DiscordRequest(`/channels/${channelId}/messages`, {
@@ -195,10 +166,6 @@ class TaskManager {
           body:   { content: texto }
         }).catch(err => console.error('[TaskManager] logicscript_message error:', err));
 
-        // "todo dia às HH:MM" — recalcula pra amanhã no mesmo horário
-        // (mesmo padrão de birthday_check/scheduled_trigger). Recorrência
-        // por intervalo simples ("a cada 2h") já é coberta pelo mecanismo
-        // genérico repeat/repeatDelay logo abaixo, em run().
         if (dailyAt) {
           const next = new Date();
           next.setDate(next.getDate() + 1);
@@ -220,8 +187,6 @@ class TaskManager {
   break;
 }
 
-      // Roda todo dia no horário configurado pela guild:
-      // varre os aniversariantes do dia e dispara um birthday_notify por membro
       case 'birthday_check': {
         const { guildId, hour, minute = 0 } = task.dados;
         if (this.client.birthdayManager) {
@@ -229,7 +194,6 @@ class TaskManager {
             .checkAll(guildId)
             .catch(err => console.error('[TaskManager] birthday_check error:', err));
         }
-        // Reagenda para amanhã no mesmo horário
         const nextCheck = new Date();
         nextCheck.setDate(nextCheck.getDate() + 1);
         nextCheck.setHours(hour, minute, 0, 0);
@@ -238,7 +202,6 @@ class TaskManager {
         break;
       }
 
-      // Enviado pelo checkAll — notifica um único aniversariante
       case 'birthday_notify': {
         const { guildId, userId } = task.dados;
         const guildDoc = await GuildDb.findOne({ guildId });
@@ -293,9 +256,6 @@ class TaskManager {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     SCHEDULED TRIGGER
-     ═══════════════════════════════════════════ */
 
   async handleScheduledTrigger(task) {
     const { guildId, flowId, hour, minute = 0 } = task.dados;
@@ -315,9 +275,6 @@ class TaskManager {
     task.status    = 'pending';
   }
 
-  /* ═══════════════════════════════════════════
-     CREATE
-     ═══════════════════════════════════════════ */
 
   async create({ tipo, delay, dados, repeat = false, repeatDelay = null }) {
     const task = await TaskModel.create({
@@ -356,11 +313,6 @@ class TaskManager {
     return task;
   }
 
-  /**
-   * Cria (ou recria) a task diária de birthday_check para uma guild.
-   * Chame ao ativar o sistema ou mudar o horário.
-   * Cancela qualquer task pendente anterior para evitar duplicata.
-   */
   async createBirthdayCheck({ guildId, hour, minute = 0 }) {
   await TaskModel.updateMany(
     { tipo: 'birthday_check', 'dados.guildId': guildId, status: 'pending' },
@@ -372,7 +324,6 @@ class TaskManager {
   executeAt.setHours(hour, minute, 0, 0);
   executeAt.setSeconds(0, 0);
 
-  // Só manda pra amanhã se já passou mais de 1 minuto
   if (executeAt.getTime() < now.getTime() - 60_000) {
     executeAt.setDate(executeAt.getDate() + 1);
   }
@@ -393,11 +344,6 @@ class TaskManager {
 
   return task;
 }
-  /**
-   * Agenda o reset semanal de missões de guilda.
-   * Chame uma vez quando a guilda for registrada/configurada.
-   * A task se reagenda automaticamente toda segunda-feira.
-   */
   async scheduleGuildMissionReset(guildId) {
     await TaskModel.updateMany(
       { tipo: 'guild_mission_reset', 'dados.guildId': guildId, status: 'pending' },
@@ -420,9 +366,6 @@ class TaskManager {
     return task;
   }
 
-  /* ═══════════════════════════════════════════
-     LEMBRETE
-     ═══════════════════════════════════════════ */
 
   async handleLembrete(dados) {
     const { userId, channelId, mensagem, locale } = dados;
@@ -433,9 +376,6 @@ class TaskManager {
     });
   }
 
-  /* ═══════════════════════════════════════════
-     CANCEL
-     ═══════════════════════════════════════════ */
 
   async cancel(taskId) {
     const task = await TaskModel.findOne({ taskId });
@@ -445,9 +385,6 @@ class TaskManager {
     return true;
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════ */
 
   _msAteHorario(hour, minute = 0) {
     const now  = new Date();

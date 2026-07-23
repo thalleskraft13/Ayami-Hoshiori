@@ -4,7 +4,6 @@ const UserEconomy = require("../../function/Gacha/Economy.js");
 const UserGlobal = require("../../Mongodb/userglobal.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js")
 
-// URL principal do site — o daily também pode ser resgatado por lá.
 const SITE_URL = "https://ayami-hoshiori.discloud.app";
 
 function MS(time) {
@@ -21,7 +20,6 @@ function MS(time) {
   return value * (units[unit] || 1);
 }
 
-// Emojis da Ayami
 const ayami = {
   default:    "<:ayami:1513904360407695370>",
   animada:    "<:ayamianimada:1513895694824378408>",
@@ -43,7 +41,6 @@ const ayami = {
   sria:       "<:ayamisria:1513904083969380372>"
 };
 
-// Cores da Ayami
 const cores = {
   azulCabelo:    0xA9D6FF,
   azulSecundario: 0x7C8FFF,
@@ -140,9 +137,6 @@ module.exports = {
     const subcommand = interaction.data.options[0];
     const authorId = interaction.member.user.id;
 
-    /* =========================
-       SALDO
-    ========================== */
     if (subcommand.name === "saldo") {
 
       const mentionedUser = subcommand.options?.[0]?.value;
@@ -169,9 +163,6 @@ module.exports = {
       );
     }
 
-    /* =========================
-       DAILY
-    ========================== */
     if (subcommand.name === "daily") {
 
       const baseReward = 160;
@@ -198,7 +189,6 @@ module.exports = {
           const freshUser = await UserGlobal.findOne({ userId: authorId });
           const expires = freshUser.primogemas.daily_tempo || 0;
 
-          /* Cooldown */
           if (nowClick < expires) {
 
             const remaining = expires - nowClick;
@@ -229,11 +219,8 @@ module.exports = {
             );
           }
 
-          /* Recompensa */
           const premium = await PremiumManager.getUserPlan(authorId);
 
-          // Seção 2: o bônus agora escala com o PLANO (catálogo estático),
-          // não é mais um valor flat igual pra qualquer premium.
           const multiplier = premium.status ? premium.plan.dailyMultiplier : 1;
           const min = Math.round(10 * multiplier);
           const max = Math.round(20 * multiplier);
@@ -256,16 +243,13 @@ module.exports = {
                     premium: premium.status,
                     date: nowClick
                   }],
-                  $slice: -100 // seção 8: teto do array, senão cresce pra sempre
+                  $slice: -100 
                 }
               }
             },
             { new: true }
           );
 
-          // Seção 8: daily fazia $inc/$push direto no Mongo, sem passar pelo
-          // Economy.js — nenhum log era gerado. Agora loga via o helper
-          // estático (só documenta a mudança, o saldo já foi alterado acima).
           await UserEconomy.log({
             userId:   authorId,
             action:   "daily",
@@ -541,7 +525,6 @@ module.exports = {
       if (!receiver) receiver = await UserGlobal.create({ userId: targetId });
       if (!sender)   sender   = await UserGlobal.create({ userId: authorId });
 
-      /* Envio para o bot */
       if (targetId === process.env.CLIENT_ID) {
 
         if (sender.primogemas.atm < amount) {
@@ -561,7 +544,6 @@ module.exports = {
           { $inc: { "primogemas.atm": -amount } }
         );
 
-        // Seção 8: essa doação pro bot também bypassava o Economy.js.
         UserEconomy.log({
           userId:   authorId,
           action:   "remove",
@@ -684,7 +666,6 @@ module.exports = {
             );
           }
 
-          /* Executa transferência */
           await UserGlobal.updateOne(
             { userId: authorId },
             { $inc: { "primogemas.atm": -amount } }
@@ -706,7 +687,7 @@ module.exports = {
                     value: amount,
                     date: Date.now()
                   }],
-                  $slice: -100 // seção 8: teto do array
+                  $slice: -100 
                 }
               }
             }
@@ -729,9 +710,6 @@ module.exports = {
             }
           );
 
-          // Seção 8: transferência entre usuários também bypassava o
-          // Economy.js — nenhum log era gerado nem persistido. Loga os dois
-          // lados (quem enviou e quem recebeu).
           UserEconomy.log({
             userId:   authorId,
             action:   "transfer_send",

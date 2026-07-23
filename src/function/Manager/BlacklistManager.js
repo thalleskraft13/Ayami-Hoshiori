@@ -3,27 +3,16 @@
 const BlacklistModel = require('../../Mongodb/blacklist.js');
 const ClusterSyncManager = require('./ClusterSyncManager.js');
 
-/**
- * BlacklistManager 
- *
- * Blacklist GLOBAL: bane do bot inteiro, aplicada só pela staff oficial da
- * Ayami (não pelos donos de servidor). Checada em toda interação
- * (DiscordGatewayClient#_onInteraction), então não pode bater no Mongo a
- * cada clique — mantém um cache em memória (Map, carregado no boot) e
- * sincronizado entre clusters via ClusterSyncManager (Mongo Change Streams) sempre que alguém for banido/desbanido em qualquer cluster.
- */
 class BlacklistManager {
 
     constructor(client) {
         this.client = client;
 
-        /** @type {Map<string, { staffId: string, motivo: string, appliedAt: number }>} */
         this._cache = new Map();
         this._sync  = new ClusterSyncManager();
         this._ready = false;
     }
 
-    /** Carrega a blacklist inteira do Mongo pra memória e começa a escutar mudanças de outros clusters. */
     async start() {
         await this._loadAll();
 
@@ -49,9 +38,6 @@ class BlacklistManager {
 
     _applyChange(change) {
         if (change.operationType === 'delete') {
-            // documentKey não tem o userId direto (é o _id do Mongo) — como não
-            // temos o userId no delete, mais simples e seguro é recarregar tudo.
-            // Baixo custo: blacklist tende a ser pequena e bans/unbans são raros.
             this._loadAll().catch(err => console.error('[Blacklist] Erro ao recarregar após delete:', err));
             return;
         }
@@ -66,7 +52,6 @@ class BlacklistManager {
         });
     }
 
-    /** Checagem síncrona e barata — é isso que roda em toda interação. */
     isBanned(userId) {
         return this._cache.has(userId);
     }
@@ -75,11 +60,6 @@ class BlacklistManager {
         return this._cache.get(userId) ?? null;
     }
 
-    /**
-     * Aplica um ban global. Persiste no Mongo (o que dispara o Change Stream
-     * e propaga pros outros clusters automaticamente) e já atualiza o cache
-     * local na hora, sem esperar o round-trip do próprio stream.
-     */
     async ban(userId, staffId, motivo = "Não especificado") {
         const doc = await BlacklistModel.findOneAndUpdate(
             { userId },
@@ -90,7 +70,6 @@ class BlacklistManager {
         return doc;
     }
 
-    /** Remove um ban global. */
     async unban(userId) {
         await BlacklistModel.deleteOne({ userId });
         this._cache.delete(userId);

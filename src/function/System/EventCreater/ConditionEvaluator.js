@@ -2,34 +2,13 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-/**
- * ConditionEvaluator
- *
- * Avalia o array de condições de um fluxo contra um ExecutionContext.
- * Suporta operadores AND/OR encadeados e negação individual.
- *
- * Categorias implementadas:
- *   user, channel, message, economy, variable,
- *   probability, date, time, permission, inventory, command
- */
 class ConditionEvaluator {
 
   constructor(client) {
     this.client = client;
   }
 
-  /* ═══════════════════════════════════════════
-     ENTRY POINT
-     ═══════════════════════════════════════════ */
 
-  /**
-   * Avalia todas as condições do fluxo.
-   * Retorna true se o fluxo deve prosseguir, false se deve ser bloqueado.
-   *
-   * @param {object[]} conditions  — array de conditionSchema
-   * @param {ExecutionContext} ctx
-   * @returns {Promise<boolean>}
-   */
   async evaluate(conditions, ctx) {
     if (!conditions || conditions.length === 0) return true;
 
@@ -49,9 +28,6 @@ class ConditionEvaluator {
     return result;
   }
 
-  /* ═══════════════════════════════════════════
-     AVALIAÇÃO INDIVIDUAL
-     ═══════════════════════════════════════════ */
 
   async _evalOne(cond, ctx) {
     let result;
@@ -89,9 +65,6 @@ class ConditionEvaluator {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     USER CONDITIONS
-     ═══════════════════════════════════════════ */
 
   async _user(type, p, ctx) {
     const { guildId, userId } = ctx.discord;
@@ -124,7 +97,6 @@ class ConditionEvaluator {
       }
 
       case 'in_voice': {
-        // verifica se o usuário está em call via voiceState do evento ou API
         if (ctx.discord.voiceState) {
           return ctx.discord.voiceState.channel_id !== null;
         }
@@ -139,7 +111,6 @@ class ConditionEvaluator {
       }
 
       case 'account_age_gt': {
-        // Snowflake → timestamp de criação
         const created = this._snowflakeToMs(userId);
         const ageDays = (Date.now() - created) / 86400000;
         return ageDays > Number(p.days);
@@ -169,9 +140,6 @@ class ConditionEvaluator {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     CHANNEL CONDITIONS
-     ═══════════════════════════════════════════ */
 
   async _channel(type, p, ctx) {
     const channelId = ctx.discord.channelId;
@@ -183,7 +151,6 @@ class ConditionEvaluator {
       case 'not_category':    return ctx.discord.categoryId !== p.categoryId;
 
       case 'is_thread_channel': {
-        // Tipos de canal que são threads: 10 (news thread), 11 (public thread), 12 (private thread)
         const channel = await ctx._fetchChannel();
         return [10, 11, 12].includes(channel?.type);
       }
@@ -192,9 +159,6 @@ class ConditionEvaluator {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     MESSAGE CONDITIONS
-     ═══════════════════════════════════════════ */
 
   _message(type, p, ctx) {
     const content = ctx.discord.message?.content || '';
@@ -217,12 +181,8 @@ class ConditionEvaluator {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     ECONOMY CONDITIONS
-     ═══════════════════════════════════════════ */
 
   async _economy(type, p, ctx) {
-    // Delega ao EconomyManager se existir no client
     const eco = this.client.economyManager;
     if (!eco) return true;
 
@@ -236,9 +196,6 @@ class ConditionEvaluator {
     }
   }
 
-  /* ═══════════════════════════════════════════
-     VARIABLE CONDITIONS
-     ═══════════════════════════════════════════ */
 
   _variable(type, p, ctx) {
     const val = ctx.getVar(p.name);
@@ -254,16 +211,12 @@ class ConditionEvaluator {
       case 'list_contains':     return Array.isArray(val) && val.includes(cmp);
 case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
 
-      // ── Meta Progressiva ──────────────────────────────────────
-      // Fórmula: Valor Atual >= Base de Progressão × Valor Base
-      // currentValue e progressionBase já chegam interpolados (podem ter sido
-      // {var:nome} ou número literal — interpolateParams já resolveu isso).
       case 'progressive_goal': {
         const current     = Number(p.currentValue)    || 0;
         const progression = Number(p.progressionBase) || 0;
         const base         = p.baseValue !== undefined && p.baseValue !== ''
           ? Number(p.baseValue)
-          : 1000; // valor padrão conforme especificação
+          : 1000; 
 
         const goal = progression * base;
         return current >= goal;
@@ -273,9 +226,6 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     PROBABILITY CONDITIONS
-     ═══════════════════════════════════════════ */
 
   _probability(type, p) {
     switch (type) {
@@ -285,9 +235,6 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     DATE CONDITIONS
-     ═══════════════════════════════════════════ */
 
   _date(type, p) {
     const now = Date.now();
@@ -304,9 +251,6 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
     }
   }
   
-    /* ═══════════════════════════════════════════
-     REACTION CONDITIONS
-     ═══════════════════════════════════════════ */
 
   
   async _reaction(type, p, ctx) {
@@ -361,12 +305,8 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
   }
 }
 
-  /* ═══════════════════════════════════════════
-     TIME CONDITIONS (horário do dia)
-     ═══════════════════════════════════════════ */
 
   _time(type, p) {
-    // p.time: "HH:MM"
     const now      = new Date();
     const nowMins  = now.getHours() * 60 + now.getMinutes();
     const toMins   = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -381,9 +321,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     PERMISSION CONDITIONS
-     ═══════════════════════════════════════════ */
 
   async _permission(type, p, ctx) {
     const getPerm = require('../../Utils/GetPerm.js');
@@ -405,9 +342,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     INVENTORY CONDITIONS
-     ═══════════════════════════════════════════ */
 
   async _inventory(type, p, ctx) {
     const inv = this.client.inventoryManager;
@@ -423,9 +357,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     COMMAND CONDITIONS
-     ═══════════════════════════════════════════ */
 
   _command(type, p, ctx) {
     switch (type) {
@@ -445,9 +376,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     ARGS CONDITIONS
-     ═══════════════════════════════════════════ */
 
   async _args(type, p, ctx) {
     const args    = ctx.discord.customData?.args || [];
@@ -455,13 +383,9 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
 
     switch (type) {
 
-      // ── args_has_content ──────────────────────────────────────
-      // Verifica se há pelo menos um argumento.
-      // Se não, envia errorMsg e cancela o fluxo.
       case 'args_has_content': {
         const hasContent = args.length > 0 && args.some(a => a.trim() !== '');
         if (!hasContent && p.errorMsg?.trim()) {
-          // envia mensagem de erro e cancela
           const channelId = discord.channelId;
           if (channelId) {
             await DiscordRequest(`/channels/${channelId}/messages`, {
@@ -474,15 +398,10 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
         return hasContent;
       }
 
-      // ── arg_is_type ──────────────────────────────────────────
-      // Verifica se o arg na posição argIndex é do tipo argType.
-      // Sempre valida se o arg existe antes de checar o tipo.
-      // Se falhar e houver errorMsg, envia e cancela.
       case 'arg_is_type': {
         const idx = Number(p.argIndex ?? 0);
         const arg = args[idx]?.trim() || '';
 
-        // 1. O arg precisa existir
         if (!arg) {
           if (p.errorMsg?.trim()) {
             const channelId = discord.channelId;
@@ -497,7 +416,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
           return false;
         }
 
-        // 2. Verifica o tipo
         let valid = false;
         switch (p.argType) {
           case 'user_mention':    valid = /^<@!?\d{17,20}>$/.test(arg);        break;
@@ -536,9 +454,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════ */
 
   async _getMember(guildId, userId) {
     try {

@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Rosaria
- * Elemento: Cryo | Raridade: 4 estrelas
- * Role: Sub-DPS, Suporte (share de CRIT)
- *
- * Mecânicas únicas:
- * - Compartilha parte do próprio CritRate com o time via Rite of Termination
- * - Ataca pelas costas para bônus de dano
- */
 module.exports = {
     nome:     'Rosaria',
     raridade: '4',

@@ -1,17 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — INTERPRETER v2
-   Mudanças:
-   - Sistema de comandos via PREFIXO (não slash)
-   - EmbedBuilder estilo discord.js (new EmbedBuilder())
-   - Embeds em sendMessage, reply, followUp, etc.
-   - Contexto de prefixo injetado automaticamente
-   - (novo) schedule()/cancelSchedule()/listSchedules() —
-     agendamento persistido via TaskManager (delay, "1h", "HH:MM",
-     com ou sem recorrência)
-   - (novo) cooldown()/cooldownRestante() — usando db.user() já existente
-   ═══════════════════════════════════════════ */
 
 const DiscordRequest = require('../../DiscordRequest.js');
 const msLib          = require('ms');
@@ -20,16 +8,6 @@ const { safeRequest, SafeHttpError } = require('../../Utils/SafeHttp.js');
 const PremiumManager  = require('../../Utils/PremiumManager.js');
 const { getPlan }     = require('../../Utils/PremiumPlans.js');
 
-/**
- * Aceita tanto um ID puro (`"123456789012345678"`) quanto uma menção
- * do Discord (`<#id>` canal, `<@&id>` cargo, `<@id>`/`<@!id>` usuário)
- * e sempre devolve só o ID numérico como string.
- *
- * Existe porque o autocomplete do editor (#canal, @cargo, dentro de
- * strings) insere a menção pronta — sem isso, quem copia/cola o
- * resultado do autocomplete em getChannel()/addRole()/etc. receberia
- * um ID "sujo" que a API do Discord rejeitaria.
- */
 function extractId(raw) {
   if (raw == null) return raw;
   const s = String(raw).trim();
@@ -51,9 +29,6 @@ const MAX_STEPS   = 50_000;
 const MAX_DEPTH   = 200;
 const MAX_WAIT_MS = 30_000;
 
-/* ══════════════════════════════════════
-   ENVIRONMENT
-   ══════════════════════════════════════ */
 class Environment {
   constructor(parent = null) {
     this._vars  = new Map();
@@ -75,10 +50,6 @@ class Environment {
   }
 }
 
-/* ══════════════════════════════════════
-   EMBED BUILDER (estilo discord.js)
-   new EmbedBuilder()
-   ══════════════════════════════════════ */
 class EmbedBuilder {
   constructor() {
     this._data = {};
@@ -95,7 +66,6 @@ class EmbedBuilder {
     else if (typeof v === 'number')
       this._data.color = v;
     else {
-      // Nomes de cores comuns
       const COLORS = {
         Red: 0xED4245, Green: 0x57F287, Blue: 0x3498DB,
         Yellow: 0xFEE75C, Orange: 0xE67E22, Purple: 0x9B59B6,
@@ -147,7 +117,6 @@ class EmbedBuilder {
     return this.addFields(...fields);
   }
 
-  // Legado (compatibilidade com a sintaxe antiga do Logic Script)
   title(v)       { return this.setTitle(v); }
   description(v) { return this.setDescription(v); }
   color(v)       { return this.setColor(v); }
@@ -162,9 +131,6 @@ class EmbedBuilder {
   toJSON() { return this._data; }
 }
 
-/* ══════════════════════════════════════
-   HELPERS DE MENSAGEM
-   ══════════════════════════════════════ */
 
 function resolveEmbed(embed) {
   if (!embed) return null;
@@ -188,7 +154,7 @@ function resolveComponents(comps) {
     } else if (c._type === 'modal') {
       // modal é tratado separadamente
     } else if (c.type === 1) {
-      rows.push(c); // row já montada
+      rows.push(c); 
     }
   }
 
@@ -199,7 +165,6 @@ function buildMessageBody(content, opts = {}) {
   const body = {};
   if (content != null && content !== '') body.content = String(content);
 
-  // Embed(s)
   if (opts.embed) {
     const resolved = resolveEmbed(opts.embed);
     if (resolved) body.embeds = [resolved];
@@ -208,28 +173,16 @@ function buildMessageBody(content, opts = {}) {
     body.embeds = opts.embeds.map(resolveEmbed).filter(Boolean);
   }
 
-  // Componentes
   if (opts.components !== undefined || opts.component !== undefined) {
     body.components = resolveComponents(opts.components ?? opts.component);
   }
 
-  // Flags
   if (opts.ephemeral) body.flags = 64;
 
   return body;
 }
 
-/* ══════════════════════════════════════
-   INTERPRETER
-   ══════════════════════════════════════ */
 class Interpreter {
-  /**
-   * @param {object} opts
-   * @param {object} opts.client       — DiscordGatewayClient
-   * @param {object} opts.discordCtx   — { guildId, channelId, userId, message, interaction, prefix }
-   * @param {object} opts.db           — LogicScriptDB
-   * @param {Map}    opts.modules      — módulos importados
-   */
   constructor(opts = {}) {
     this.client     = opts.client     ?? null;
     this.discordCtx = opts.discordCtx ?? {};
@@ -239,25 +192,17 @@ class Interpreter {
     this._steps     = 0;
     this._depth     = 0;
     this._totalWait = 0;
-    this._printLog  = [];   // buffer de saídas print() — usado pelo console do dashboard
+    this._printLog  = [];   
 
-    // Contador de requisições HTTP desta execução (compartilhado entre
-    // todas as chamadas de http()/webhook() deste run — ver SafeHttp.js)
     this._httpRequestCounter = { count: 0 };
 
-    // Cache do plano premium da guild (resolvido uma vez por execução,
-    // sob demanda — só quando algo que depende de plano é chamado).
     this._planCache = null;
 
     this._globals   = new Environment();
     this._setupGlobals();
   }
 
-  /* ══════════════════════════════════════
-     PREMIUM / LOGS
-     ══════════════════════════════════════ */
 
-  /** Resolve (e cacheia por execução) o plano premium da guild atual. */
   async _getGuildPlan() {
     if (this._planCache) return this._planCache;
     const guildId = this.discordCtx.guildId;
@@ -270,13 +215,6 @@ class Interpreter {
     return this._planCache;
   }
 
-  /**
-   * Lança um RuntimeError amigável se a guild não tiver o recurso do plano.
-   * `planLabel` é o plano mínimo exibido na mensagem — por padrão 🌙 Lua
-   * Crescente (recursos httpAccess/webhookAccess/canRunFlowById), mas
-   * recursos liberados num patamar mais baixo (ex: premiumEvents, a
-   * partir do 🌟 Nova Estrela) devem passar o próprio label.
-   */
   async _requireLogicScriptFeature(feature, friendlyName, planLabel = '🌙 Lua Crescente') {
     const plan = await this._getGuildPlan();
     if (!plan.logicScript?.[feature]) {
@@ -288,33 +226,20 @@ class Interpreter {
     return plan;
   }
 
-  /**
-   * Registra uma ação no log da execução (mostrado no dashboard/`/logic script`).
-   * Só deve ser chamado para operações que de fato mudam algo ou saem pra
-   * rede (mensagem enviada/editada/apagada, ban/kick/timeout, cargo,
-   * canal, requisição HTTP não-GET, webhook) — NUNCA para leituras de
-   * cache (getUser/getChannel/getGuild/etc.), que não batem na API do
-   * Discord e não precisam de log (ver seção "Logs do Logic Script").
-   */
   _logAction(tag, text) {
     const line = `[${tag}] ${text}`;
     this._printLog.push(line);
     if (this._printLog.length > 200) this._printLog.shift();
   }
 
-  /* ══════════════════════════════════════
-     GLOBALS
-     ══════════════════════════════════════ */
   _setupGlobals() {
     const G   = this._globals;
     const ctx = this.discordCtx;
 
-    /* ── Utilitários ── */
     G.define('print',    (...a) => {
       const text = a.map(v => this._str(v)).join(' ');
       console.log('[LS]', text);
       this._printLog.push(text);
-      // Limite de segurança: evita buffer gigante em loops
       if (this._printLog.length > 200) this._printLog.shift();
       return null;
     });
@@ -351,9 +276,6 @@ class Interpreter {
       await new Promise(r => setTimeout(r, n));
     });
 
-    /* ── Agendamento (schedule) ──
-       Reaproveita o TaskManager que já existe (mesma infra de lembrete,
-       birthday_check, etc) — persiste no Mongo, sobrevive a restart. */
     G.define('schedule', async (tempo, channel, texto, opts = {}) => {
       if (!this.client?.taskManager) {
         throw new RuntimeError('Agendamento indisponível (TaskManager não carregado).');
@@ -369,13 +291,8 @@ class Interpreter {
       if (recorrente) {
         repeat = true;
         if (parsed.clockTime) {
-          // "todo dia às HH:MM" — se autogerencia dentro do TaskManager,
-          // recalculando pra amanhã no mesmo horário a cada execução
-          // (ver case 'logicscript_message' no TaskManager.js).
           dados.dailyAt = parsed.clockTime;
         } else {
-          // "a cada X" — usa o mecanismo genérico de repeat/repeatDelay
-          // que o TaskManager já aplica pra qualquer tipo de task.
           repeatDelay = parsed.delayMs;
         }
       }
@@ -412,11 +329,8 @@ class Interpreter {
       }));
     });
 
-    /* ── Cooldown (por usuário, por guild) ──
-       Usa o mesmo db.user() de baixo nível — não precisa de collection
-       nova, guarda o timestamp de expiração como mais uma chave do usuário. */
     G.define('cooldown', async (chave, tempo) => {
-      if (!this.db) return true; // sem banco configurado, nunca bloqueia
+      if (!this.db) return true; 
       const { delayMs } = this._parseTime(tempo);
       const key = `_cooldown_${chave}`;
       const expiraEm = await this.db.getUser(ctx.guildId, ctx.userId, key);
@@ -435,39 +349,30 @@ class Interpreter {
       return restante > 0 ? restante : 0;
     });
 
-    /* ── Prefixo ── */
     G.define('PREFIX', ctx.prefix ?? '!');
 
-    /* ── EmbedBuilder (estilo discord.js) ── */
     const self = this;
     G.define('EmbedBuilder', function() { return new EmbedBuilder(); });
 
-    /* ── Legado: Embed() ── */
     G.define('Embed', function() { return new EmbedBuilder(); });
 
-    /* ── Button ── */
     G.define('Button', () => this._makeButton());
 
-    /* ── SelectMenu ── */
     G.define('SelectMenu', () => this._makeSelectMenu());
 
-    /* ── Modal ── */
     G.define('Modal', () => this._makeModal());
 
-    /* ── Objetos Discord ── */
     G.define('getUser',        async () => this._buildUserObj(ctx.userId));
     G.define('getChannel',     async (id) => this._buildChannelObj(extractId(id) ?? ctx.channelId));
     G.define('getGuild',       async () => this._buildGuildObj(ctx.guildId));
     G.define('getInteraction', () => this._buildInteractionObj(ctx.interaction));
     G.define('getMessage',     () => this._buildMessageObj(ctx.message));
 
-    /* ── sendMessage ── */
     G.define('sendMessage', async (channel, content, opts) => {
       const chId = typeof channel === 'object' ? channel?.id : extractId(String(channel ?? ctx.channelId));
       return this._sendToChannel(chId, content, opts);
     });
 
-    /* ── sendDM ── */
     G.define('sendDM', async (user, content, opts) => {
       const uid = typeof user === 'object' ? user?.id : extractId(String(user));
       const dm  = await DiscordRequest('/users/@me/channels', { method: 'POST', body: { recipient_id: uid } }).catch(() => null);
@@ -475,15 +380,9 @@ class Interpreter {
       return this._sendToChannel(dm.id, content, opts);
     });
 
-    /* ── HTTP (GET/POST/PUT/PATCH/DELETE) ──
-       Premium: bloqueado no 🌟 Nova Estrela, liberado a partir do
-       🌙 Lua Crescente. Sempre passa pelo SafeHttp (rate limit, timeout,
-       limite de tamanho, bloqueio de localhost/IP privado, limite de
-       requisições por execução). */
     const httpMethod = (method) => async (url, a, b) => {
       await this._requireLogicScriptFeature('httpAccess', 'Requisições HTTP');
 
-      // get(url, opts) vs post/put/patch(url, body, opts)
       const hasBody = !['GET', 'HEAD', 'DELETE'].includes(method);
       const body    = hasBody ? a : undefined;
       const opts    = hasBody ? (b ?? {}) : (a ?? {});
@@ -515,9 +414,6 @@ class Interpreter {
       delete: httpMethod('DELETE'),
     });
 
-    /* ── Webhook ──
-       Premium: bloqueado no 🌟 Nova Estrela, liberado (personalizado)
-       a partir do 🌙 Lua Crescente. */
     G.define('webhook', {
       send: async (url, content, opts = {}) => {
         await this._requireLogicScriptFeature('webhookAccess', 'Webhooks');
@@ -542,11 +438,6 @@ class Interpreter {
       },
     });
 
-    /* ── Executar Fluxo do Logic Builder por ID ──
-       Premium: bloqueado no 🌟 Nova Estrela, liberado a partir do
-       🌙 Lua Crescente. Usa o mesmo mecanismo interno do LogicEngine
-       (client.logicEngine), compartilhando o contexto atual (guild/canal/
-       usuário) com o fluxo executado. */
     G.define('runFlow', async (flowId) => {
       await this._requireLogicScriptFeature('canRunFlowById', 'Executar Fluxo do Logic Builder');
 
@@ -570,13 +461,6 @@ class Interpreter {
       return { ok: true };
     });
 
-    /* ── abrirTicket ──
-       Premium: bloqueado no 🌑 Gratuito, liberado a partir do 🌟 Nova
-       Estrela — mesmo patamar dos eventos ticketUpdate/activitySpike
-       (flag `logicScript.premiumEvents`). Abre um ticket de um painel
-       já configurado em /painel sem precisar de clique em botão —
-       pensado pra scripts abrirem ticket automaticamente (ex: após um
-       comando, uma condição, ou em resposta a outro evento). */
     G.define('abrirTicket', async (panelId, userId) => {
       await this._requireLogicScriptFeature('premiumEvents', 'abrirTicket()', '🌟 Nova Estrela');
 
@@ -599,20 +483,14 @@ class Interpreter {
       return { id: result.channelId, channelId: result.channelId, panelId: result.panelId };
     });
 
-    /* ── Banco de dados ── */
     G.define('db', this._buildDbObj());
   }
 
-  /* ══════════════════════════════════════
-     PARSER DE TEMPO — número (ms), duração ("1h"/"30m"/"10s"/"2d")
-     ou horário fixo ("10:20"). Usado por schedule()/cooldown().
-     ══════════════════════════════════════ */
   _parseTime(tempo) {
     if (typeof tempo === 'number') return { delayMs: tempo, clockTime: null };
 
     const s = String(tempo).trim();
 
-    // Formato "HH:MM" — horário fixo do dia
     const clockMatch = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(s);
     if (clockMatch) {
       const hour   = Number(clockMatch[1]);
@@ -629,7 +507,6 @@ class Interpreter {
       return { delayMs, clockTime: { hour, minute } };
     }
 
-    // Formato de duração ("1h", "30m", "10s", "2d") via lib `ms`
     const parsedMs = msLib(s);
     if (typeof parsedMs !== 'number' || Number.isNaN(parsedMs)) {
       throw new RuntimeError(`Formato de tempo inválido: '${tempo}' (use ms, "1h"/"30m"/"10s" ou "HH:MM")`);
@@ -637,14 +514,10 @@ class Interpreter {
     return { delayMs: parsedMs, clockTime: null };
   }
 
-  /* ══════════════════════════════════════
-     ENVIO DE MENSAGEM (centralizado)
-     ══════════════════════════════════════ */
   async _sendToChannel(channelId, content, opts = {}) {
     channelId = extractId(channelId);
     if (!channelId) return null;
 
-    // Segurança: canal deve pertencer à guild
     try {
       const ch = await DiscordRequest(`/channels/${channelId}`);
       if (ch?.guild_id && ch.guild_id !== this.discordCtx.guildId) return null;
@@ -657,9 +530,6 @@ class Interpreter {
     return msg?.id ? this._buildMessageObj(msg) : null;
   }
 
-  /* ══════════════════════════════════════
-     EXECUÇÃO
-     ══════════════════════════════════════ */
   async run(ast, env = null) {
     return this._execBlock(ast.body ?? ast, env ?? this._globals);
   }
@@ -752,15 +622,6 @@ class Interpreter {
         return null;
       }
       case 'Import': {
-        // Antes: se o módulo (path) ou o nome importado não existisse, o
-        // import virava um no-op silencioso — e só ia dar erro confuso lá
-        // na frente, na hora de CHAMAR a função ("'addCoins' não é uma
-        // função"), sem nenhuma pista de que o problema era o import.
-        //
-        // BUG do fix anterior: o ScriptRunner guarda os módulos no Map com
-        // a chave NORMALIZADA (com barra: "/economia.logic"), mas aqui a
-        // busca usava `node.source` cru (sem barra) — nunca batia, mesmo
-        // com o módulo carregado corretamente. Normaliza aqui também.
         const source = node.source.startsWith('/') ? node.source : '/' + node.source;
         const mod = this.modules.get(source);
         if (!mod) {
@@ -780,7 +641,7 @@ class Interpreter {
         }
         return null;
       }
-      case 'OnEvent': return null; // tratado pelo ScriptRunner
+      case 'OnEvent': return null; 
       case 'ExprStmt': { await this._eval(node.expr, env); return null; }
       default: throw new RuntimeError(`Statement desconhecido: ${node.type}`, node.line);
     }
@@ -856,7 +717,6 @@ class Interpreter {
         return method.apply(obj, args);
       }
       case 'NewExpression': {
-        // new EmbedBuilder()
         const cls = env.get(node.name);
         if (typeof cls !== 'function') throw new RuntimeError(`'${node.name}' não é uma classe`, node.line);
         const args = [];
@@ -895,9 +755,6 @@ class Interpreter {
     return String(v);
   }
 
-  /* ══════════════════════════════════════
-     DISCORD OBJECTS
-     ══════════════════════════════════════ */
 
   _buildMessageObj(msg) {
     if (!msg) return null;
@@ -945,10 +802,6 @@ class Interpreter {
       joinedAt:    member?.joined_at,
       isBot:       user?.bot ?? false,
       permissions: member?.permissions,
-      // Antes: chamava _sendToChannel("@dm:"+userId), um "canal" que não
-      // existe pra API do Discord — user.send() nunca funcionava (sempre
-      // retornava null em silêncio). Corrigido pra abrir o DM primeiro,
-      // igual o global sendDM() já fazia corretamente.
       send:        async (c, o) => {
         const dm = await DiscordRequest('/users/@me/channels', { method: 'POST', body: { recipient_id: userId } }).catch(() => null);
         if (!dm?.id) return null;
@@ -1022,17 +875,6 @@ class Interpreter {
         interaction._lsResponded = true;
         return DiscordRequest(`/interactions/${id}/${token}/callback`, { method: 'POST', body: { type: 5, data: { flags: ephemeral ? 64 : 0 } } });
       },
-      /**
-       * Abre um Modal (formulário popup) em resposta a essa interação.
-       * `modal` é o objeto retornado por Modal()...onSubmit(fn) — precisa
-       * ter passado por onSubmit() antes, senão não tem handler nenhum
-       * registrado pra tratar o envio.
-       *
-       * Limitação do Discord: só funciona em resposta a uma interação já
-       * existente (buttonClick, selectMenu) — não dá pra abrir modal a
-       * partir de on(command), que é baseado em mensagem comum, sem
-       * token de interação.
-       */
       showModal: async (modal) => {
         if (!modal?._data?.custom_id) {
           throw new RuntimeError('showModal() precisa de um Modal() que já passou por .onSubmit(fn).');
@@ -1058,26 +900,10 @@ class Interpreter {
     };
   }
 
-  /* ══════════════════════════════════════
-     UI BUILDERS
-     ══════════════════════════════════════ */
-  /**
-   * Gera um custom_id "neutro" pra componentes que nunca foram ligados a
-   * nada (nem setCustomId, nem onClick). Não é registrado em lugar nenhum
-   * de propósito: clicar nele simplesmente não faz nada (Discord mostra
-   * "essa interação falhou"), em vez de mentir dizendo que "expirou" como
-   * acontecia antes.
-   */
   _looseId(prefix) {
     return `ls_${prefix}_` + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
-  /**
-   * Resolve o parâmetro `user` de onClick()/opts.user:
-   *  - true      → restringe ao usuário que disparou o evento atual (ctx.userId)
-   *  - string/obj → id explícito (ou objeto com .id)
-   *  - undefined → sem restrição (qualquer um pode clicar)
-   */
   _resolveInteractionOwner(user) {
     if (user === true) return this.discordCtx.userId ?? undefined;
     if (user && typeof user === 'object') return user.id ?? undefined;
@@ -1093,17 +919,8 @@ class Interpreter {
       setLabel:    v => { data.label = String(v); return obj; },
       setStyle:    v => { const s = { Primary:1,Secondary:2,Success:3,Danger:4,Link:5,primary:1,secondary:2,success:3,danger:4,link:5 }; data.style = s[v] ?? Number(v) ?? 1; return obj; },
 
-      /** Interação PERMANENTE: id fixo escolhido pelo autor do script.
-       *  Nunca expira; é tratada por on(buttonClick)/on(selectMenu),
-       *  comparando interaction.customId dentro do handler. Continua
-       *  funcionando mesmo depois de a Ayami reiniciar. */
       setCustomId: v => { data.custom_id = String(v); return obj; },
 
-      /** Interação TEMPORÁRIA: registra o botão de verdade no
-       *  InteractionManager (mesmo cache com TTL usado pelo resto do bot).
-       *  `fn` é chamada com o objeto de interação assim que o botão for
-       *  clicado. Expira sozinha (padrão 10min) e some do cache.
-       *  opts: { user: true|id, ttl: ms } */
       onClick: (fn, opts = {}) => {
         if (typeof fn !== 'function') {
           throw new RuntimeError('Button().onClick() espera uma função como argumento.');
@@ -1124,7 +941,6 @@ class Interpreter {
       setEmoji:    e => { data.emoji = typeof e === 'string' ? { name: e } : e; return obj; },
       setDisabled: v => { data.disabled = Boolean(v); return obj; },
       setURL:      v => { data.url = String(v); data.style = 5; delete data.custom_id; return obj; },
-      // Legado
       label:    v => { data.label = String(v); return obj; },
       style:    v => obj.setStyle(v),
       customId: v => obj.setCustomId(v),
@@ -1140,11 +956,8 @@ class Interpreter {
     const obj  = {
       _type: 'selectmenu', _data: data,
 
-      /** Interação PERMANENTE — ver Button().setCustomId(). */
       setCustomId: v => { data.custom_id = String(v); return obj; },
 
-      /** Interação TEMPORÁRIA — ver Button().onClick(). `fn` recebe o
-       *  objeto de interação (com .values contendo as opções escolhidas). */
       onClick: (fn, opts = {}) => {
         if (typeof fn !== 'function') {
           throw new RuntimeError('SelectMenu().onClick() espera uma função como argumento.');
@@ -1175,7 +988,6 @@ class Interpreter {
         for (const o of list) data.options.push({ label: String(o.label), value: String(o.value), description: o.description, emoji: o.emoji ? (typeof o.emoji === 'string' ? { name: o.emoji } : o.emoji) : undefined });
         return obj;
       },
-      // Legado
       customId:    v => obj.setCustomId(v),
       placeholder: v => obj.setPlaceholder(v),
       minValues:   v => obj.setMinValues(v),
@@ -1185,12 +997,6 @@ class Interpreter {
     return obj;
   }
 
-  /**
-   * Modal (formulário popup). Só pode ser aberto via
-   * `interaction.showModal(modal)` — dentro de on(buttonClick)/on(selectMenu)
-   * — nunca a partir de on(command), que não tem interação de verdade por
-   * trás (é só uma mensagem comum).
-   */
   _makeModal() {
     const data = { title: 'Formulário', components: [] };
     const self = this;
@@ -1199,11 +1005,6 @@ class Interpreter {
 
       setTitle: v => { data.title = String(v).slice(0, 45); return obj; },
 
-      /**
-       * Adiciona um campo de texto.
-       * opts: { style: 'short'|'long', placeholder, required, minLength, maxLength, value }
-       * `style: 'short'` (padrão) é uma linha; `'long'` é um parágrafo.
-       */
       addTextInput: (customId, label, opts = {}) => {
         const STYLE = { short: 1, long: 2 };
         data.components.push({
@@ -1223,13 +1024,6 @@ class Interpreter {
         return obj;
       },
 
-      /**
-       * Registra quem trata o envio do formulário (mesmo InteractionManager
-       * usado por Button/SelectMenu — cache com TTL, expira sozinho).
-       * `fn(interaction, fields)` — `fields` é um objeto com o valor de
-       * cada campo, indexado pelo customId dado em addTextInput().
-       * opts: { user: true|id, ttl: ms }
-       */
       onSubmit: (fn, opts = {}) => {
         if (typeof fn !== 'function') {
           throw new RuntimeError('Modal().onSubmit() espera uma função como argumento.');
@@ -1250,15 +1044,12 @@ class Interpreter {
           },
         });
         data.custom_id = built.custom_id;
-        return obj; // segue sendo o "modal pronto" pra interaction.showModal(modal)
+        return obj; 
       },
     };
     return obj;
   }
 
-  /* ══════════════════════════════════════
-     DATABASE
-     ══════════════════════════════════════ */
   _buildDbObj() {
     const db      = this.db;
     const guildId = this.discordCtx.guildId;

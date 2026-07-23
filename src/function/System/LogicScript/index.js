@@ -1,9 +1,5 @@
 'use strict';
 
-/* ═══════════════════════════════════════════
-   LOGIC SCRIPT — INDEX
-   Ponto de entrada público do sistema.
-   ═══════════════════════════════════════════ */
 
 const { Lexer, LexerError }              = require('./Lexer.js');
 const { Parser, ParseError }              = require('./Parser.js');

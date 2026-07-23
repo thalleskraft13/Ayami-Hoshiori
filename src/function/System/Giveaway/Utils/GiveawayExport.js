@@ -1,21 +1,7 @@
 'use strict';
 
-/**
- * GiveawayExport
- *
- * Gera arquivos de exportação dos participantes de um sorteio
- * nos formatos HTML, CSV, XLSX e JSON.
- *
- * Retorna sempre: { name: string, data: Buffer, contentType: string }
- * compatível com o sistema de arquivos do DiscordRequest.
- */
 class GiveawayExport {
 
-  /**
-   * @param {object} doc     Documento do sorteio
-   * @param {string} format  'html' | 'csv' | 'xlsx' | 'json'
-   * @returns {Promise<{ name: string, data: Buffer, contentType: string }>}
-   */
   static async export(doc, format) {
 
     switch (format) {
@@ -27,9 +13,6 @@ class GiveawayExport {
     }
   }
 
-  /* ─────────────────────────────────────────
-     HTML
-  ───────────────────────────────────────── */
 
   static async _toHTML(doc) {
 
@@ -165,9 +148,6 @@ class GiveawayExport {
     };
   }
 
-  /* ─────────────────────────────────────────
-     CSV
-  ───────────────────────────────────────── */
 
   static async _toCSV(doc) {
 
@@ -198,16 +178,9 @@ class GiveawayExport {
     };
   }
 
-  /* ─────────────────────────────────────────
-     XLSX
-  ───────────────────────────────────────── */
 
   static async _toXLSX(doc) {
 
-    /*
-      Usa a biblioteca 'xlsx' (SheetJS).
-      Instale: npm install xlsx
-    */
     const XLSX = require('xlsx');
 
     const data = [
@@ -228,7 +201,6 @@ class GiveawayExport {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(data);
 
-    // Larguras das colunas
     ws['!cols'] = [
       { wch: 5 }, { wch: 22 }, { wch: 22 }, { wch: 22 },
       { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 40 },
@@ -245,9 +217,6 @@ class GiveawayExport {
     };
   }
 
-  /* ─────────────────────────────────────────
-     JSON
-  ───────────────────────────────────────── */
 
   static async _toJSON(doc) {
 
@@ -283,9 +252,6 @@ class GiveawayExport {
     };
   }
 
-  /* ─────────────────────────────────────────
-     HELPER
-  ───────────────────────────────────────── */
 
   static _esc(str) {
     return String(str ?? '')

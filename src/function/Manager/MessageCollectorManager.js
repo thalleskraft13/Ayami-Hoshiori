@@ -32,19 +32,8 @@ class NextMessageCollector {
     constructor(client) {
         this.client = client;
 
-        /**
-         * Active wait() collectors.
-         * key   → `${channelId}_${userId}`
-         * value → { resolve, reject, expires, timeout }
-         * @type {Map<string, CollectorEntry>}
-         */
         this._waiting = new Map();
 
-        /**
-         * Staff command registry.
-         * Maps command name → handler method (bound to this).
-         * @type {Map<string, Function>}
-         */
         this._staffCommands = this._buildStaffCommandRegistry();
     }
 
@@ -63,12 +52,6 @@ class NextMessageCollector {
         this._runPipeline(message);
     }
 
-    /**
-     * Wait for the next message from a specific user in a specific channel.
-     *
-     * @param {{ channelId: string, userId: string, time?: number }} opts
-     * @returns {Promise<object>} Resolves with the Discord message object.
-     */
     wait({ channelId, userId, time = COLLECTOR_DEFAULT_MS }) {
         return new Promise((resolve, reject) => {
             const key     = this._collectorKey(channelId, userId);
@@ -87,10 +70,6 @@ class NextMessageCollector {
     }
 
 
-    /**
-     * Ordered pipeline executed for every incoming message.
-     * Each stage is isolated — a failure in one does not block the others.
-     */
     async _runPipeline(message) {
         await this._handleLeaks(message);
         await this._handleAdventureXp(message);
@@ -305,10 +284,6 @@ Eu estarei observando.`
 
 
 
-    /**
-     * Route a message to the correct staff command handler.
-     * Uses an internal Map registry instead of chained ifs.
-     */
     _handleStaffCommands(message) {
         if (!message.content?.startsWith('!')) return;
 
@@ -342,13 +317,6 @@ Eu estarei observando.`
     }
 
 
-    /**
-     * !status [tipo] [presenca] <texto>
-     * tipo/presenca são opcionais e podem vir em qualquer ordem —
-     * o handler reconhece as palavras-chave e trata o resto como texto.
-     * Ex: !status jogando ausente Genshin Impact
-     *     !status Só o texto mesmo
-     */
     async _cmdStatus(message, args) {
         if (!args.length) {
             return this._send(
@@ -395,11 +363,6 @@ Eu estarei observando.`
     }
 
 
-    /**
-     * !blacklist banir <id|@usuario> [motivo]
-     * !blacklist desbanir <id|@usuario>
-     * !blacklist consultar <id|@usuario>
-     */
     async _cmdBlacklist(message, args) {
         const [rawSub, rawTarget, ...rest] = args;
         const sub    = rawSub?.toLowerCase();
@@ -462,16 +425,6 @@ Eu estarei observando.`
         }
     }
 
-    /**
-     * !manutencao ativar [mensagem personalizada]
-     * !manutencao desativar
-     * !manutencao status
-     *
-     * Sistema de Atualização Programada — todas as interações (comandos,
-     * botões, selects, modais) passam a exibir um aviso, sem deixar de
-     * funcionar normalmente. Ver DiscordGatewayClient.js#_onInteraction
-     * e function/Utils/MaintenanceMode.js.
-     */
     async _cmdManutencao(message, args) {
         const MaintenanceMode = require('../Utils/MaintenanceMode.js');
         const [rawSub, ...rest] = args;
@@ -501,7 +454,6 @@ Eu estarei observando.`
             return this._send(message.channel_id, '✅ Atualização Programada **desativada** em todos os clusters.');
         }
 
-        // ativar
         const customMsg = rest.join(' ').trim() || null;
         await MaintenanceMode.setActive(this.client, true, { staffId: message.author.id, message: customMsg });
         return this._send(
@@ -516,7 +468,6 @@ Eu estarei observando.`
         const [targetId, rawDays, rawPlan] = args;
         const days = Number(rawDays);
 
-        // Planos concedíveis (FREE não é um plano premium, então fica de fora)
         const grantablePlans = Object.values(PLAN_KEYS).filter(k => k !== PLAN_KEYS.FREE);
         const planList = grantablePlans.map(k => `\`${k}\` (${PLANS[k].name})`).join(', ');
 
@@ -529,9 +480,6 @@ Eu estarei observando.`
             );
         }
 
-        // Plano é opcional, mas se for informado precisa ser válido — sem
-        // isso o comando aceitava qualquer coisa e caía silenciosamente
-        // sempre no plano padrão (Constellation), que era o bug original.
         let planId;
         if (rawPlan) {
             const normalized = normalizePlanKey(rawPlan);
@@ -600,7 +548,6 @@ Eu estarei observando.`
         }
 
         try {
-            // eslint-disable-next-line no-eval
             let result = await eval(`(async () => { ${code} })()`);
 
             if (typeof result !== 'string') {
@@ -621,10 +568,6 @@ Eu estarei observando.`
     }
 
 
-    /**
-     * Resolve a pending wait() collector if one exists for this message.
-     * Deletes the collected message from Discord afterward.
-     */
     _handleCollectors(message) {
         const key  = this._collectorKey(message.channel_id, message.author.id);
         const data = this._waiting.get(key);
@@ -639,7 +582,6 @@ Eu estarei observando.`
         clearTimeout(data.timeout);
         this._waiting.delete(key);
 
-        // Best-effort delete — non-critical if it fails.
         this._deleteMessage(message.channel_id, message.id);
 
         data.resolve(message);
@@ -653,10 +595,6 @@ Eu estarei observando.`
     }
 
 
-    /**
-     * Aceita tanto uma menção (<@id> / <@!id>) quanto um ID cru.
-     * Retorna null se não conseguir extrair um ID válido.
-     */
     _extractUserId(raw) {
         if (!raw) return null;
 

@@ -3,9 +3,6 @@ const {GuildDb} = require("../../Mongodb/guild.js");
 const PremiumKey = require("../../Mongodb/premiumKey.js");
 const { getPlan, isValidPlan, isPlanAtLeast, normalizePlanKey, DEFAULT_PLAN } = require("./PremiumPlans.js");
 
-// Normaliza um planId recebido (pode vir em formato legado, minúsculo) para
-// a chave canônica; se não houver plano nenhum, cai no DEFAULT_PLAN. Usado
-// sempre que vamos GRAVAR um plano no banco, pra auto-curar dados antigos.
 function resolveStoredPlan(rawPlanId) {
   return rawPlanId ? normalizePlanKey(rawPlanId) : DEFAULT_PLAN;
 }
@@ -30,13 +27,8 @@ class PremiumManager {
     else
       user.premium = agora + tempoMs;
 
-    // premiumExpiresAt é o campo canônico lido pelo site (config/premiumPlans.js
-    // #resolveActivePlan) — mantido sempre igual a `premium` pra não haver
-    // divergência entre o que o bot e o site enxergam.
     user.premiumExpiresAt = user.premium;
 
-    // Se já tinha um plano melhor ativo, não rebaixa por engano (ex:
-    // resgatar uma key de Nova Estrela enquanto já é Constellation).
     const planoAtual = user.premiumPlan && isValidPlan(user.premiumPlan) ? getPlan(user.premiumPlan) : null;
     const planoNovo = getPlan(plan);
     if (!planoAtual || planoNovo.order >= planoAtual.order) {
@@ -52,11 +44,6 @@ class PremiumManager {
     };
   }
 
-  /**
-   * Remove o premium de um usuário imediatamente (não espera expirar).
-   * ⚠️ Método que não existia antes — `!userremovepremium` (ver
-   * MessageCollectorManager.js) chamava isso e quebrava com TypeError.
-   */
   async removeUserPremium(userId) {
 
     const user = await UserGlobalDb.findOne({ userId });
@@ -71,13 +58,6 @@ class PremiumManager {
     return { status: true };
   }
 
-  /**
-   * "função ponte": resolve tudo que depende do PLANO do
-   * usuário (não só se tem premium ou não). É a fonte única de verdade
-   * pra limites/benefícios; `getUserPremium()` abaixo é mantido como
-   * wrapper fino por cima dela, pra não quebrar os call sites existentes
-   * que só olham `.status`/`.tempo`/`.expireAt`.
-   */
   async getUserPlan(userId) {
 
     const user = await UserGlobalDb.findOne({ userId });
@@ -106,9 +86,6 @@ class PremiumManager {
     return { status: false, planId: null, plan: null };
   }
 
-  // Mantido por compatibilidade — mesmo formato de retorno de antes
-  // (status/tempo/expireAt), só que agora por baixo dos panos passa pela
-  // função ponte `getUserPlan()`.
   async getUserPremium(userId) {
     return this.getUserPlan(userId);
   }
@@ -126,7 +103,6 @@ class PremiumManager {
       user.premium_guilds = [];
 
 
-    // mais de um número flat igual pra todo mundo.
     const limite = premium.plan.guildLimit;
 
     if (user.premium_guilds.length >= limite) {
@@ -145,7 +121,7 @@ class PremiumManager {
 
     guild.premiumUser = userId;
     guild.premiumTime = expireAt;
-    guild.premiumPlan = premium.planId; // servidor herda o plano de quem ativou
+    guild.premiumPlan = premium.planId; 
 
     await guild.save();
 
@@ -224,15 +200,6 @@ class PremiumManager {
     };
   }
 
-  /**
-   * Remove o premium de um servidor imediatamente.
-   *
-   * `userId` é opcional: quando não informado (ex.: comando administrativo
-   * `!guildremovepremium [GUILD_ID]`, que só tem o guildId), remove o
-   * premium do servidor mesmo sem saber quem foi o usuário que o concedeu —
-   * antes esse caminho silenciosamente não fazia nada porque o método
-   * exigia os dois parâmetros e retornava `status: false` sem limpar nada.
-   */
   async removeGuildPremium(guildId, userId = null) {
 
     const guild = await GuildDb.findOne({ guildId });

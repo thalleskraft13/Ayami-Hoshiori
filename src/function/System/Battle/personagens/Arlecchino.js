@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Arlecchino
- * Elemento: Pyro | Raridade: 5 estrelas
- * Role: DPS principal, off-field debuffer via Marcas do Senhor da Morte
- *
- * Mecânicas únicas:
- * - Marca do Senhor da Morte: destrói a vida de inimigos via marcas acumuladas
- * - C1: Ataque Normal aplica aura Pyro adicional
- * - C2: Habilidade Elemental ganha cooldown reduzido
- */
 module.exports = {
     nome:     'Arlecchino',
     raridade: '5',
@@ -43,7 +33,6 @@ module.exports = {
         1: {
             nome:       'Linhagem dos Réquiems',
             bonusStats: { critRate: 10 },
-            // Efeito extra: Ataque Normal aplica aura Pyro
             trigger: null,
         },
         2: {
@@ -65,7 +54,6 @@ module.exports = {
         6: {
             nome:       'Il Capitano',
             bonusStats: { critDano: 40, atk: 500 },
-            // C6: Supremo não tem cooldown
             trigger: 'supremo_aliado',
             efeitos: [
                 { tipo: 'buff', alvo: 'self', stat: 'atk', valor: 800, duracao: 3 },
@@ -170,7 +158,6 @@ module.exports = {
             nome:    'Sangue da Herdeira',
             trigger: 'inicio_turno',
             efeitos: [
-                // Cada turno consome marcas de morte para curar Arlecchino
                 {
                     tipo:   'cura',
                     alvo:   'self',
