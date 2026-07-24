@@ -362,7 +362,7 @@ class Interpreter {
 
     G.define('Modal', () => this._makeModal());
 
-    G.define('getUser',        async () => this._buildUserObj(ctx.userId));
+    G.define('getUser',        async (id) => this._buildUserObj(extractId(id) ?? ctx.userId));
     G.define('getChannel',     async (id) => this._buildChannelObj(extractId(id) ?? ctx.channelId));
     G.define('getGuild',       async () => this._buildGuildObj(ctx.guildId));
     G.define('getInteraction', () => this._buildInteractionObj(ctx.interaction));
