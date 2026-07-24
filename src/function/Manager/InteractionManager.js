@@ -227,6 +227,16 @@ if (interaction.data?.custom_id === "birthday_register_btn") {
 }
 
 
+            // Só é "nosso" se foi registrado via createButton/createSelect
+            // (prefixo temp_). Qualquer outro formato que chegou até aqui
+            // (ex.: Button().setCustomId() do Logic Script, que é permanente
+            // por design e tratado à parte por on(buttonClick)/on(selectMenu))
+            // NÃO deve ser respondido como "expirado" — isso roubaria a
+            // interação de quem realmente ia tratá-la, fazendo o botão
+            // parecer quebrado mesmo funcionando. Se não é um dos nossos
+            // formatos conhecidos, simplesmente não fazemos nada aqui.
+            if (!customId.startsWith('temp_')) return;
+
             const entry = this._cache.get(customId);
 
             if (!entry || this._isExpired(entry)) {
