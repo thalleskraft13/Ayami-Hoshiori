@@ -950,4 +950,7 @@ module.exports = [
   { id: "fb_filter_activity_type_any_option", render: () => "Cualquiera (empezar o terminar)" },
   { id: "fb_filter_activity_type_starting_option", render: () => "Solo al empezar" },
   { id: "fb_filter_activity_type_ended_option", render: () => "Solo al terminar" },
+
+  { id: "target_flow_unavailable", render: (ctx) =>
+    `${ctx.emoji ?? "😕"} Este botón apunta a una automatización que ya no existe (fue eliminada o desactivada). Pídele a quien lo configuró que recree el botón.` },
 ];

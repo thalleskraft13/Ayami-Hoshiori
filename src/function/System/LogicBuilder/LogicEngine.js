@@ -228,8 +228,42 @@ class LogicEngine {
 
   async runById(flowId, discordCtx) {
     const flow = await FlowModel.findOne({ flowId, enabled: true }).lean();
-    if (!flow) return;
+
+    if (!flow) {
+      // Diagnóstico: antes disso o clique falhava em silêncio (Discord
+      // mostrava erro genérico, sem nenhum log nosso). Isso tornava
+      // impossível saber, na prática, POR QUE um botão permanente parou
+      // de funcionar — se o flowId nunca existiu, se o fluxo foi
+      // apagado, ou se está só desativado. Agora registramos os 3 casos
+      // separadamente e avisamos quem clicou, em vez de deixar o Discord
+      // mostrar "a interação falhou" sem explicação nenhuma.
+      const anyVersion = await FlowModel.findOne({ flowId }).lean();
+      const reason = !anyVersion ? 'not_found' : 'disabled';
+      console.warn(
+        `[LogicEngine] runById: fluxo-alvo indisponível (motivo: ${reason}) — ` +
+        `flowId="${flowId}" guildId="${discordCtx?.guildId}" userId="${discordCtx?.userId}"`
+      );
+      return this._notifyFlowUnavailable(discordCtx, reason);
+    }
+
     return this._runFlow(flow, discordCtx);
+  }
+
+  async _notifyFlowUnavailable(discordCtx, reason) {
+    const interaction = discordCtx?.interaction;
+    if (!interaction) return;
+
+    const ctx     = localeCtx(interaction);
+    const content = this.client.t('logicbuilder.target_flow_unavailable', ctx);
+
+    try {
+      await DiscordRequest(
+        `/interactions/${interaction.id}/${interaction.token}/callback`,
+        { method: 'POST', body: { type: 4, data: { content, flags: 64 } } }
+      );
+    } catch (err) {
+      console.error('[LogicEngine] Falha ao avisar sobre fluxo-alvo indisponível:', err?.message || err);
+    }
   }
 
   async runFlowById(flowId, discordCtx = {}) {

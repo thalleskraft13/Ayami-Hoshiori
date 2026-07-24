@@ -939,4 +939,7 @@ module.exports = [
   { id: "fb_filter_activity_type_any_option", render: () => "Either (starting or ending)" },
   { id: "fb_filter_activity_type_starting_option", render: () => "Only when starting" },
   { id: "fb_filter_activity_type_ended_option", render: () => "Only when ending" },
+
+  { id: "target_flow_unavailable", render: (ctx) =>
+    `${ctx.emoji ?? "😕"} This button points to an automation that no longer exists (it was deleted or disabled). Ask whoever set it up to recreate the button.` },
 ];
