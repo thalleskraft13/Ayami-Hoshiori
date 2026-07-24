@@ -369,6 +369,21 @@ class DiscordGatewayClient extends EventEmitter {
         try {
             this.NextMessageCollector.handle(payload);
             this.guilds.handleDispatch(payload);
+
+            // Botões/selects/modais reais (tickets, sorteios, Logic Builder
+            // flow_trigger, etc.) precisam ser respondidos ANTES de
+            // logicEngine/logicScriptRunner verem o mesmo evento. Os dois
+            // também escutam INTERACTION_CREATE pra extrair seus próprios
+            // triggers (on(buttonClick) do Logic Script, "button_clicked" do
+            // Logic Builder) e, mesmo filtrando pelos custom_ids reservados,
+            // isso é uma segunda camada de proteção contra os dois sistemas
+            // tentarem responder a MESMA interação (o primeiro a responder
+            // "vence"; o outro cai em erro "Unknown interaction"/10062,
+            // porque o token já foi consumido ou expirou enquanto esperava).
+            if (payload.t === 'INTERACTION_CREATE') {
+                await this._onInteraction(payload.d);
+            }
+
             await this.logicEngine.handleGateway(payload);
             
             await this.logicScriptRunner.handleGateway(payload).catch(() => {});
@@ -376,7 +391,6 @@ class DiscordGatewayClient extends EventEmitter {
             if (payload.t === 'MESSAGE_CREATE') return await this._onMessage(payload.d);
 
             if (payload.t === 'READY')             return await this._onReady(payload.d);
-            if (payload.t === 'INTERACTION_CREATE') return await this._onInteraction(payload.d);
             
             if (payload.t === 'VOICE_STATE_UPDATE')   return await this._onVoiceStateUpdate(payload.d);   
         if (payload.t === 'MESSAGE_REACTION_ADD') return await this._onReactionAdd(payload.d);        
