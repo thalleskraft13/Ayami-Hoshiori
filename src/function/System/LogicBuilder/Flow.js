@@ -15,7 +15,7 @@ const COLOR = {
   success: 0x57F287,
 };
 
-const GUIDE_URL = 'https://ayami-hoshiori.discloud.app/logic-builder';
+const GUIDE_URL = 'https://ayami-hoshiori.cpufael.com/logic-builder';
 
 class FlowUI {
 

@@ -13,7 +13,7 @@
   <a href="#-adicionar-ao-servidor"><b>➕ Adicionar ao servidor</b></a> •
   <a href="#-o-que-o-ayami-faz">O que ele faz</a> •
   <a href="#-primeiros-passos">Primeiros passos</a> •
-  <a href="https://ayami-hoshiori.discloud.app/">🌐 Site oficial</a> •
+  <a href="https://ayami-hoshiori.cpufael.com/">🌐 Site oficial</a> •
   <a href="#-suporte">Suporte</a>
 </p>
 
@@ -51,7 +51,7 @@ Por ele dá pra ajustar idioma do servidor, canais de log, cargos automáticos e
 | | |
 |---|---|
 | 🧩 **Logic Builder** | Crie automações do seu jeito, sem escrever nenhuma linha de código — tudo por botões e menus do Discord. "Quando X acontecer, faça Y." |
-| 📜 **Logic Script** *(Premium)* | Para quem quer ir além do visual: uma linguagem de automação própria, com [documentação completa](https://ayami-hoshiori.discloud.app/docs). |
+| 📜 **Logic Script** *(Premium)* | Para quem quer ir além do visual: uma linguagem de automação própria, com [documentação completa](https://ayami-hoshiori.cpufael.com/docs). |
 | 🎟️ **Tickets** | Painéis de atendimento completos, com fila de perguntas, transcrição da conversa e atribuição automática de cargo pra quem atender. |
 | 🎉 **Sorteios** | Crie sorteios com requisitos de entrada, autorização de participantes e exportação da lista de ganhadores. |
 | 🛡️ **Segurança** | Verificação de novos membros, auto-moderação, canal-armadilha e proteção contra raids. |
@@ -74,8 +74,8 @@ Depois de adicionar o bot e rodar `/configurar`, alguns comandos bons pra começ
 
 Precisa de ajuda, encontrou um bug ou quer sugerir algo?
 
-- 🌐 Site oficial: **[ayami-hoshiori.discloud.app](https://ayami-hoshiori.discloud.app/)**
-- 📜 Documentação do Logic Script: **[ayami-hoshiori.discloud.app/docs](https://ayami-hoshiori.discloud.app/docs)**
+- 🌐 Site oficial: **[ayami-hoshiori.cpufael.com](https://ayami-hoshiori.cpufael.com/)**
+- 📜 Documentação do Logic Script: **[ayami-hoshiori.cpufael.com/docs](https://ayami-hoshiori.cpufael.com/docs)**
 - Ou abra um ticket direto pelo comando `/info`
 
 

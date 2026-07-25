@@ -4,7 +4,7 @@ const DiscordRequest = require("../../function/DiscordRequest.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
-const SITE_URL = "https://ayami-hoshiori.discloud.app";
+const SITE_URL = "https://ayami-hoshiori.cpufael.com";
 
 
 function cv2Text(content) {

@@ -9,7 +9,7 @@ const MAX_EMBEDS       = 10;
 const IS_COMPONENTS_V2 = 1 << 15;
 const FLOWS_PER_PAGE   = 24; 
 
-const SITE_URL = "https://ayami-hoshiori.discloud.app";
+const SITE_URL = "https://ayami-hoshiori.cpufael.com";
 
 const CTYPE = Object.freeze({
   ACTION_ROW   : 1,

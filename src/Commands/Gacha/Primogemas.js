@@ -4,7 +4,7 @@ const UserEconomy = require("../../function/Gacha/Economy.js");
 const UserGlobal = require("../../Mongodb/userglobal.js");
 const PremiumManager = require("../../function/Utils/PremiumManager.js")
 
-const SITE_URL = "https://ayami-hoshiori.discloud.app";
+const SITE_URL = "https://ayami-hoshiori.cpufael.com";
 
 function MS(time) {
   const value = parseInt(time);

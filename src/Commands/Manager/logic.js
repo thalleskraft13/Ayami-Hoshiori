@@ -8,7 +8,7 @@ const { LogicScriptModel, LogicRunLogModel } = require('../../Mongodb/logicScrip
 const { LogicScriptConfig } = require('../../Mongodb/logicScriptConfig.js');
 const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
-const DASHBOARD_BASE_URL = 'https://ayami-hoshiori.discloud.app';
+const DASHBOARD_BASE_URL = 'https://ayami-hoshiori.cpufael.com';
 
 function cv2Text(content)          { return { type: 10, content }; }
 function cv2Divider(spacing = 1)   { return { type: 14, divider: true, spacing }; }

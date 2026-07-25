@@ -4,7 +4,7 @@ const getPerm         = require("../../function/Utils/GetPerm.js");
 const DiscordRequest  = require("../../function/DiscordRequest.js");
 const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
-const SITE_URL = "https://ayami-hoshiori.discloud.app";
+const SITE_URL = "https://ayami-hoshiori.cpufael.com";
 
 const COLOR = {
   main: 0x7C8FFF,
