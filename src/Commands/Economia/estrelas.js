@@ -7,6 +7,12 @@ const DiscordRequest   = require("../../function/DiscordRequest.js");
 const PremiumManager  = require("../../function/Utils/PremiumManager.js");
 const { getPlan }     = require("../../function/Utils/PremiumPlans.js");
 const { economyContext, respond, respondError } = require("../../function/Estrelas/interactionHelpers.js");
+const CV2             = require("../../function/Messages/CV2.js");
+const Inventory       = require("../../function/Estrelas/Inventory.js");
+const { CATEGORIAS }  = require("../../function/Estrelas/data/itemCatalog.js");
+
+const INV_ITENS_POR_PAGINA = 5;
+const INV_ACCENT_COLOR     = 0xF5C542;
 
 const DAILY_BASE        = 150;
 const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -396,18 +402,195 @@ async function handleRanking(interaction, client, escopo = 'global') {
 }
 
 async function handleInventario(interaction, client, userId) {
-  const user = await UserGlobalDb.findOne({ userId });
-  const inv = user?.inventario ?? { itens: [], ferramentas: [], decoracoes: [] };
+  const categorias = await Inventory.getInventario(userId);
+  const containers = buildInventarioMain(client, userId, categorias);
 
-  const embed = new MessageEmbed()
-    .setTitle("🎒 Seu Inventário")
-    .setColor("Gold")
-    .addField("📦 Itens", inv.itens.length ? `${inv.itens.length} item(ns)` : "Vazio", true)
-    .addField("🔧 Ferramentas", inv.ferramentas.length ? `${inv.ferramentas.length} ferramenta(s)` : "Vazio", true)
-    .addField("🎀 Decorações", inv.decoracoes.length ? `${inv.decoracoes.length} decoração(ões)` : "Vazio", true)
-    .setFooter("Novos itens chegam com Exploração, Jardim e Oficina.");
+  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    body: { type: 4, data: CV2.payload(containers) }
+  });
+}
 
-  return await respond(interaction, embed);
+function invUpdate(interaction, containers) {
+  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    body: { type: 7, data: CV2.payload(containers) }
+  });
+}
+
+function invFechar(interaction) {
+  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    body: {
+      type: 7,
+      data: CV2.payload(CV2.container([
+        CV2.text("🎒 Inventário fechado.")
+      ], { accentColor: INV_ACCENT_COLOR }))
+    }
+  });
+}
+
+function buildInventarioMain(client, userId, categorias) {
+  const linhas = CATEGORIAS
+    .map(c => `${c.emoji} **${c.nome}** — ${categorias[c.id].length} tipo(s)`)
+    .join("\n");
+
+  const catSelect = client.interactions.createSelect({
+    user: userId,
+    data: {
+      placeholder: "📂 Selecione uma categoria",
+      options: CATEGORIAS.map(c => ({
+        label: c.nome,
+        value: c.id,
+        emoji: { name: c.emoji },
+        description: `${categorias[c.id].length} tipo(s) de item`
+      }))
+    },
+    funcao: async (si) => {
+      const catId = si.data.values[0];
+      const catCategorias = await Inventory.getInventario(userId);
+      const containers = buildInventarioCategoria(client, userId, catId, catCategorias, 0);
+      return invUpdate(si, containers);
+    }
+  });
+
+  const fecharBtn = client.interactions.createButton({
+    user: userId,
+    data: { label: "Fechar", style: 4, emoji: { name: "✖️" } },
+    funcao: async (bi) => invFechar(bi)
+  });
+
+  return CV2.container([
+    CV2.text(`🎒 **Inventário** — <@${userId}>`),
+    CV2.text(linhas || "Seu inventário ainda está vazio."),
+    CV2.separator(),
+    CV2.text("Selecione uma categoria abaixo para ver os itens."),
+    CV2.row(catSelect),
+    CV2.row(fecharBtn)
+  ], { accentColor: INV_ACCENT_COLOR });
+}
+
+function buildInventarioCategoria(client, userId, catId, categorias, pagina) {
+  const cat = CATEGORIAS.find(c => c.id === catId) ?? CATEGORIAS[0];
+  const itens = categorias[catId] ?? [];
+  const maxPagina = Math.max(0, Math.ceil(itens.length / INV_ITENS_POR_PAGINA) - 1);
+  const paginaAtual = Math.min(Math.max(0, pagina), maxPagina);
+  const paginaItens = itens.slice(
+    paginaAtual * INV_ITENS_POR_PAGINA,
+    paginaAtual * INV_ITENS_POR_PAGINA + INV_ITENS_POR_PAGINA
+  );
+
+  const blocos = [
+    CV2.text(`${cat.emoji} **${cat.nome}** — ${itens.length} tipo(s)`),
+    CV2.text(itens.length ? `Página ${paginaAtual + 1}/${maxPagina + 1}` : "Nenhum item nesta categoria ainda."),
+    CV2.separator()
+  ];
+
+  for (const item of paginaItens) {
+    blocos.push(CV2.text(`**${item.emoji} ${item.nome}** \`x${item.quantidade}\`\n${item.descricao}`));
+  }
+
+  if (paginaItens.length) {
+    blocos.push(CV2.separator());
+
+    const detalheSelect = client.interactions.createSelect({
+      user: userId,
+      data: {
+        placeholder: "🔍 Ver detalhes de um item",
+        options: paginaItens.map(item => ({
+          label: item.nome.slice(0, 100),
+          value: item.id,
+          emoji: { name: item.emoji },
+          description: `Quantidade: ${item.quantidade}`
+        }))
+      },
+      funcao: async (si) => {
+        const catCategorias = await Inventory.getInventario(userId);
+        const alvo = (catCategorias[catId] ?? []).find(i => i.id === si.data.values[0]);
+        if (!alvo) return invUpdate(si, buildInventarioCategoria(client, userId, catId, catCategorias, paginaAtual));
+        return invUpdate(si, buildInventarioDetalhe(client, userId, catId, paginaAtual, alvo));
+      }
+    });
+
+    blocos.push(CV2.row(detalheSelect));
+  }
+
+  const navBotoes = [
+    client.interactions.createButton({
+      user: userId,
+      data: { label: "Voltar", style: 2, emoji: { name: "🔙" } },
+      funcao: async (bi) => {
+        const catCategorias = await Inventory.getInventario(userId);
+        return invUpdate(bi, buildInventarioMain(client, userId, catCategorias));
+      }
+    })
+  ];
+
+  if (paginaAtual > 0) {
+    navBotoes.push(client.interactions.createButton({
+      user: userId,
+      data: { label: "Anterior", style: 2, emoji: { name: "◀️" } },
+      funcao: async (bi) => {
+        const catCategorias = await Inventory.getInventario(userId);
+        return invUpdate(bi, buildInventarioCategoria(client, userId, catId, catCategorias, paginaAtual - 1));
+      }
+    }));
+  }
+
+  if (paginaAtual < maxPagina) {
+    navBotoes.push(client.interactions.createButton({
+      user: userId,
+      data: { label: "Próxima", style: 2, emoji: { name: "▶️" } },
+      funcao: async (bi) => {
+        const catCategorias = await Inventory.getInventario(userId);
+        return invUpdate(bi, buildInventarioCategoria(client, userId, catId, catCategorias, paginaAtual + 1));
+      }
+    }));
+  }
+
+  navBotoes.push(client.interactions.createButton({
+    user: userId,
+    data: { label: "Fechar", style: 4, emoji: { name: "✖️" } },
+    funcao: async (bi) => invFechar(bi)
+  }));
+
+  blocos.push(CV2.row(...navBotoes));
+
+  return CV2.container(blocos, { accentColor: INV_ACCENT_COLOR });
+}
+
+function buildInventarioDetalhe(client, userId, catId, pagina, item) {
+  const detalhes = [
+    `**Nome:** ${item.emoji} ${item.nome}`,
+    `**Quantidade:** \`${item.quantidade}\``,
+    `**Categoria:** ${item.categoria}`,
+    `**Descrição:** ${item.descricao}`,
+    `**Origem:** ${item.origem}`,
+    `**Raridade:** ${item.raridade}`
+  ].join("\n");
+
+  const voltarBtn = client.interactions.createButton({
+    user: userId,
+    data: { label: "Voltar", style: 2, emoji: { name: "🔙" } },
+    funcao: async (bi) => {
+      const catCategorias = await Inventory.getInventario(userId);
+      return invUpdate(bi, buildInventarioCategoria(client, userId, catId, catCategorias, pagina));
+    }
+  });
+
+  const fecharBtn = client.interactions.createButton({
+    user: userId,
+    data: { label: "Fechar", style: 4, emoji: { name: "✖️" } },
+    funcao: async (bi) => invFechar(bi)
+  });
+
+  return CV2.container([
+    CV2.text(`🔎 **${item.emoji} ${item.nome}**`),
+    CV2.separator(),
+    CV2.text(detalhes),
+    CV2.separator(),
+    CV2.row(voltarBtn, fecharBtn)
+  ], { accentColor: INV_ACCENT_COLOR });
 }
 
 async function handleMigrar(interaction, client, userId) {
