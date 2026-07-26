@@ -42,10 +42,6 @@ function formatarConquistas(ids = []) {
   return ids.map(id => NOMES_CONQUISTAS[id] ?? id);
 }
 
-/**
- * Encontra a option "focused" (a que o usuário está digitando agora) em uma
- * interação de autocomplete, seja ela top-level ou dentro de um subcomando.
- */
 function getFocusedOption(interaction) {
   const opts = interaction.data.options ?? [];
 
@@ -60,10 +56,6 @@ function getFocusedOption(interaction) {
   return null;
 }
 
-/**
- * Filtra um catálogo (objeto { id: { nome, emoji, ... } }) pelo texto digitado
- * e retorna no formato de choices do Discord ({ name, value }), até 25 itens.
- */
 function filtrarCatalogo(catalogo, textoDigitado = '') {
   const busca = textoDigitado.toLowerCase();
 

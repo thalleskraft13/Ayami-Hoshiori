@@ -3,9 +3,7 @@
 const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const Companion     = require("../../function/Estrelas/Companion.js");
 const CATALOGO      = require("../../function/Estrelas/data/companheiros.js");
-const { economyContext, respond, respondError } = require("../../function/Estrelas/interactionHelpers.js");
-
-const CHOICES_COMPANHEIROS = Object.values(CATALOGO).map(c => ({ name: `${c.emoji} ${c.nome}`, value: c.id }));
+const { economyContext, respond, respondError, getFocusedOption } = require("../../function/Estrelas/interactionHelpers.js");
 
 module.exports = {
   info: {
@@ -40,7 +38,7 @@ module.exports = {
             name: 'companheiro',
             description: 'Qual companheiro ativar',
             required: true,
-            choices: CHOICES_COMPANHEIROS
+            autocomplete: true
           }
         ]
       },
@@ -55,7 +53,7 @@ module.exports = {
             name: 'companheiro',
             description: 'Qual companheiro alimentar',
             required: true,
-            choices: CHOICES_COMPANHEIROS
+            autocomplete: true
           }
         ]
       },
@@ -70,7 +68,7 @@ module.exports = {
             name: 'companheiro',
             description: 'Qual companheiro evoluir',
             required: true,
-            choices: CHOICES_COMPANHEIROS
+            autocomplete: true
           }
         ]
       }
@@ -98,6 +96,16 @@ module.exports = {
       console.error('[/companheiros]', err);
       return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
     }
+  },
+
+  async autocomplete(interaction, client) {
+    const focused = getFocusedOption(interaction);
+    if (!focused || focused.name !== 'companheiro') return [];
+
+    const userId = interaction.member?.user?.id ?? interaction.user?.id;
+    const companion = new Companion(userId, economyContext(interaction, client));
+
+    return companion.autocompletePossuidos(focused.value);
   }
 };
 

@@ -29,6 +29,17 @@ class Companion {
     }));
   }
 
+  async autocompletePossuidos(textoDigitado = '') {
+    const busca = String(textoDigitado ?? '').toLowerCase();
+    const companheiros = await CompanionDb.find({ userId: this.userId });
+
+    return companheiros
+      .map(c => CATALOGO[c.companheiroId])
+      .filter(item => item && item.nome.toLowerCase().includes(busca))
+      .slice(0, 25)
+      .map(item => ({ name: item.nome, value: item.id }));
+  }
+
   async _getPossuido(companheiroId) {
     const companheiro = await CompanionDb.findOne({ userId: this.userId, companheiroId });
     if (!companheiro)

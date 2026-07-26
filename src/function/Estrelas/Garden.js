@@ -20,8 +20,6 @@ class Garden {
       return GardenDb.create({ userId: this.userId });
     }
 
-    // Auto-repara documentos antigos/incompletos (ex: criados por uma versão
-    // anterior com bug, ou parcialmente salvos) para nunca quebrar o comando.
     let precisaSalvar = false;
 
     if (!Array.isArray(garden.plots) || garden.plots.length === 0) {

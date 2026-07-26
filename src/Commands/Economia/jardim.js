@@ -4,7 +4,7 @@ const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const Garden        = require("../../function/Estrelas/Garden.js");
 const SEMENTES      = require("../../function/Estrelas/data/sementes.js");
 const { construcoes: CONSTRUCOES, decoracoes: DECORACOES } = require("../../function/Estrelas/data/construcoes.js");
-const { economyContext, respond, respondError, formatarConquistas, getFocusedOption, filtrarCatalogo } = require("../../function/Estrelas/interactionHelpers.js");
+const { economyContext, respond, respondError, formatarConquistas } = require("../../function/Estrelas/interactionHelpers.js");
 
 module.exports = {
   info: {
@@ -46,7 +46,12 @@ module.exports = {
             name: 'semente',
             description: 'Semente a plantar',
             required: true,
-            autocomplete: true
+            choices: [
+              { name: 'Flor Estelar', value: 'flor_estelar' },
+              { name: 'Cogumelo Lunar', value: 'cogumelo_lunar' },
+              { name: 'Arvorezinha', value: 'arvore_pequena' },
+              { name: 'Broto de Cristal', value: 'cristal_bruto' },
+            ]
           }
         ]
       },
@@ -76,7 +81,10 @@ module.exports = {
             name: 'construcao',
             description: 'O que construir',
             required: true,
-            autocomplete: true
+            choices: [
+              { name: 'Canteiro Extra', value: 'canteiro_extra' },
+              { name: 'Cerca Decorativa', value: 'cerca_decorativa' },
+            ]
           }
         ]
       },
@@ -91,7 +99,10 @@ module.exports = {
             name: 'decoracao',
             description: 'O que adicionar',
             required: true,
-            autocomplete: true
+            choices: [
+              { name: 'Lanterna Estelar', value: 'lanterna_estelar' },
+              { name: 'Banco de Pedra', value: 'banco_de_pedra' },
+            ]
           }
         ]
       }
@@ -119,24 +130,6 @@ module.exports = {
     } catch (err) {
       console.error('[/jardim]', err);
       return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
-    }
-  },
-
-  async autocomplete(interaction, client) {
-    const focused = getFocusedOption(interaction);
-    if (!focused) return [];
-
-    const texto = String(focused.value ?? '');
-
-    switch (focused.name) {
-      case 'semente':
-        return filtrarCatalogo(SEMENTES, texto);
-      case 'construcao':
-        return filtrarCatalogo(CONSTRUCOES, texto);
-      case 'decoracao':
-        return filtrarCatalogo(DECORACOES, texto);
-      default:
-        return [];
     }
   }
 };

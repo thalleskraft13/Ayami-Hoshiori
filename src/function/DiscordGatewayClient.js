@@ -600,13 +600,6 @@ async _onReactionAdd(d) {
         }
     }
 
-    /**
-     * Responde interações de autocomplete (enquanto o usuário digita em uma option
-     * marcada com `autocomplete: true`). O comando deve exportar um método
-     * `autocomplete(interaction, client)` que retorna um array de até 25
-     * `{ name, value }`. Se o comando não tiver esse método, responde lista vazia
-     * em vez de deixar o Discord travado sem resposta.
-     */
     async _executeAutocomplete(interaction) {
         const command = this.commands.get(interaction.data.name);
 
