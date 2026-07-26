@@ -4,7 +4,7 @@ const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const Garden        = require("../../function/Estrelas/Garden.js");
 const SEMENTES      = require("../../function/Estrelas/data/sementes.js");
 const { construcoes: CONSTRUCOES, decoracoes: DECORACOES } = require("../../function/Estrelas/data/construcoes.js");
-const { economyContext, respond, respondError, formatarConquistas } = require("../../function/Estrelas/interactionHelpers.js");
+const { economyContext, respond, respondError, formatarConquistas, getFocusedOption, filtrarCatalogo } = require("../../function/Estrelas/interactionHelpers.js");
 
 module.exports = {
   info: {
@@ -46,12 +46,7 @@ module.exports = {
             name: 'semente',
             description: 'Semente a plantar',
             required: true,
-            choices: [
-              { name: '🌸 Flor Estelar',    value: 'flor_estelar' },
-              { name: '🍄 Cogumelo Lunar',  value: 'cogumelo_lunar' },
-              { name: '🌱 Arvorezinha',     value: 'arvore_pequena' },
-              { name: '💎 Broto de Cristal', value: 'cristal_bruto' },
-            ]
+            autocomplete: true
           }
         ]
       },
@@ -81,10 +76,7 @@ module.exports = {
             name: 'construcao',
             description: 'O que construir',
             required: true,
-            choices: [
-              { name: '🪴 Canteiro Extra',    value: 'canteiro_extra' },
-              { name: '🪵 Cerca Decorativa',  value: 'cerca_decorativa' },
-            ]
+            autocomplete: true
           }
         ]
       },
@@ -99,10 +91,7 @@ module.exports = {
             name: 'decoracao',
             description: 'O que adicionar',
             required: true,
-            choices: [
-              { name: '🏮 Lanterna Estelar', value: 'lanterna_estelar' },
-              { name: '🪨 Banco de Pedra',   value: 'banco_de_pedra' },
-            ]
+            autocomplete: true
           }
         ]
       }
@@ -131,6 +120,24 @@ module.exports = {
       console.error('[/jardim]', err);
       return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
     }
+  },
+
+  async autocomplete(interaction, client) {
+    const focused = getFocusedOption(interaction);
+    if (!focused) return [];
+
+    const texto = String(focused.value ?? '');
+
+    switch (focused.name) {
+      case 'semente':
+        return filtrarCatalogo(SEMENTES, texto);
+      case 'construcao':
+        return filtrarCatalogo(CONSTRUCOES, texto);
+      case 'decoracao':
+        return filtrarCatalogo(DECORACOES, texto);
+      default:
+        return [];
+    }
   }
 };
 
@@ -141,15 +148,19 @@ async function handleVer(interaction, garden) {
     if (!p.sementeId) return `\`#${p.index}\` — vazio`;
     const semente = SEMENTES[p.sementeId];
     const pronto = Date.now() >= p.prontoEm;
-    return `\`#${p.index}\` — ${semente.emoji} ${semente.nome} ${pronto ? "✅ pronto!" : `⏳ <t:${Math.floor(p.prontoEm / 1000)}:R>`}`;
+    return `\`#${p.index}\` — ${semente.emoji} ${semente.nome} ${pronto ? "(pronto)" : `— pronto <t:${Math.floor(p.prontoEm / 1000)}:R>`}`;
   });
 
+  const nomesConstrucoes = g.construcoes.map(id => CONSTRUCOES[id]?.nome ?? id);
+  const nomesDecoracoes  = g.decoracoes.map(id => DECORACOES[id]?.nome ?? id);
+
   const embed = new MessageEmbed()
-    .setTitle("🌿 Seu Jardim")
+    .setTitle("Seu Jardim")
     .setColor("Green")
     .addField("Canteiros", linhasCanteiros.join('\n') || "Nenhum", false)
-    .addField("Construções", g.construcoes.length ? g.construcoes.join(', ') : "Nenhuma", true)
-    .addField("Decorações", g.decoracoes.length ? g.decoracoes.join(', ') : "Nenhuma", true);
+    .addField("Construções", nomesConstrucoes.length ? nomesConstrucoes.join(', ') : "Nenhuma", true)
+    .addField("Decorações", nomesDecoracoes.length ? nomesDecoracoes.join(', ') : "Nenhuma", true)
+    .setFooter("Use /jardim plantar, colher, construir ou decorar.");
 
   return await respond(interaction, embed);
 }
@@ -158,7 +169,7 @@ async function handlePlantar(interaction, garden, canteiro, sementeId) {
   const { semente } = await garden.plantar(canteiro, sementeId);
 
   const embed = new MessageEmbed()
-    .setTitle(`${semente.emoji} Plantado!`)
+    .setTitle(`${semente.emoji} Plantado`)
     .setColor("Green")
     .setDescription(`**${semente.nome}** plantada no canteiro \`#${canteiro}\`. Fica pronta em **${semente.tempoMinutos} minutos**.`);
 
@@ -169,16 +180,16 @@ async function handleColher(interaction, garden, canteiro) {
   const { semente, conquistas } = await garden.colher(canteiro);
 
   const listaColheita = Object.entries(semente.colheita)
-    .map(([nome, qtd]) => `\`+${qtd}\` ${nome}`)
+    .map(([nome, qtd]) => `+${qtd} ${nome}`)
     .join('\n');
 
   const embed = new MessageEmbed()
-    .setTitle(`${semente.emoji} Colhido!`)
+    .setTitle(`${semente.emoji} Colhido`)
     .setColor("Green")
     .addField("Você recebeu", listaColheita, false);
 
   if (conquistas?.length) {
-    embed.addField("🏅 Conquistas desbloqueadas", formatarConquistas(conquistas).join('\n'), false);
+    embed.addField("Conquistas desbloqueadas", formatarConquistas(conquistas).join('\n'), false);
   }
 
   return await respond(interaction, embed);
@@ -188,7 +199,7 @@ async function handleConstruir(interaction, garden, construcaoId) {
   const { construcao } = await garden.construir(construcaoId);
 
   const embed = new MessageEmbed()
-    .setTitle(`${construcao.emoji} Construído!`)
+    .setTitle(`${construcao.emoji} Construído`)
     .setColor("Green")
     .setDescription(`**${construcao.nome}** adicionado ao seu jardim.`);
 
@@ -199,7 +210,7 @@ async function handleDecorar(interaction, garden, decoracaoId) {
   const { decoracao } = await garden.decorar(decoracaoId);
 
   const embed = new MessageEmbed()
-    .setTitle(`${decoracao.emoji} Decorado!`)
+    .setTitle(`${decoracao.emoji} Decorado`)
     .setColor("Green")
     .setDescription(`**${decoracao.nome}** adicionado ao seu jardim. (+5 reputação)`);
 

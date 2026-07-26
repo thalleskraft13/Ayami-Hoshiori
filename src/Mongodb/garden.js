@@ -11,6 +11,15 @@ const plotSchema = new Schema({
 
 const DEFAULT_PLOTS = 4;
 
+function buildDefaultPlots(length = DEFAULT_PLOTS) {
+  return Array.from({ length }, (_, i) => ({
+    index: i,
+    sementeId: null,
+    plantadoEm: null,
+    prontoEm: null
+  }));
+}
+
 const gardenSchema = new Schema({
   userId: {
     type: String,
@@ -20,12 +29,7 @@ const gardenSchema = new Schema({
 
   plots: {
     type: [plotSchema],
-    default: () => Array.from({ length: DEFAULT_PLOTS }, (_, i) => ({
-      index: i,
-      sementeId: null,
-      plantadoEm: null,
-      prontoEm: null
-    }))
+    default: () => buildDefaultPlots()
   },
 
   construcoes: {
@@ -41,4 +45,9 @@ const gardenSchema = new Schema({
   collection: 'gardens'
 });
 
-module.exports = models.Garden || model('Garden', gardenSchema);
+const GardenModel = models.Garden || model('Garden', gardenSchema);
+
+GardenModel.DEFAULT_PLOTS = DEFAULT_PLOTS;
+GardenModel.buildDefaultPlots = buildDefaultPlots;
+
+module.exports = GardenModel;

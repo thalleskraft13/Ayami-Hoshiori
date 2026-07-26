@@ -53,10 +53,13 @@ const XP_PER_INTERACTION   = 10;
 const ESTRELAS_PER_LEVEL   = 800;
 
 const INTERACTION_TYPE = Object.freeze({
-    APPLICATION_COMMAND: 2,
-    MESSAGE_COMPONENT:   3,
-    MODAL_SUBMIT:        5,
+    APPLICATION_COMMAND:              2,
+    MESSAGE_COMPONENT:                3,
+    APPLICATION_COMMAND_AUTOCOMPLETE: 4,
+    MODAL_SUBMIT:                     5,
 });
+
+const AUTOCOMPLETE_CALLBACK_TYPE = 8;
 
 const RECONNECT_BASE_DELAY_MS = 5_000;
 const RECONNECT_MAX_DELAY_MS  = 30_000;
@@ -588,10 +591,48 @@ async _onReactionAdd(d) {
         switch (interaction.type) {
             case INTERACTION_TYPE.APPLICATION_COMMAND:
                 return this._executeCommand(interaction);
+            case INTERACTION_TYPE.APPLICATION_COMMAND_AUTOCOMPLETE:
+                return this._executeAutocomplete(interaction);
             case INTERACTION_TYPE.MESSAGE_COMPONENT:
                 return this.interactions.handleComponent(interaction);
             case INTERACTION_TYPE.MODAL_SUBMIT:
                 return this.interactions.handleModal(interaction);
+        }
+    }
+
+    /**
+     * Responde interações de autocomplete (enquanto o usuário digita em uma option
+     * marcada com `autocomplete: true`). O comando deve exportar um método
+     * `autocomplete(interaction, client)` que retorna um array de até 25
+     * `{ name, value }`. Se o comando não tiver esse método, responde lista vazia
+     * em vez de deixar o Discord travado sem resposta.
+     */
+    async _executeAutocomplete(interaction) {
+        const command = this.commands.get(interaction.data.name);
+
+        let choices = [];
+        try {
+            if (command?.autocomplete) {
+                choices = (await command.autocomplete(interaction, this)) ?? [];
+            }
+        } catch (err) {
+            console.error(`[Autocomplete] Error resolving /${interaction.data.name}:`, err);
+            choices = [];
+        }
+
+        try {
+            await DiscordRequest(
+                `/interactions/${interaction.id}/${interaction.token}/callback`,
+                {
+                    method: 'POST',
+                    body: {
+                        type: AUTOCOMPLETE_CALLBACK_TYPE,
+                        data: { choices: choices.slice(0, 25) },
+                    },
+                }
+            );
+        } catch (err) {
+            console.error(`[Autocomplete] Failed to respond to /${interaction.data.name}:`, err);
         }
     }
 

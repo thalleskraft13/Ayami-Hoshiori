@@ -405,6 +405,50 @@ class Economy {
   }
 
   /**
+   * Verifica se o usuário tem saldo de Estrelas suficiente, sem debitar nada.
+   */
+  async hasBalance(amount) {
+    if (!amount) return true;
+    const user = await this._getOrCreate();
+    return user.estrelas.atm >= amount;
+  }
+
+  /**
+   * Verifica se o usuário tem todos os recursos de `custos` (ex: { madeira: 2, pedra: 1 }),
+   * sem remover nada. Útil para validar antes de uma operação com múltiplos custos.
+   */
+  async hasResources(custos = {}) {
+    const atuais = await this.getResources();
+    return Object.entries(custos).every(([nome, quantidade]) => (atuais[nome] ?? 0) >= quantidade);
+  }
+
+  /**
+   * Remove vários recursos de uma vez, validando TODOS antes de remover qualquer um.
+   * Evita o problema de debitar parcialmente (ex: remover madeira e só depois descobrir
+   * que faltava pedra, deixando o usuário sem madeira e sem a construção).
+   */
+  async removeResources(custos = {}) {
+    const entradas = Object.entries(custos).filter(([, quantidade]) => quantidade > 0);
+    if (!entradas.length) return {};
+
+    const atuais = await this.getResources();
+    const faltando = entradas.filter(([nome, quantidade]) => (atuais[nome] ?? 0) < quantidade);
+
+    if (faltando.length) {
+      const detalhe = faltando
+        .map(([nome, quantidade]) => `${nome} (precisa de ${quantidade}, tem ${atuais[nome] ?? 0})`)
+        .join(', ');
+      throw new Error(`Recursos insuficientes: ${detalhe}.`);
+    }
+
+    const resultado = {};
+    for (const [nome, quantidade] of entradas) {
+      resultado[nome] = await this.removeResource(nome, quantidade);
+    }
+    return resultado;
+  }
+
+  /**
    * Migra o saldo legado de "primogemas" (removido do schema, mas que pode
    * ainda existir em documentos antigos no MongoDB) para Estrelas.
    * Idempotente: uma vez migrado, marca `estrelas.migrado = true` e nunca repete.

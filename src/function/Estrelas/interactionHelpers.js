@@ -42,4 +42,38 @@ function formatarConquistas(ids = []) {
   return ids.map(id => NOMES_CONQUISTAS[id] ?? id);
 }
 
-module.exports = { economyContext, respond, respondError, formatarConquistas };
+/**
+ * Encontra a option "focused" (a que o usuário está digitando agora) em uma
+ * interação de autocomplete, seja ela top-level ou dentro de um subcomando.
+ */
+function getFocusedOption(interaction) {
+  const opts = interaction.data.options ?? [];
+
+  for (const opt of opts) {
+    if (opt.focused) return opt;
+    if (Array.isArray(opt.options)) {
+      const nested = opt.options.find(o => o.focused);
+      if (nested) return nested;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Filtra um catálogo (objeto { id: { nome, emoji, ... } }) pelo texto digitado
+ * e retorna no formato de choices do Discord ({ name, value }), até 25 itens.
+ */
+function filtrarCatalogo(catalogo, textoDigitado = '') {
+  const busca = textoDigitado.toLowerCase();
+
+  return Object.values(catalogo)
+    .filter(item => item.nome.toLowerCase().includes(busca))
+    .slice(0, 25)
+    .map(item => ({
+      name: item.nome,
+      value: item.id
+    }));
+}
+
+module.exports = { economyContext, respond, respondError, formatarConquistas, getFocusedOption, filtrarCatalogo };
