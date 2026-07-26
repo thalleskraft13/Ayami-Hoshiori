@@ -28,6 +28,7 @@ const LogicEngine = require('./System/LogicBuilder/LogicEngine.js')
 const FlowUI = require('./System/LogicBuilder/Flow.js');
 const BirthdayManager = require("./System/BirthdayManager.js");
 const LibraryManager = require("./System/LogicBuilder/LibraryManager.js");
+const Missions = require("./Estrelas/Missions.js");
 const MessageLibraryManager = require("./System/MessageLibrary/LibraryManager.js");
 const MissionManager = require('./System/MissionManager.js');
 const SecuritySystem = require("./System/SecuritySystem.js")
@@ -406,6 +407,8 @@ if (payload.t === 'CHANNEL_CREATE')      return await this._onChannelCreate(payl
 if (payload.t === 'GUILD_MEMBER_UPDATE') return await this._onMemberUpdate(payload.d);
 if (payload.t === 'WEBHOOKS_UPDATE')     return await this._onWebhooksUpdate(payload.d);
 if (payload.t === 'AUTO_MODERATION_ACTION_EXECUTION') return await this._onAutoModExecution(payload.d);
+if (payload.t === 'THREAD_CREATE') return await this._onThreadCreate(payload.d);
+if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onScheduledEventUserAdd(payload.d);
 
         } catch (err) {
             console.error('[Dispatch] Unhandled error:', err);
@@ -416,6 +419,10 @@ if (payload.t === 'AUTO_MODERATION_ACTION_EXECUTION') return await this._onAutoM
   await this.security.handleMessage(data);
   await this.activityAnalytics.handleMessage(data);
   await this.giveaway.messageTracker.onMessage(data)
+
+  if (data.guild_id && data.author?.id && !data.author?.bot) {
+    Missions.progress(data.author.id, { client: this, guildId: data.guild_id, actor: data.author }, 'enviar_mensagens', 1);
+  }
 }
     
     async _onMemberAdd(data) {
@@ -463,6 +470,7 @@ async _onAutoModExecution(data) {
         this._voiceSessions.set(key, { guildId, joinedAt: Date.now() });
 
         this.missionManager.trackEvent(d.user_id, 'join_voice', 1, guildId).catch(() => {});
+        if (guildId) Missions.progress(d.user_id, { client: this, guildId }, 'entrar_voz', 1);
         return;
     }
 
@@ -473,6 +481,7 @@ async _onAutoModExecution(data) {
         const minutes = Math.floor((Date.now() - session.joinedAt) / 60_000);
         if (minutes > 0) {
             this.missionManager.trackEvent(d.user_id, 'voice_minutes', minutes, session.guildId).catch(() => {});
+            Missions.progress(d.user_id, { client: this, guildId: session.guildId }, 'permanecer_voz', minutes);
         }
     }
 
@@ -481,6 +490,7 @@ async _onAutoModExecution(data) {
         const minutes = Math.floor((Date.now() - session.joinedAt) / 60_000);
         if (minutes > 0) {
             this.missionManager.trackEvent(d.user_id, 'voice_minutes', minutes, session.guildId).catch(() => {});
+            Missions.progress(d.user_id, { client: this, guildId: session.guildId }, 'permanecer_voz', minutes);
         }
         this._voiceSessions.set(key, { guildId, joinedAt: Date.now() });
     }
@@ -494,6 +504,23 @@ async _onReactionAdd(d) {
 
     await this.activityAnalytics.handleReactionAdd(d).catch(() => {});
     await this.missionManager.trackEvent(userId, 'add_reaction', 1, guildId).catch(() => {});
+    Missions.progress(userId, { client: this, guildId }, 'reagir_mensagem', 1);
+}
+
+async _onThreadCreate(data) {
+    const guildId = data.guild_id;
+    const userId  = data.owner_id;
+    if (!guildId || !userId) return;
+
+    Missions.progress(userId, { client: this, guildId }, 'criar_topico', 1);
+}
+
+async _onScheduledEventUserAdd(data) {
+    const guildId = data.guild_id;
+    const userId  = data.user_id;
+    if (!guildId || !userId) return;
+
+    Missions.progress(userId, { client: this, guildId }, 'participar_evento', 1);
 }
 
 
@@ -675,6 +702,12 @@ async _onReactionAdd(d) {
 
         try {
             await command.execute(interaction, this);
+
+            const guildId = interaction.guild_id;
+            const userId  = interaction.member?.user?.id ?? interaction.user?.id;
+            if (guildId && userId) {
+                Missions.progress(userId, { client: this, guildId }, 'usar_comando', 1);
+            }
         } catch (err) {
             console.error(`[Command] Error executing /${interaction.data.name}:`, err);
         }

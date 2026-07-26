@@ -2,6 +2,7 @@
 
 const { randomUUID }   = require('crypto');
 const DiscordRequest   = require('../../DiscordRequest.js');
+const LibraryRewards   = require('../../Estrelas/LibraryRewards.js');
 const { SavedMessageModel } = require('../../../Mongodb/savedMessage.js');
 const { CreatorProfileModel } = require('../../../Mongodb/flow.js'); // perfil de criador é compartilhado com a Biblioteca de Fluxos
 const {
@@ -49,6 +50,10 @@ class MessageLibraryManager {
       components:   sanitized.components,
       status:       'approved'
     });
+
+    const tipoRecompensa = sanitized.type === 'components_v2' ? 'publish_components_v2' : 'publish_embed';
+    LibraryRewards.conceder(authorId, tipoRecompensa, { client: this.client }, { libId: entry.libId })
+      .catch(err => console.error('[LibraryRewards] Falha ao recompensar publicação:', err));
 
     return entry;
   }
@@ -229,6 +234,11 @@ class MessageLibraryManager {
       $inc: { 'stats.installs': 1, 'stats.weeklyScore': 5 }
     });
 
+    if (entry.authorId !== userId) {
+      LibraryRewards.conceder(entry.authorId, 'download', { client: this.client }, { libId })
+        .catch(err => console.error('[LibraryRewards] Falha ao recompensar download:', err));
+    }
+
     return draft;
   }
 
@@ -278,6 +288,7 @@ class MessageLibraryManager {
     if (rating < 1 || rating > 5) throw new Error(this.client.t('biblioteca.invalid_rating', ctx));
 
     const existing = await LibraryMessageRatingModel.findOne({ libId, userId });
+    const primeiraAvaliacao = !existing;
 
     if (existing) {
       existing.rating = rating;
@@ -295,6 +306,14 @@ class MessageLibraryManager {
         'stats.ratingCount': all.length
       }
     });
+
+    if (primeiraAvaliacao) {
+      const entry = await LibraryMessageModel.findOne({ libId }).select({ authorId: 1 }).lean();
+      if (entry?.authorId && entry.authorId !== userId) {
+        LibraryRewards.conceder(entry.authorId, 'avaliacao', { client: this.client }, { libId })
+          .catch(err => console.error('[LibraryRewards] Falha ao recompensar avaliação:', err));
+      }
+    }
 
     return { avg: Math.round(avg * 10) / 10, count: all.length };
   }

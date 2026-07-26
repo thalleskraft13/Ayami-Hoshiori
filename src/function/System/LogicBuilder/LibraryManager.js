@@ -2,6 +2,7 @@
 
 const { randomUUID }   = require('crypto');
 const DiscordRequest   = require('../../DiscordRequest.js');
+const LibraryRewards   = require('../../Estrelas/LibraryRewards.js');
 const {
   LibraryFlowModel,
   LibraryRatingModel,
@@ -64,6 +65,9 @@ class LibraryManager {
       templateVars,
       status:       'approved'
     });
+
+    LibraryRewards.conceder(authorId, 'publish_logic_engine', { client: this.client }, { libId: entry.libId })
+      .catch(err => console.error('[LibraryRewards] Falha ao recompensar publicação:', err));
 
     return entry;
   }
@@ -253,6 +257,11 @@ class LibraryManager {
       }
     });
 
+    if (entry.authorId !== userId) {
+      LibraryRewards.conceder(entry.authorId, 'download', { client: this.client }, { libId })
+        .catch(err => console.error('[LibraryRewards] Falha ao recompensar download:', err));
+    }
+
     return createdIds;
   }
 
@@ -302,6 +311,7 @@ class LibraryManager {
     if (rating < 1 || rating > 5) throw new Error(this.client.t('logicbuilder.err_rating_range', ctx));
 
     const existing = await LibraryRatingModel.findOne({ libId, userId });
+    const primeiraAvaliacao = !existing;
 
     if (existing) {
       existing.rating = rating;
@@ -319,6 +329,14 @@ class LibraryManager {
         'stats.ratingCount': all.length
       }
     });
+
+    if (primeiraAvaliacao) {
+      const entry = await LibraryFlowModel.findOne({ libId }).select({ authorId: 1 }).lean();
+      if (entry?.authorId && entry.authorId !== userId) {
+        LibraryRewards.conceder(entry.authorId, 'avaliacao', { client: this.client }, { libId })
+          .catch(err => console.error('[LibraryRewards] Falha ao recompensar avaliação:', err));
+      }
+    }
 
     return { avg: Math.round(avg * 10) / 10, count: all.length };
   }

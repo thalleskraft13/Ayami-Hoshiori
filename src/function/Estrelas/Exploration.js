@@ -4,6 +4,7 @@ const ExpeditionDb = require("../../Mongodb/expedition.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const CompanionDb  = require("../../Mongodb/companion.js");
 const Economy      = require("./Economy.js");
+const Missions     = require("./Missions.js");
 const REGIOES      = require("./data/regioes.js");
 const DURACOES     = require("./data/duracoes.js");
 const COMPANHEIROS = require("./data/companheiros.js");
@@ -63,6 +64,11 @@ class Exploration {
       coletado: false
     });
 
+    await Missions.progress(this.userId, this.context, 'explorar_regiao', 1);
+    if (companheiroId) {
+      await Missions.progress(this.userId, this.context, 'enviar_expedicao', 1);
+    }
+
     return { expedicao, regiao, duracao };
   }
 
@@ -115,6 +121,12 @@ class Exploration {
     );
 
     const conquistas = await this._checarConquistas(user);
+
+    await Missions.progress(this.userId, this.context, 'concluir_expedicao', 1);
+    const totalRecursos = Object.values(recursosGanhos).reduce((soma, qtd) => soma + qtd, 0);
+    if (totalRecursos > 0) {
+      await Missions.progress(this.userId, this.context, 'coletar_recurso', totalRecursos);
+    }
 
     // Descoberta de companheiro: primeira expedição concluída na região correta
     let companheiroDescoberto = null;

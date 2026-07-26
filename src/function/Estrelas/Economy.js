@@ -209,6 +209,12 @@ class Economy {
     });
   }
 
+  async _registrarProgressoMissao(acao, quantidade) {
+    if (!this.context?.guildId) return;
+    const Missions = require("./Missions.js");
+    await Missions.progress(this.userId, this.context, acao, quantidade);
+  }
+
   async add(amount, { action = "add", metadata = null } = {}) {
     if (amount <= 0)
       throw new Error("Quantidade deve ser maior que 0.");
@@ -246,6 +252,11 @@ class Economy {
     });
 
     await this._sendLog(log);
+
+    if (action !== 'missao_recompensa') {
+      await this._registrarProgressoMissao('ganhar_estrelas', amount);
+    }
+
     return log;
   }
 
@@ -292,6 +303,11 @@ class Economy {
     });
 
     await this._sendLog(log);
+
+    if (action !== 'transfer_send') {
+      await this._registrarProgressoMissao('gastar_estrelas', amount);
+    }
+
     return log;
   }
 
@@ -354,6 +370,8 @@ class Economy {
       });
       throw err;
     }
+
+    await this._registrarProgressoMissao('transferir_estrelas', amount);
 
     return { origin: this.userId, destination: destinationUserId, amount, motivo };
   }
@@ -432,6 +450,102 @@ class Economy {
     const resultado = {};
     for (const [nome, quantidade] of entradas) {
       resultado[nome] = await this.removeResource(nome, quantidade);
+    }
+    return resultado;
+  }
+
+  // ================================
+  // Itens de inventário (produzidos na Oficina, obtidos na Exploração, etc.)
+  // ================================
+
+  async addItem(itemId, quantidade = 1) {
+    if (quantidade <= 0)
+      throw new Error("Quantidade deve ser maior que 0.");
+
+    await this._getOrCreate();
+
+    const jaExiste = await UserGlobalSchema.findOneAndUpdate(
+      { userId: this.userId, "inventario.itens.itemId": itemId },
+      { $inc: { "inventario.itens.$.quantidade": quantidade } },
+      { new: true }
+    );
+
+    if (jaExiste) return jaExiste;
+
+    return UserGlobalSchema.findOneAndUpdate(
+      { userId: this.userId },
+      {
+        $push: {
+          "inventario.itens": { itemId, quantidade, obtidoEm: Date.now() }
+        }
+      },
+      { new: true, upsert: false }
+    );
+  }
+
+  async removeItem(itemId, quantidade = 1) {
+    if (quantidade <= 0)
+      throw new Error("Quantidade deve ser maior que 0.");
+
+    const user = await this._getOrCreate();
+    const item = (user.inventario?.itens ?? []).find(i => i.itemId === itemId);
+
+    if (!item || item.quantidade < quantidade)
+      throw new Error(`Item insuficiente no inventário: ${itemId}.`);
+
+    if (item.quantidade === quantidade) {
+      await UserGlobalSchema.updateOne(
+        { userId: this.userId },
+        { $pull: { "inventario.itens": { itemId } } }
+      );
+      return 0;
+    }
+
+    await UserGlobalSchema.updateOne(
+      { userId: this.userId, "inventario.itens.itemId": itemId },
+      { $inc: { "inventario.itens.$.quantidade": -quantidade } }
+    );
+
+    return item.quantidade - quantidade;
+  }
+
+  async getItems() {
+    const user = await this._getOrCreate();
+    return user.inventario?.itens ?? [];
+  }
+
+  async getItemQuantidade(itemId) {
+    const itens = await this.getItems();
+    return itens.find(i => i.itemId === itemId)?.quantidade ?? 0;
+  }
+
+  async hasItems(custos = {}) {
+    const entradas = Object.entries(custos).filter(([, quantidade]) => quantidade > 0);
+    if (!entradas.length) return true;
+
+    const itens = await this.getItems();
+    const mapa = new Map(itens.map(i => [i.itemId, i.quantidade]));
+
+    return entradas.every(([itemId, quantidade]) => (mapa.get(itemId) ?? 0) >= quantidade);
+  }
+
+  async removeItems(custos = {}) {
+    const entradas = Object.entries(custos).filter(([, quantidade]) => quantidade > 0);
+    if (!entradas.length) return {};
+
+    if (!(await this.hasItems(custos))) {
+      const itens = await this.getItems();
+      const mapa = new Map(itens.map(i => [i.itemId, i.quantidade]));
+      const faltando = entradas
+        .filter(([itemId, quantidade]) => (mapa.get(itemId) ?? 0) < quantidade)
+        .map(([itemId, quantidade]) => `${itemId} (precisa de ${quantidade}, tem ${mapa.get(itemId) ?? 0})`)
+        .join(', ');
+      throw new Error(`Itens insuficientes: ${faltando}.`);
+    }
+
+    const resultado = {};
+    for (const [itemId, quantidade] of entradas) {
+      resultado[itemId] = await this.removeItem(itemId, quantidade);
     }
     return resultado;
   }

@@ -3,6 +3,7 @@
 const MessageEmbed    = require("../../function/Messages/EmbedBuild.js");
 const UserGlobalDb    = require("../../Mongodb/userglobal.js");
 const Economy         = require("../../function/Estrelas/Economy.js");
+const DiscordRequest   = require("../../function/DiscordRequest.js");
 const PremiumManager  = require("../../function/Utils/PremiumManager.js");
 const { getPlan }     = require("../../function/Utils/PremiumPlans.js");
 const { economyContext, respond, respondError } = require("../../function/Estrelas/interactionHelpers.js");
@@ -123,7 +124,20 @@ module.exports = {
           'en-US': 'Shows the Stars leaderboard',
           'en-GB': 'Shows the Stars leaderboard',
           'es-ES': 'Muestra el ranking de Estrellas',
-        }
+        },
+        options: [
+          {
+            type: 3,
+            name: 'escopo',
+            description: 'Ranking global ou apenas deste servidor (padrão: global)',
+            name_localizations: { 'en-US': 'scope', 'en-GB': 'scope', 'es-ES': 'ambito' },
+            required: false,
+            choices: [
+              { name: 'Global', value: 'global' },
+              { name: 'Servidor', value: 'servidor' }
+            ]
+          }
+        ]
       },
       {
         type: 1,
@@ -164,7 +178,7 @@ module.exports = {
         case 'diario':    return await handleDiario(interaction, client, userId);
         case 'transferir': return await handleTransferir(interaction, client, userId, getOpt('destino'), getOpt('quantidade'), getOpt('motivo'));
         case 'historico': return await handleHistorico(interaction, client, userId);
-        case 'ranking':   return await handleRanking(interaction, client);
+        case 'ranking':   return await handleRanking(interaction, client, getOpt('escopo') ?? 'global');
         case 'inventario': return await handleInventario(interaction, client, userId);
         case 'migrar':    return await handleMigrar(interaction, client, userId);
         default:
@@ -296,28 +310,85 @@ async function handleHistorico(interaction, client, userId) {
   return await respond(interaction, embed);
 }
 
-async function handleRanking(interaction, client) {
-  const top = await UserGlobalDb.find({})
+async function fetchGuildMemberIds(guildId) {
+  const ids = new Set();
+  let after = undefined;
+
+  for (let pagina = 0; pagina < 10; pagina++) {
+    const params = new URLSearchParams({ limit: '1000' });
+    if (after) params.set('after', after);
+
+    const lote = await DiscordRequest(`/guilds/${guildId}/members?${params}`, { method: 'GET' });
+    if (!Array.isArray(lote) || !lote.length) break;
+
+    for (const membro of lote) {
+      if (membro?.user?.id) ids.add(membro.user.id);
+    }
+
+    if (lote.length < 1000) break;
+    after = lote[lote.length - 1]?.user?.id;
+    if (!after) break;
+  }
+
+  return ids;
+}
+
+async function resolverPerfil(userId) {
+  try {
+    const user = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+    const nome = user?.global_name || user?.username || userId;
+    return `[${nome}](https://discord.com/users/${userId})`;
+  } catch {
+    return `[Usuário desconhecido](https://discord.com/users/${userId})`;
+  }
+}
+
+async function handleRanking(interaction, client, escopo = 'global') {
+  const guildId = interaction.guild_id ?? null;
+
+  if (escopo === 'servidor' && !guildId) {
+    return await respondError(interaction, "O ranking do servidor só pode ser usado dentro de um servidor.");
+  }
+
+  let query = {};
+
+  if (escopo === 'servidor') {
+    const memberIds = await fetchGuildMemberIds(guildId);
+    if (!memberIds.size) {
+      const embed = new MessageEmbed()
+        .setTitle("Ranking de Estrelas — Servidor")
+        .setColor("Gray")
+        .setDescription("Ainda não há ninguém no ranking deste servidor.");
+
+      return await respond(interaction, embed);
+    }
+    query = { userId: { $in: [...memberIds] } };
+  }
+
+  const top = await UserGlobalDb.find(query)
     .sort({ 'estrelas.atm': -1 })
     .limit(10)
     .select({ userId: 1, 'estrelas.atm': 1 });
 
+  const titulo = escopo === 'servidor' ? "Ranking de Estrelas — Servidor" : "Ranking de Estrelas — Global";
+
   if (!top.length) {
     const embed = new MessageEmbed()
-      .setTitle("🏆 Ranking de Estrelas")
+      .setTitle(titulo)
       .setColor("Gray")
       .setDescription("Ainda não há ninguém no ranking.");
 
     return await respond(interaction, embed);
   }
 
-  const medalhas = ["🥇", "🥈", "🥉"];
+  const perfis = await Promise.all(top.map(u => resolverPerfil(u.userId)));
+
   const linhas = top.map((u, i) =>
-    `${medalhas[i] ?? `\`#${i + 1}\``} <@${u.userId}> — **${u.estrelas.atm.toLocaleString()}** Estrelas`
+    `\`#${i + 1}\` ${perfis[i]} — **${u.estrelas.atm.toLocaleString()}** Estrelas`
   );
 
   const embed = new MessageEmbed()
-    .setTitle("🏆 Ranking de Estrelas")
+    .setTitle(titulo)
     .setColor("Gold")
     .setDescription(linhas.join("\n"));
 

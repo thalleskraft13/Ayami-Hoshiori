@@ -3,6 +3,7 @@
 const CompanionDb  = require("../../Mongodb/companion.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const Economy      = require("./Economy.js");
+const Missions     = require("./Missions.js");
 const CATALOGO     = require("./data/companheiros.js");
 
 const FELICIDADE_MAX = 100;
@@ -73,6 +74,8 @@ class Companion {
     companheiro.felicidade = Math.min(FELICIDADE_MAX, companheiro.felicidade + FELICIDADE_POR_ALIMENTAR);
     await companheiro.save();
 
+    await Missions.progress(this.userId, this.context, 'alimentar', 1);
+
     return companheiro;
   }
 
@@ -96,6 +99,8 @@ class Companion {
     companheiro.nivel += 1;
     companheiro.felicidade = Math.round(FELICIDADE_MAX * 0.5);
     await companheiro.save();
+
+    await Missions.progress(this.userId, this.context, 'evoluir', 1);
 
     return companheiro;
   }

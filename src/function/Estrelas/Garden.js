@@ -3,6 +3,7 @@
 const GardenDb   = require("../../Mongodb/garden.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const Economy    = require("./Economy.js");
+const Missions   = require("./Missions.js");
 const SEMENTES   = require("./data/sementes.js");
 const { construcoes: CONSTRUCOES, decoracoes: DECORACOES } = require("./data/construcoes.js");
 
@@ -67,6 +68,9 @@ class Garden {
 
     garden.markModified('plots');
     await garden.save();
+
+    await Missions.progress(this.userId, this.context, 'plantar', 1);
+
     return { plot, semente };
   }
 
@@ -98,6 +102,8 @@ class Garden {
 
     const user = await UserGlobalDb.findOne({ userId: this.userId });
     const conquistas = await this._checarConquistas(user);
+
+    await Missions.progress(this.userId, this.context, 'colher', 1);
 
     return { semente, conquistas };
   }
@@ -136,6 +142,9 @@ class Garden {
     }
 
     await garden.save();
+
+    await Missions.progress(this.userId, this.context, 'construir', 1);
+
     return { construcao, garden };
   }
 
@@ -166,6 +175,8 @@ class Garden {
 
     // Decorar contribui para a reputação (colecionismo).
     await UserGlobalDb.updateOne({ userId: this.userId }, { $inc: { reputacao: 5 } });
+
+    await Missions.progress(this.userId, this.context, 'decorar', 1);
 
     return { decoracao, garden };
   }
