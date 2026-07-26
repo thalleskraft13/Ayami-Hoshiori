@@ -333,9 +333,9 @@ async function fetchGuildMemberIds(guildId) {
   return ids;
 }
 
-async function resolverPerfil(userId) {
+async function resolverPerfil(userId, client) {
   try {
-    const user = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+    const user = await client.users.getUser(userId);
     const nome = user?.global_name || user?.username || userId;
     return `[${nome}](https://discord.com/users/${userId})`;
   } catch {
@@ -381,7 +381,7 @@ async function handleRanking(interaction, client, escopo = 'global') {
     return await respond(interaction, embed);
   }
 
-  const perfis = await Promise.all(top.map(u => resolverPerfil(u.userId)));
+  const perfis = await Promise.all(top.map(u => resolverPerfil(u.userId, client)));
 
   const linhas = top.map((u, i) =>
     `\`#${i + 1}\` ${perfis[i]} — **${u.estrelas.atm.toLocaleString()}** Estrelas`

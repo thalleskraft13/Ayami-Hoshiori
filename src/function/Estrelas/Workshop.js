@@ -3,6 +3,7 @@
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const Economy      = require("./Economy.js");
 const Missions     = require("./Missions.js");
+const Collections  = require("./Collections.js");
 const RECEITAS     = require("./data/receitas.js");
 
 class Workshop {
@@ -62,6 +63,8 @@ class Workshop {
     );
 
     await Missions.progress(this.userId, this.context, 'fabricar', quantidadeProduzida);
+    Collections.registrar(this.userId, 'itens', receita.resultado.itemId);
+    Collections.registrar(this.userId, 'receitas', receita.id);
 
     return { receita, quantidade, quantidadeProduzida };
   }

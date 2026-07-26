@@ -4,7 +4,7 @@ const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const Exploration  = require("../../function/Estrelas/Exploration.js");
 const DURACOES     = require("../../function/Estrelas/data/duracoes.js");
 const COMPANHEIROS = require("../../function/Estrelas/data/companheiros.js");
-const { economyContext, respond, respondError, formatarConquistas } = require("../../function/Estrelas/interactionHelpers.js");
+const { economyContext, defer, respond, respondError, formatarConquistas } = require("../../function/Estrelas/interactionHelpers.js");
 
 module.exports = {
   info: {
@@ -90,19 +90,24 @@ module.exports = {
 
     const exploration = new Exploration(userId, economyContext(interaction, client));
 
+    const SUBCOMANDOS_PESADOS = new Set(['iniciar', 'coletar']);
+    if (SUBCOMANDOS_PESADOS.has(sub)) {
+      await defer(interaction);
+    }
+
     try {
       switch (sub) {
         case 'regioes': return await handleRegioes(interaction, exploration);
         case 'mapa':    return await handleMapa(interaction, exploration);
-        case 'iniciar': return await handleIniciar(interaction, exploration, getOpt('regiao'), getOpt('duracao'));
+        case 'iniciar': return await handleIniciar(interaction, client, exploration, getOpt('regiao'), getOpt('duracao'));
         case 'status':  return await handleStatus(interaction, exploration);
-        case 'coletar': return await handleColetar(interaction, exploration);
+        case 'coletar': return await handleColetar(interaction, client, exploration);
         default:
-          return await respondError(interaction, "Subcomando desconhecido.");
+          return await respondError(interaction, "Subcomando desconhecido.", client);
       }
     } catch (err) {
       console.error('[/explorar]', err);
-      return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
+      return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.", client);
     }
   }
 };
@@ -142,7 +147,7 @@ async function handleMapa(interaction, exploration) {
   return await respond(interaction, embed);
 }
 
-async function handleIniciar(interaction, exploration, regiaoId, duracaoKey) {
+async function handleIniciar(interaction, client, exploration, regiaoId, duracaoKey) {
   const { regiao, duracao } = await exploration.iniciar(regiaoId, duracaoKey);
 
   const embed = new MessageEmbed()
@@ -150,7 +155,7 @@ async function handleIniciar(interaction, exploration, regiaoId, duracaoKey) {
     .setColor("Green")
     .setDescription(`Sua expedição para **${regiao.nome}** vai durar **${duracao.label}**.\nUse \`/explorar coletar\` quando estiver pronta.`);
 
-  return await respond(interaction, embed);
+  return await respond(interaction, embed, client);
 }
 
 async function handleStatus(interaction, exploration) {
@@ -180,7 +185,7 @@ async function handleStatus(interaction, exploration) {
   return await respond(interaction, embed);
 }
 
-async function handleColetar(interaction, exploration) {
+async function handleColetar(interaction, client, exploration) {
   const resultado = await exploration.coletar();
   const { regiao, estrelas, recursosGanhos, bonus, conquistas, companheiroDescoberto } = resultado;
 
@@ -207,5 +212,5 @@ async function handleColetar(interaction, exploration) {
     embed.addField("🏅 Conquistas desbloqueadas", formatarConquistas(conquistas).join('\n'), false);
   }
 
-  return await respond(interaction, embed);
+  return await respond(interaction, embed, client);
 }

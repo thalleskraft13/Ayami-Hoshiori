@@ -71,7 +71,7 @@ async function getPerm({ channel = false, id, guildId, bot = false, client = nul
     : id;
 
   const member = useCache
-    ? await client.guilds.fetchMember(guildId, userId)
+    ? await client.guilds.getGuildMember(guildId, userId)
     : await DiscordRequest(`/guilds/${guildId}/members/${userId}`);
 
   const guild = useCache

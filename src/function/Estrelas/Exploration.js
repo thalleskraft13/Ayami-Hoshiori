@@ -5,6 +5,7 @@ const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const CompanionDb  = require("../../Mongodb/companion.js");
 const Economy      = require("./Economy.js");
 const Missions     = require("./Missions.js");
+const Collections  = require("./Collections.js");
 const REGIOES      = require("./data/regioes.js");
 const DURACOES     = require("./data/duracoes.js");
 const COMPANHEIROS = require("./data/companheiros.js");
@@ -68,6 +69,7 @@ class Exploration {
     if (companheiroId) {
       await Missions.progress(this.userId, this.context, 'enviar_expedicao', 1);
     }
+    Collections.registrar(this.userId, 'regioes', regiaoId);
 
     return { expedicao, regiao, duracao };
   }
@@ -135,6 +137,7 @@ class Exploration {
       if (!jaTem) {
         await CompanionDb.create({ userId: this.userId, companheiroId: regiao.companheiro });
         companheiroDescoberto = regiao.companheiro;
+        Collections.registrar(this.userId, 'companheiros', regiao.companheiro);
       }
     }
 

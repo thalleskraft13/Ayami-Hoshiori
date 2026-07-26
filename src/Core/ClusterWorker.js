@@ -29,8 +29,21 @@ async function main() {
         });
     }
 
+    if (msg?.type === 'GET_CACHE_STATS') {
+        const data = client.getCacheStats();
+        parentPort.postMessage({
+            type:      'CACHE_STATS_RESPONSE',
+            requestId: msg.requestId,
+            data,
+        });
+    }
+
     if (msg?.type === 'ALL_STATS_RESPONSE') {
         client.emit('all_stats_response', msg);
+    }
+
+    if (msg?.type === 'ALL_CACHE_STATS_RESPONSE') {
+        client.emit('all_cache_stats_response', msg);
     }
 
     if (msg?.type === 'SET_PRESENCE') {

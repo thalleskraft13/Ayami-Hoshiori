@@ -39,7 +39,7 @@ class ExecutionContext {
   async _fetchUser() {
     if (this._userData !== null) return this._userData;
     if (!this.discord.userId) return null;
-    this._userData = await DiscordRequest(`/users/${this.discord.userId}`).catch(() => null);
+    this._userData = await this.client.users.getUser(this.discord.userId).catch(() => null);
     return this._userData;
   }
 

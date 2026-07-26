@@ -1265,7 +1265,7 @@ class GiveawaySystem {
     const configurerId = interaction.member?.user?.id || interaction.user?.id;
     let configurerTag  = `<@${configurerId}>`;
     try {
-      const u    = await DiscordRequest(`/users/${configurerId}`, { method: 'GET' });
+      const u    = await this.client.users.getUser(configurerId);
       configurerTag = u.global_name
         ? `${u.global_name} (@${u.username})`
         : `@${u.username}`;

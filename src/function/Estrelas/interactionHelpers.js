@@ -11,25 +11,36 @@ function economyContext(interaction, client) {
   };
 }
 
-function respond(interaction, embed) {
+function defer(interaction) {
   return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
     method: "POST",
-    body: {
-      type: 4,
-      data: {
-        embeds: [embed.build ? embed.build() : embed]
-      }
-    }
+    body: { type: 5, data: {} }
+  }).then(() => { interaction.__deferred = true; });
+}
+
+function respond(interaction, embed, client) {
+  const data = { embeds: [embed.build ? embed.build() : embed] };
+
+  if (interaction.__deferred && client) {
+    return DiscordRequest(`/webhooks/${client.clientId}/${interaction.token}/messages/@original`, {
+      method: "PATCH",
+      body: data
+    });
+  }
+
+  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    body: { type: 4, data }
   });
 }
 
-function respondError(interaction, mensagem) {
+function respondError(interaction, mensagem, client) {
   const embed = new MessageEmbed()
     .setTitle("⚠️ Não deu certo")
     .setDescription(mensagem)
     .setColor("Red");
 
-  return respond(interaction, embed);
+  return respond(interaction, embed, client);
 }
 
 const NOMES_CONQUISTAS = {
@@ -68,4 +79,4 @@ function filtrarCatalogo(catalogo, textoDigitado = '') {
     }));
 }
 
-module.exports = { economyContext, respond, respondError, formatarConquistas, getFocusedOption, filtrarCatalogo };
+module.exports = { economyContext, defer, respond, respondError, formatarConquistas, getFocusedOption, filtrarCatalogo };

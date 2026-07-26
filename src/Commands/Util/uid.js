@@ -138,7 +138,7 @@ module.exports = {
         userdb = await db.findOne({ userId: userID });
       }
 
-      const user = await DiscordRequest(`/users/${userID}`, { method: "GET" });
+      const user = await client.users.getUser(userID);
       const userName = user.global_name || user.username;
       const userUrl = `https://discord.com/users/${userID}`;
 

@@ -457,7 +457,7 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
 
   async _getMember(guildId, userId) {
     try {
-      return await DiscordRequest(`/guilds/${guildId}/members/${userId}`);
+      return await this.client.guilds.getGuildMember(guildId, userId);
     } catch {
       return null;
     }

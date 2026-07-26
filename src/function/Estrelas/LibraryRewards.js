@@ -2,6 +2,7 @@
 
 const Economy      = require("./Economy.js");
 const Missions     = require("./Missions.js");
+const Collections  = require("./Collections.js");
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
 const RECOMPENSAS  = require("./data/recompensasBiblioteca.js");
 
@@ -29,6 +30,7 @@ class LibraryRewards {
         { $inc: { "estatisticas.criacoesPublicadas": 1 } }
       );
       await Missions.progress(userId, context, 'publicar', 1);
+      Collections.registrar(userId, 'criacoes', metadataExtra?.libId ?? `${tipo}_${Date.now()}`);
     }
 
     const acaoMissao = ACAO_MISSAO_POR_TIPO[tipo];

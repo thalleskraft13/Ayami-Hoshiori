@@ -43,9 +43,7 @@ module.exports = {
       let options = interaction.data.options;
       let userId = options[0].options[0].value; 
       
-      let user = await DiscordRequest(`/users/${userId}`, {
-        method: 'GET'
-      });
+      let user = await client.users.getUser(userId);
 
       const ctx = localeCtx(interaction, { name: user.global_name ? user.global_name : user.username });
 

@@ -1076,7 +1076,7 @@ async function _resolveAuthorName(lib, authorId, client, ctx, fallback = null) {
   } catch {}
 
   try {
-    const userData = await DiscordRequest(`/users/${authorId}`);
+    const userData = await client.users.getUser(authorId);
     return userData?.global_name || userData?.username || client.t('biblioteca.fallback_user', { ...ctx, suffix: authorId.slice(-4) });
   } catch {}
 
@@ -1315,7 +1315,7 @@ async function _flowPublicar(interaction, client, lib, userId, guildId, e) {
 
   let authorName = client.t('biblioteca.fallback_anon', ctx);
   try {
-    const userData = await DiscordRequest(`/users/${userId}`);
+    const userData = await client.users.getUser(userId);
     authorName = userData.global_name || userData.username || client.t('biblioteca.fallback_anon', ctx);
   } catch {}
 
@@ -1481,7 +1481,7 @@ async function _flowAtualizar(interaction, client, lib, opts, userId, guildId, e
 
   let authorName = entry.authorName || client.t('biblioteca.fallback_anon', ctx);
   try {
-    const userData = await DiscordRequest(`/users/${userId}`);
+    const userData = await client.users.getUser(userId);
     authorName = userData.global_name || userData.username || authorName;
   } catch {}
 
@@ -1764,7 +1764,7 @@ async function _renderProfile(interaction, client, targetId, userId, e) {
   let displayName = flowProfile.username;
   if (!displayName || displayName === targetId) {
     try {
-      const userData = await DiscordRequest(`/users/${targetId}`);
+      const userData = await client.users.getUser(targetId);
       displayName = userData?.global_name || userData?.username || client.t('biblioteca.fallback_user', { ...ctx, suffix: targetId.slice(-4) });
     } catch {
       displayName = client.t('biblioteca.fallback_user', { ...ctx, suffix: targetId.slice(-4) });
@@ -2160,7 +2160,7 @@ async function _embedsPublicar(interaction, client, lib, userId, guildId, e) {
 
   let authorName = client.t('biblioteca.fallback_anon', ctx);
   try {
-    const userData = await DiscordRequest(`/users/${userId}`);
+    const userData = await client.users.getUser(userId);
     authorName = userData.global_name || userData.username || client.t('biblioteca.fallback_anon', ctx);
   } catch {}
 
@@ -2293,7 +2293,7 @@ async function _embedsAtualizar(interaction, client, lib, opts, userId, guildId,
 
   let authorName = entry.authorName || client.t('biblioteca.fallback_anon', ctx);
   try {
-    const userData = await DiscordRequest(`/users/${userId}`);
+    const userData = await client.users.getUser(userId);
     authorName = userData.global_name || userData.username || authorName;
   } catch {}
 

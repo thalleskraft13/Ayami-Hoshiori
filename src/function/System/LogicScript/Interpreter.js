@@ -789,8 +789,8 @@ class Interpreter {
   async _buildUserObj(userId) {
     userId = extractId(userId);
     if (!userId) return null;
-    const user   = await DiscordRequest(`/users/${userId}`).catch(() => null);
-    const member = await DiscordRequest(`/guilds/${this.discordCtx.guildId}/members/${userId}`).catch(() => null);
+    const user   = await this.client.users.getUser(userId).catch(() => null);
+    const member = await this.client.guilds.getGuildMember(this.discordCtx.guildId, userId).catch(() => null);
     const self   = this;
     return {
       id:          userId,

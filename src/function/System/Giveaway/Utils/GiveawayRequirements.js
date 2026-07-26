@@ -87,7 +87,7 @@ class GiveawayRequirements {
 
   static async _checkRequiredRole(req, participant, guildId, client) {
 
-    const member = await this._getMember(guildId, participant.userId);
+    const member = await this._getMember(guildId, participant.userId, client);
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const has = member.roles.includes(req.value);
@@ -99,7 +99,7 @@ class GiveawayRequirements {
 
   static async _checkForbiddenRole(req, participant, guildId, client) {
 
-    const member = await this._getMember(guildId, participant.userId);
+    const member = await this._getMember(guildId, participant.userId, client);
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const has = member.roles.includes(req.value);
@@ -127,7 +127,7 @@ class GiveawayRequirements {
   static async _checkMinDaysInServer(req, participant, guildId, client) {
 
     const minDays = parseInt(req.value) || 0;
-    const member  = await this._getMember(guildId, participant.userId);
+    const member  = await this._getMember(guildId, participant.userId, client);
 
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
@@ -161,7 +161,7 @@ class GiveawayRequirements {
 
   static async _checkInServer(req, participant, client) {
 
-    const member = await this._getMember(req.guildId, participant.userId);
+    const member = await this._getMember(req.guildId, participant.userId, client);
     return {
       ok: !!member,
       reason: member ? null : this._t(client, 'req_not_in_partner_server', { guildId: req.guildId }),
@@ -171,7 +171,7 @@ class GiveawayRequirements {
 
   static async _checkRequiredRoleInServer(req, participant, client) {
 
-    const member = await this._getMember(req.guildId, participant.userId);
+    const member = await this._getMember(req.guildId, participant.userId, client);
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_ext_server', { guildId: req.guildId }) };
 
     const has = member.roles.includes(req.value);
@@ -183,7 +183,7 @@ class GiveawayRequirements {
 
   static async _checkForbiddenRoleInServer(req, participant, client) {
 
-    const member = await this._getMember(req.guildId, participant.userId);
+    const member = await this._getMember(req.guildId, participant.userId, client);
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_ext_server', { guildId: req.guildId }) };
 
     const has = member.roles.includes(req.value);
@@ -196,7 +196,7 @@ class GiveawayRequirements {
   static async _checkMinDaysInExtServer(req, participant, client) {
 
     const minDays = parseInt(req.value) || 0;
-    const member  = await this._getMember(req.guildId, participant.userId);
+    const member  = await this._getMember(req.guildId, participant.userId, client);
 
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_ext_server', { guildId: req.guildId }) };
 
@@ -285,7 +285,7 @@ class GiveawayRequirements {
 
   static async _checkBooster(participant, guildId, client) {
 
-    const member = await this._getMember(guildId, participant.userId);
+    const member = await this._getMember(guildId, participant.userId, client);
     if (!member) return { ok: false, reason: this._t(client, 'req_not_in_server') };
 
     const isBooster = !!member.premium_since;
@@ -309,11 +309,9 @@ class GiveawayRequirements {
   }
 
 
-  static async _getMember(guildId, userId) {
+  static async _getMember(guildId, userId, client) {
     try {
-      return await DiscordRequest(`/guilds/${guildId}/members/${userId}`, {
-        method: 'GET',
-      });
+      return await client.guilds.getGuildMember(guildId, userId);
     } catch {
       return null;
     }

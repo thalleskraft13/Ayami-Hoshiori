@@ -392,6 +392,9 @@ class Economy {
       { new: true, upsert: false }
     );
 
+    const Collections = require("./Collections.js");
+    Collections.registrar(this.userId, 'recursos', nome);
+
     return updated.recursos.get(nome) ?? quantidade;
   }
 

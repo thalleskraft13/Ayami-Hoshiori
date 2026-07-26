@@ -387,7 +387,7 @@ class ActionRunner {
       case 'toggle_role': {
         const roleId = p.roleId;
         if (!roleId) break;
-        const member  = await DiscordRequest(`/guilds/${guildId}/members/${userId}`);
+        const member  = await this.client.guilds.getGuildMember(guildId, userId);
         if (!member) break;
         const hasRole = member.roles?.includes(roleId);
         await DiscordRequest(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, {

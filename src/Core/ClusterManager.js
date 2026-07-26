@@ -22,6 +22,7 @@ class ClusterManager {
         this._clusters = new Map();
 
         this._pendingStats = new Map();
+        this._pendingCacheStats = new Map();
 
         this._pendingReady = new Map();
     }
@@ -49,6 +50,22 @@ class ClusterManager {
 
         for (const [clusterId, { worker }] of this._clusters) {
             requests.push(this._requestStats(clusterId, worker));
+        }
+
+        const results = await Promise.allSettled(requests);
+
+        return results.map((r, i) =>
+            r.status === 'fulfilled'
+                ? r.value
+                : { clusterId: i, error: 'Timeout ou cluster offline' }
+        );
+    }
+
+    async getAllCacheStats() {
+        const requests = [];
+
+        for (const [clusterId, { worker }] of this._clusters) {
+            requests.push(this._requestCacheStats(clusterId, worker));
         }
 
         const results = await Promise.allSettled(requests);
@@ -88,6 +105,21 @@ class ClusterManager {
         });
     }
 
+    _requestCacheStats(clusterId, worker) {
+        return new Promise((resolve, reject) => {
+            const requestId = `cachestats_${clusterId}_${Date.now()}`;
+
+            const timeout = setTimeout(() => {
+                this._pendingCacheStats.delete(requestId);
+                reject(new Error('Timeout'));
+            }, IPC_TIMEOUT_MS);
+
+            this._pendingCacheStats.set(requestId, { resolve, timeout });
+
+            worker.postMessage({ type: 'GET_CACHE_STATS', requestId });
+        });
+    }
+
     _handleWorkerMessage(clusterId, msg) {
         if (msg?.type === 'CLUSTER_READY') {
             const pending = this._pendingReady.get(clusterId);
@@ -108,12 +140,36 @@ class ClusterManager {
             pending.resolve(msg.data);
             return;
         }
+
+        if (msg?.type === 'CACHE_STATS_RESPONSE') {
+            const pending = this._pendingCacheStats.get(msg.requestId);
+            if (!pending) return;
+
+            clearTimeout(pending.timeout);
+            this._pendingCacheStats.delete(msg.requestId);
+            pending.resolve(msg.data);
+            return;
+        }
+
         if (msg?.type === 'GET_ALL_STATS') {
     this.getAllStats().then((data) => {
         const { worker } = this._clusters.get(clusterId) ?? {};
         if (!worker) return;
         worker.postMessage({
             type:      'ALL_STATS_RESPONSE',
+            requestId: msg.requestId,
+            data,
+        });
+    });
+    return;
+}
+
+        if (msg?.type === 'GET_ALL_CACHE_STATS') {
+    this.getAllCacheStats().then((data) => {
+        const { worker } = this._clusters.get(clusterId) ?? {};
+        if (!worker) return;
+        worker.postMessage({
+            type:      'ALL_CACHE_STATS_RESPONSE',
             requestId: msg.requestId,
             data,
         });

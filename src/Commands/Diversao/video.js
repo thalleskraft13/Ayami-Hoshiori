@@ -198,7 +198,7 @@ async function _homer(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user    = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user    = await client.users.getUser(userId);
         avatarUrl     = _getAvatarURL(user);
 
     } else {
@@ -262,7 +262,7 @@ async function _what(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user    = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user    = await client.users.getUser(userId);
         avatarUrl     = _getAvatarURL(user);
 
     } else {
@@ -326,7 +326,7 @@ async function _henrydanger(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user    = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user    = await client.users.getUser(userId);
         avatarUrl1     = _getAvatarURL(user);
 
     } else {
@@ -390,7 +390,7 @@ async function _cartadajujuba(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user    = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user    = await client.users.getUser(userId);
         avatarUrl1     = _getAvatarURL(user);
 
     } else {
@@ -454,7 +454,7 @@ async function _homelander(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user    = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user    = await client.users.getUser(userId);
         avatarUrl1     = _getAvatarURL(user);
 
     } else {

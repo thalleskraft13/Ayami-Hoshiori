@@ -265,7 +265,7 @@ async function _cinema(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {
@@ -332,7 +332,7 @@ async function _rezando(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {
@@ -400,7 +400,7 @@ async function _jornal(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {
@@ -468,7 +468,7 @@ async function _gohan(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {
@@ -534,7 +534,7 @@ async function _prisao(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {
@@ -600,7 +600,7 @@ async function _pinkiepie(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {
@@ -666,7 +666,7 @@ async function _planomaligno(interaction, client) {
 
     } else if (usuarioOpt) {
         const userId = usuarioOpt.value;
-        const user   = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+        const user   = await client.users.getUser(userId);
         avatarUrl    = _getAvatarURL(user);
 
     } else {

@@ -66,9 +66,7 @@ module.exports = {
       const xpAtual = userdb.rankaventureiro.xpTotal;
       const xpRestante = userdb.rankaventureiro.xpRestante;
 
-      const user = await DiscordRequest(`/users/${targetId}`, {
-        method: "GET"
-      });
+      const user = await client.users.getUser(targetId);
 
       const isSelf = targetId === authorId;
       const userName = user.global_name || user.username;
@@ -187,7 +185,7 @@ module.exports = {
 
           let user;
           try {
-            user = await DiscordRequest(`/users/${u.userId}`, { method: "GET" });
+            user = await client.users.getUser(u.userId);
           } catch {
             user = { username: client.t("rank_aventureiro.unknown_adventurer", ctx) };
           }

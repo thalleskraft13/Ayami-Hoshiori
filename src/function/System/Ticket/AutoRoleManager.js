@@ -151,8 +151,7 @@ class AutoRoleManager {
     const cached = this._botRolePosition.get(guildId);
     if (cached && cached.expires > Date.now()) return cached.position;
 
-    const botUser = await DiscordRequest('/users/@me');
-    const member  = await DiscordRequest(`/guilds/${guildId}/members/${botUser.id}`);
+    const member  = await this.client.guilds.getGuildMember(guildId, this.client.clientId);
     const roles   = await DiscordRequest(`/guilds/${guildId}/roles`);
 
     let maxPos = 0;

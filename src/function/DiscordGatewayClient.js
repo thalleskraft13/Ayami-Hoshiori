@@ -15,6 +15,7 @@ const connectMongo         = require('./ConnectMongo.js');
 const InteractionManager   = require('./Manager/InteractionManager.js');
 const NextMessageCollector = require('./Manager/MessageCollectorManager.js');
 const GuildManager = require('./Manager/GuildManager.js');
+const UserManager   = require('./Manager/UserManager.js');
 const BlacklistManager     = require('./Manager/BlacklistManager.js');
 const CommandLogManager    = require('./Manager/CommandLogManager.js');
 const TicketSystem         = require('./System/Ticket/index.js');
@@ -129,6 +130,7 @@ class DiscordGatewayClient extends EventEmitter {
 
         
         this.guilds = new GuildManager(this);
+        this.users  = new UserManager(this);
         this.blacklist = new BlacklistManager(this); 
         this.emoji = require("../public/emojis.js")
         this.MediaManager = MediaManager;
@@ -405,6 +407,7 @@ class DiscordGatewayClient extends EventEmitter {
 if (payload.t === 'GUILD_ROLE_CREATE')   return await this._onRoleCreate(payload.d);
 if (payload.t === 'CHANNEL_CREATE')      return await this._onChannelCreate(payload.d);
 if (payload.t === 'GUILD_MEMBER_UPDATE') return await this._onMemberUpdate(payload.d);
+if (payload.t === 'USER_UPDATE')         return await this._onUserUpdate(payload.d);
 if (payload.t === 'WEBHOOKS_UPDATE')     return await this._onWebhooksUpdate(payload.d);
 if (payload.t === 'AUTO_MODERATION_ACTION_EXECUTION') return await this._onAutoModExecution(payload.d);
 if (payload.t === 'THREAD_CREATE') return await this._onThreadCreate(payload.d);
@@ -416,6 +419,9 @@ if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onSchedul
     }
     
     async _onMessage(data) {
+  if (data.author?.id) this.users.set(data.author);
+  if (data.guild_id && data.member) this.guilds.setMember(data.guild_id, { ...data.member, user: data.author });
+
   await this.security.handleMessage(data);
   await this.activityAnalytics.handleMessage(data);
   await this.giveaway.messageTracker.onMessage(data)
@@ -444,6 +450,10 @@ async _onChannelCreate(data) {
 
 async _onMemberUpdate(data) {
   await this.security.handleMemberUpdate(data);
+}
+
+async _onUserUpdate(data) {
+  this.users.set(data);
 }
 
 async _onWebhooksUpdate(data) {
@@ -840,7 +850,7 @@ async _onScheduledEventUserAdd(data) {
             const levelsGained = levelAfter - levelBefore;
             const estrelas      = levelsGained * ESTRELAS_PER_LEVEL;
 
-            const userData = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+            const userData = await this.users.getUser(userId);
 
             const embed = new MessageEmbed()
                 .setTitle('Novo Rank de Aventureiro!')
@@ -950,6 +960,49 @@ async getClusterInfo() {
         memory:    process.memoryUsage().heapUsed,
         guilds,
     };
+}
+
+getCacheStats() {
+    const userStats   = this.users.getStats();
+    const memberStats = this.guilds.getMemberStats();
+
+    return {
+        clusterId:         this.getClusterId(),
+        users:              userStats.count,
+        members:            memberStats.count,
+        guilds:             memberStats.guildCount,
+        approxMemoryBytes:  userStats.approxBytes + memberStats.approxBytes,
+    };
+}
+
+requestAllCacheStats() {
+    return new Promise((resolve, reject) => {
+        const requestId = `cachestats_${Date.now()}`;
+        const timeout = setTimeout(() => reject(new Error('Timeout')), 10_000);
+
+        this.once('all_cache_stats_response', (msg) => {
+            if (msg.requestId !== requestId) return;
+            clearTimeout(timeout);
+            resolve(msg.data);
+        });
+
+        parentPort.postMessage({ type: 'GET_ALL_CACHE_STATS', requestId });
+    });
+}
+
+async getGlobalCacheStats() {
+    const perCluster = await this.requestAllCacheStats();
+
+    const total = perCluster.reduce((acc, cluster) => {
+        if (cluster.error) return acc;
+        acc.users             += cluster.users             ?? 0;
+        acc.members           += cluster.members           ?? 0;
+        acc.guilds            += cluster.guilds            ?? 0;
+        acc.approxMemoryBytes += cluster.approxMemoryBytes ?? 0;
+        return acc;
+    }, { users: 0, members: 0, guilds: 0, approxMemoryBytes: 0 });
+
+    return { total, perCluster };
 }
 
 requestAllStats() {

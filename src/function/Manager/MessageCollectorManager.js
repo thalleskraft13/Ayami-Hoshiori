@@ -189,7 +189,7 @@ await this.client.missionManager.trackEvent(
 
     async _sendLevelUpDm(userId, user, levelBefore, levelAfter) {
         try {
-            const userData = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
+            const userData = await this.client.users.getUser(userId);
 
             const embed = new MessageEmbed()
                 .setTitle('Novo Rank de Aventureiro!')

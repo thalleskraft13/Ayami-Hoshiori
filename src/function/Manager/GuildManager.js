@@ -4,6 +4,10 @@ const DiscordRequest = require('../DiscordRequest.js');
 
 const CDN = 'https://cdn.discordapp.com';
 
+const DEFAULT_MEMBER_TTL_MS    = parseInt(process.env.MEMBER_CACHE_TTL_MS, 10)   || 30 * 60 * 1000;
+const DEFAULT_MEMBER_SWEEP_MS  = parseInt(process.env.MEMBER_CACHE_SWEEP_MS, 10) || 5  * 60 * 1000;
+const APPROX_MEMBER_BASE_BYTES = 260;
+
 const ChannelType = Object.freeze({
     GUILD_TEXT:           0,
     DM:                   1,
@@ -128,6 +132,7 @@ class GuildMember {
         this.pending        = data.pending       ?? false;
         this.communicationDisabledUntil = data.communication_disabled_until
             ? new Date(data.communication_disabled_until) : null;
+        this.cachedAt = Date.now();
         return this;
     }
 
@@ -277,7 +282,7 @@ class GuildEmoji {
 
 class GuildManager {
 
-    constructor(client) {
+    constructor(client, options = {}) {
         this.client = client;
 
         this.cache = {
@@ -289,6 +294,16 @@ class GuildManager {
         };
 
         this._sessionGuildIds = new Set();
+
+        this.memberTTL          = options.memberTTL          ?? DEFAULT_MEMBER_TTL_MS;
+        this.memberSweepInterval = options.memberSweepInterval ?? DEFAULT_MEMBER_SWEEP_MS;
+
+        this._memberSweeper = setInterval(() => this._sweepMembers(), this.memberSweepInterval);
+        if (this._memberSweeper.unref) this._memberSweeper.unref();
+    }
+
+    destroy() {
+        clearInterval(this._memberSweeper);
     }
 
     markSessionGuilds(guildIds) {
@@ -306,7 +321,10 @@ class GuildManager {
             case 'GUILD_UPDATE':          this._onGuildUpdate(d);                          break;
             case 'GUILD_DELETE':          this._onGuildDelete(d);                          break;
             case 'GUILD_MEMBER_ADD':
-            case 'GUILD_MEMBER_UPDATE':   this._upsertMember(d.guild_id, d);               break;
+            case 'GUILD_MEMBER_UPDATE':
+                this._upsertMember(d.guild_id, d);
+                if (d.user) this.client.users?.set(d.user);
+                break;
             case 'GUILD_MEMBER_REMOVE':   this._removeMember(d.guild_id, d.user.id);       break;
             case 'CHANNEL_CREATE':
             case 'CHANNEL_UPDATE':        this._upsertChannel(d);                          break;
@@ -322,7 +340,10 @@ class GuildManager {
     _onGuildCreate(data) {
         const guild = this._upsertGuild(data);
         for (const ch  of data.channels ?? []) this._upsertChannel({ ...ch,  guild_id: data.id });
-        for (const m   of data.members  ?? []) this._upsertMember(data.id, m);
+        for (const m   of data.members  ?? []) {
+            this._upsertMember(data.id, m);
+            if (m.user) this.client.users?.set(m.user);
+        }
         for (const r   of data.roles    ?? []) this._upsertRole(data.id, r);
         for (const e   of data.emojis   ?? []) this._upsertEmoji(data.id, e);
 
@@ -451,10 +472,14 @@ class GuildManager {
         const key = this._memberKey(guildId, userId);
         if (!force) {
             const cached = this.cache.members.get(key);
-            if (cached) return cached;
+            if (cached && !this._isMemberExpired(cached)) return cached;
         }
         const data = await DiscordRequest(`/guilds/${guildId}/members/${userId}`, { method: 'GET' });
         return this._upsertMember(guildId, data);
+    }
+
+    async getGuildMember(guildId, userId, force = false) {
+        return this.fetchMember(guildId, userId, force);
     }
 
     async fetchMembers(guildId, options = {}) {
@@ -471,7 +496,11 @@ class GuildManager {
         return result;
     }
 
-    getMember(guildId, userId) { return this.cache.members.get(this._memberKey(guildId, userId)) ?? null; }
+    getMember(guildId, userId) {
+        const cached = this.cache.members.get(this._memberKey(guildId, userId));
+        if (!cached || this._isMemberExpired(cached)) return null;
+        return cached;
+    }
     setMember(guildId, data)   { return this._upsertMember(guildId, data); }
 
     async patchMember(guildId, userId, data) {
@@ -583,6 +612,38 @@ class GuildManager {
             if (predicate(value)) result.set(id, value);
         }
         return result;
+    }
+
+    _isMemberExpired(member) {
+        if (this.memberTTL <= 0) return false;
+        return (Date.now() - member.cachedAt) > this.memberTTL;
+    }
+
+    _sweepMembers() {
+        if (this.memberTTL <= 0) return;
+        const now = Date.now();
+        for (const [key, member] of this.cache.members) {
+            if (now - member.cachedAt > this.memberTTL) this.cache.members.delete(key);
+        }
+    }
+
+    getMemberStats() {
+        return {
+            count:       this.cache.members.size,
+            guildCount:  this.cache.guilds.size,
+            approxBytes: this._approxMemberMemory(),
+        };
+    }
+
+    _approxMemberMemory() {
+        let total = 0;
+        for (const member of this.cache.members.values()) {
+            total += APPROX_MEMBER_BASE_BYTES
+                + ((member.username ?? '').length * 2)
+                + ((member.nick     ?? '').length * 2)
+                + (member.roles.length * 20);
+        }
+        return total;
     }
 }
 

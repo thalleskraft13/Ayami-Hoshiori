@@ -33,12 +33,6 @@ const userMissionSchema = new Schema({
   semanal: { type: grupoMissaoSchema, default: () => ({}) },
   mensal:  { type: grupoMissaoSchema, default: () => ({}) },
 
-  colecoes: {
-    type: Map,
-    of: [String],
-    default: {}
-  },
-
   createdAt: { type: Date, default: Date.now }
 });
 
