@@ -40,6 +40,7 @@ const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
 const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
 const MediaManager = require('./Manager/MediaManager');
 const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.js');
+const Economy = require('./Estrelas/Economy.js');
 
 const EventEmitter = require('events');
 
@@ -49,8 +50,7 @@ const EventEmitter = require('events');
 
 const MAX_ADVENTURE_LEVEL  = 60;
 const XP_PER_INTERACTION   = 10;
-const ROLLS_PER_LEVEL      = 5;
-const PRIMOGEMAS_PER_ROLL  = 160;
+const ESTRELAS_PER_LEVEL   = 800;
 
 const INTERACTION_TYPE = Object.freeze({
     APPLICATION_COMMAND: 2,
@@ -695,13 +695,22 @@ async _onReactionAdd(d) {
             const levelAfter   = user.rankaventureiro.nivelAtual;
             const levelsGained = levelAfter - levelBefore;
 
-            if (levelsGained > 0) {
-                this._applyLevelUpRewards(user, levelBefore, levelAfter);
-            }
-
             this._updateXpRemaining(user);
 
             await user.save();
+
+            if (levelsGained > 0) {
+                const estrelas = levelsGained * ESTRELAS_PER_LEVEL;
+
+                await new Economy(userId, {
+                    client:  this,
+                    guildId: interaction.guild_id ?? null,
+                    actor:   interaction.member?.user ?? interaction.user
+                }).add(estrelas, {
+                    action: 'level_reward',
+                    metadata: { old_level: levelBefore, new_level: levelAfter }
+                }).catch(err => console.error('[AdventureRank] Falha ao creditar Estrelas:', err));
+            }
 
             if (levelsGained > 0 && user.dmNotificacoes) {
                 await this._sendLevelUpDm(userId, user, levelBefore, levelAfter);
@@ -746,27 +755,6 @@ async _onReactionAdd(d) {
         user.rankaventureiro.nivelAtual = Math.min(nivelAtual, MAX_ADVENTURE_LEVEL);
     }
 
-    _applyLevelUpRewards(user, levelBefore, levelAfter) {
-        const levelsGained = levelAfter - levelBefore;
-        const rolls        = levelsGained * ROLLS_PER_LEVEL;
-        const primogemas   = rolls * PRIMOGEMAS_PER_ROLL;
-
-        user.primogemas.atm += primogemas;
-
-        if (!Array.isArray(user.primogemas.transacoes)) {
-            user.primogemas.transacoes = [];
-        }
-
-        user.primogemas.transacoes.push({
-            type:      'adventure_rank_reward',
-            value:     primogemas,
-            rolls,
-            old_level: levelBefore,
-            new_level: levelAfter,
-            date:      Date.now(),
-        });
-    }
-
     _updateXpRemaining(user) {
         const { nivelAtual, xpTotal } = user.rankaventureiro;
 
@@ -783,8 +771,7 @@ async _onReactionAdd(d) {
     async _sendLevelUpDm(userId, user, levelBefore, levelAfter) {
         try {
             const levelsGained = levelAfter - levelBefore;
-            const rolls        = levelsGained * ROLLS_PER_LEVEL;
-            const primogemas   = rolls * PRIMOGEMAS_PER_ROLL;
+            const estrelas      = levelsGained * ESTRELAS_PER_LEVEL;
 
             const userData = await DiscordRequest(`/users/${userId}`, { method: 'GET' });
 
@@ -795,8 +782,7 @@ async _onReactionAdd(d) {
                 .setDescription(this._buildLevelUpDescription({
                     levelBefore,
                     levelAfter,
-                    rolls,
-                    primogemas,
+                    estrelas,
                     xpTotal:    user.rankaventureiro.xpTotal,
                     xpRestante: user.rankaventureiro.xpRestante,
                 }));
@@ -813,18 +799,16 @@ async _onReactionAdd(d) {
         return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=1024`;
     }
 
-    _buildLevelUpDescription({ levelBefore, levelAfter, rolls, primogemas, xpTotal, xpRestante }) {
+    _buildLevelUpDescription({ levelBefore, levelAfter, estrelas, xpTotal, xpRestante }) {
         return (
 `${this.emoji.animada} Uau, você subiu de rank!! Do **#${levelBefore}** pro **#${levelAfter}**, que incrível!!
 
 Fico tão feliz em ver você crescendo assim! ${this.emoji.corao}
 
-Fiquei tão animada que separei **${rolls} giros** pra você de presente~!
+⭐ Recompensa recebida:
+**${estrelas.toLocaleString()} Estrelas**
 
-💎 Recompensa recebida:
-**${primogemas.toLocaleString()} Primogemas**
-
-${this.emoji.festa} Aproveita bem, tá?! Cada primogema conta~
+${this.emoji.festa} Aproveita bem, tá?! Cada estrela conta~
 
 Sua experiência atual é **${xpTotal} XP**!
 Faltam só **${xpRestante} XP** pro Rank **#${levelAfter + 1}**!

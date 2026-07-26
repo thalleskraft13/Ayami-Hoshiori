@@ -122,6 +122,13 @@ class CustomEmbed {
     return this;
   }
 
+  setAuthor(name, icon_url = null, url = null) {
+    this.data.author = { name };
+    if (icon_url) this.data.author.icon_url = icon_url;
+    if (url) this.data.author.url = url;
+    return this;
+  }
+
   setFooter(text, icon_url = null) {
     this.data.footer = { text };
     if (icon_url)

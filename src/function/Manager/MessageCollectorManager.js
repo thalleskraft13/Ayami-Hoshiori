@@ -10,13 +10,13 @@ const sendDm         = require('../Utils/sendDm.js');
 const MessageEmbed   = require('../Messages/EmbedBuild.js');
 const DiscordRequest = require('../DiscordRequest.js');
 const { STAFF_IDS }  = require('../Utils/StaffIds.js');
+const Economy         = require('../Estrelas/Economy.js');
 
 
 
 const MAX_ADVENTURE_LEVEL  = 60;
 const XP_PER_MESSAGE       = 5;
-const ROLLS_PER_LEVEL      = 5;
-const PRIMOGEMAS_PER_ROLL  = 160;
+const ESTRELAS_PER_LEVEL   = 800;
 const EVAL_OUTPUT_LIMIT    = 1900;
 const COLLECTOR_DEFAULT_MS = 60_000;
 
@@ -105,13 +105,23 @@ class NextMessageCollector {
             const levelAfter   = user.rankaventureiro.nivelAtual;
             const levelsGained = levelAfter - levelBefore;
 
-            if (levelsGained > 0) {
-                this._applyLevelUpRewards(user, levelBefore, levelAfter);
-            }
-
             this._updateXpRemaining(user);
 
             await user.save();
+
+            if (levelsGained > 0) {
+                const reward = levelsGained * ESTRELAS_PER_LEVEL;
+
+                await new Economy(userId, {
+                    client:  this.client,
+                    guildId: message.guild_id ?? null,
+                    actor:   message.author
+                }).add(reward, {
+                    action: 'level_reward',
+                    metadata: { old_level: levelBefore, new_level: levelAfter }
+                }).catch(err => console.error('[AdventureXP] Falha ao creditar Estrelas:', err));
+            }
+
             await this.client.missionManager.trackEvent(
   userId, 'send_message', 1, message.guild_id
 );
@@ -164,27 +174,6 @@ await this.client.missionManager.trackEvent(
         user.rankaventureiro.nivelAtual = Math.min(nivelAtual, MAX_ADVENTURE_LEVEL);
     }
 
-    _applyLevelUpRewards(user, levelBefore, levelAfter) {
-        const levelsGained = levelAfter - levelBefore;
-        const rolls        = levelsGained * ROLLS_PER_LEVEL;
-        const primogemas   = rolls * PRIMOGEMAS_PER_ROLL;
-
-        user.primogemas.atm += primogemas;
-
-        if (!Array.isArray(user.primogemas.transacoes)) {
-            user.primogemas.transacoes = [];
-        }
-
-        user.primogemas.transacoes.push({
-            type:      'adventure_rank_reward',
-            value:     primogemas,
-            rolls,
-            old_level: levelBefore,
-            new_level: levelAfter,
-            date:      Date.now(),
-        });
-    }
-
     _updateXpRemaining(user) {
         const { nivelAtual, xpTotal } = user.rankaventureiro;
 
@@ -216,14 +205,17 @@ await this.client.missionManager.trackEvent(
     }
 
     _buildLevelUpText(user, levelBefore, levelAfter) {
+        const levelsGained = levelAfter - levelBefore;
+        const estrelas = levelsGained * ESTRELAS_PER_LEVEL;
+
         return (
 `Hm... então você evoluiu.
 
 Do Rank de Aventureiro #${levelBefore} para #${levelAfter}.
 Nada mal. Você começa a entender o peso do próprio crescimento.
 
-Como reconhecimento pelo avanço, a Casa da Lareira concedeu a você 5 giros.
-Use-os com sabedoria… ou desperdice-os como tantos outros fazem.
+Como reconhecimento pelo avanço, a Casa da Lareira concedeu a você ${estrelas.toLocaleString()} Estrelas.
+Use-as com sabedoria… ou desperdice-as como tantos outros fazem.
 
 Sua experiência atual é ${user.rankaventureiro.xpTotal}XP.
 Ainda faltam ${user.rankaventureiro.xpRestante}XP para alcançar o Rank de Aventureiro #${levelAfter + 1}.

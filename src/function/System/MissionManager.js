@@ -5,6 +5,7 @@ const UserGlobalDb         = require('../../Mongodb/userglobal.js');
 const AdventureGroupModel  = require('../../Mongodb/AdventureGroup.js');
 const GuildMissionModel    = require('../../Mongodb/GuildMission.js');
 const DiscordRequest       = require('../DiscordRequest.js');
+const Economy              = require('../Estrelas/Economy.js');
 
 
 
@@ -77,14 +78,14 @@ class MissionManager {
 
   async trackEvent(userId, eventType, amount = 1, guildId = null) {
     await Promise.all([
-      this._trackPersonal(userId, eventType, amount),
+      this._trackPersonal(userId, eventType, amount, guildId),
       this._trackGroup(userId, eventType, amount),
       guildId ? this._trackGuild(guildId, userId, eventType, amount) : Promise.resolve()
     ]);
   }
 
 
-  async _trackPersonal(userId, eventType, amount) {
+  async _trackPersonal(userId, eventType, amount, guildId = null) {
     try {
       const user = await this._getOrCreateUser(userId);
       await this._ensurePersonalMissions(user);
@@ -99,7 +100,7 @@ class MissionManager {
           m.progress = Math.min(m.progress + amount, m.goal);
           if (m.progress >= m.goal) {
             m.done = true;
-            await this._rewardUser(user, m.reward, m.label, `mission_${period}`);
+            await this._rewardUser(user, m.reward, m.label, `mission_${period}`, guildId);
           }
           changed = true;
         }
@@ -329,7 +330,7 @@ class MissionManager {
     const total = pending.reduce((acc, r) => acc + r.amount, 0);
     const user  = await this._getOrCreateUser(userId);
 
-    await this._rewardUser(user, total, 'Missões de Guilda coletadas', 'guild_collect');
+    await this._rewardUser(user, total, 'Missões de Guilda coletadas', 'guild_collect', guildId);
     await user.save();
 
     doc.pendingRewards = doc.pendingRewards.filter(r => r.userId !== userId);
@@ -445,10 +446,15 @@ class MissionManager {
     return user;
   }
 
-  async _rewardUser(user, amount, label, type) {
-    user.primogemas.atm += amount;
-    if (!Array.isArray(user.primogemas.transacoes)) user.primogemas.transacoes = [];
-    user.primogemas.transacoes.push({ type, value: amount, label, date: Date.now() });
+  async _rewardUser(user, amount, label, type, guildId = null) {
+    await new Economy(user.userId, {
+      client:  this.client,
+      guildId,
+      actor:   { id: user.userId }
+    }).add(amount, {
+      action: 'mission_reward',
+      metadata: { label, type }
+    }).catch(err => console.error('[MissionManager] Falha ao creditar Estrelas:', err));
 
     if (user.dmNotificacoes) {
       this._sendRewardDm(user.userId, amount, label).catch(() => {});
@@ -468,7 +474,7 @@ class MissionManager {
         body: {
           embeds: [{
             title:       '✅ Missão concluída!',
-            description: `**${label}**\n\n🔮 +**${amount} Primogemas**`,
+            description: `**${label}**\n\n⭐ +**${amount} Estrelas**`,
             color:       0xA855F7,
             footer:      { text: 'Lynette • Missões' },
             timestamp:   new Date().toISOString()

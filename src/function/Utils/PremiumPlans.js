@@ -55,7 +55,7 @@ const PLANS = {
     bonusRewards: false,
     summonBonus: false,
     dailyBonusMultiplier: 1,
-    dailyMultiplier: 1, // alias (nome usado em Primogemas.js/Banners.js)
+    dailyMultiplier: 1, // alias (multiplicador de recompensa diária de Estrelas)
     fiveStarExtraChance: BASE_FIVE_STAR_EXTRA_CHANCE,
 
     earlyAccess: false,
@@ -96,7 +96,7 @@ const PLANS = {
     bonusRewards: false,
     summonBonus: false,
     dailyBonusMultiplier: 1.25,
-    dailyMultiplier: 1.25, // alias (nome usado em Primogemas.js/Banners.js)
+    dailyMultiplier: 1.25, // alias (multiplicador de recompensa diária de Estrelas)
     fiveStarExtraChance: 4 / 20,
 
     earlyAccess: false,
@@ -136,7 +136,7 @@ const PLANS = {
     bonusRewards: true,
     summonBonus: true,
     dailyBonusMultiplier: 1.6,
-    dailyMultiplier: 1.6, // alias (nome usado em Primogemas.js/Banners.js)
+    dailyMultiplier: 1.6, // alias (multiplicador de recompensa diária de Estrelas)
     fiveStarExtraChance: 5.5 / 20,
 
     earlyAccess: false,
@@ -176,7 +176,7 @@ const PLANS = {
     bonusRewards: true,
     summonBonus: true,
     dailyBonusMultiplier: 2,
-    dailyMultiplier: 2, // alias (nome usado em Primogemas.js/Banners.js)
+    dailyMultiplier: 2, // alias (multiplicador de recompensa diária de Estrelas)
     fiveStarExtraChance: 7 / 20,
 
     earlyAccess: true,

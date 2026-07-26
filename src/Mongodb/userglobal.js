@@ -51,7 +51,11 @@ const userSchema = new Schema({
     default: []
   },
 
-  primogemas: {
+  // ================================
+  // Economia da Ayami — Estrelas
+  // ================================
+
+  estrelas: {
 
     atm: {
       type: Number,
@@ -63,140 +67,131 @@ const userSchema = new Schema({
       default: []
     },
 
-    daily_tempo: {
+    dailyTempo: {
       type: Number,
       default: 0
     },
 
-    bannerlimitado: {
-      garantidot5: {
-        type: Boolean,
-        default: false
-      },
-
-      garantidot4: {
-        type: Boolean,
-        default: false
-      },
-
-      pityt5: {
-        type: Number,
-        default: 0
-      },
-
-      pityt4: {
-        type: Number,
-        default: 0
-      }
-    },
-
-    mochileiro: {
-      pityt5: {
-        type: Number,
-        default: 0
-      },
-
-      pityt4: {
-        type: Number,
-        default: 0
-      }
+    // Impede que /estrelas migrar seja executado mais de uma vez por conta.
+    migrado: {
+      type: Boolean,
+      default: false
     }
+
   },
 
-  personagens: [{
-    nome: String,
+  // Recursos são utilizados apenas para crafting/evolução (Oficina, Jardim, Exploração).
+  // Estrutura livre para permitir novos recursos sem migração de schema.
+  recursos: {
+    type: Map,
+    of: Number,
+    default: () => ({
+      madeira: 0,
+      pedra: 0,
+      ferro: 0,
+      cristais: 0,
+      flores: 0,
+      livros: 0,
+      reliquias: 0,
+      cogumelos: 0,
+      poeiraEstelar: 0
+    })
+  },
 
-    raridade: String,
-
-    constelacao: {
-      type: Number,
-      default: 0,
-      max: 6
-    },
-
-    nivel: {
-      type: Number,
-      default: 1
-    },
-
-    amizade: {
-      type: Number,
-      default: 0
-    },
-
-    obtidoEm: {
-      type: Number,
-      default: Date.now
-    }
-  }],
-
-  times: [{
-    nome: {
-      type: String,
-      default: "Time"
-    },
-
-    personagens: {
-      type: [String],
-      default: []
-    }
-  }],
-
-  timeAtivo: {
+  // Reputação geral do usuário na comunidade da Ayami (Mercado, Biblioteca, Guildas...)
+  reputacao: {
     type: Number,
     default: 0
   },
 
-  arena: {
+  conquistas: {
+    type: [{
+      id: {
+        type: String,
+        required: true
+      },
+      obtidoEm: {
+        type: Number,
+        default: Date.now
+      }
+    }],
+    default: []
+  },
 
-    pontos: {
-      type: Number,
-      default: 1000
+  inventario: {
+
+    itens: {
+      type: [{
+        itemId: String,
+        quantidade: { type: Number, default: 1 },
+        obtidoEm: { type: Number, default: Date.now }
+      }],
+      default: []
     },
 
-    vitorias: {
+    ferramentas: {
+      type: [{
+        itemId: String,
+        durabilidade: { type: Number, default: 100 },
+        obtidoEm: { type: Number, default: Date.now }
+      }],
+      default: []
+    },
+
+    decoracoes: {
+      type: [{
+        itemId: String,
+        quantidade: { type: Number, default: 1 },
+        obtidoEm: { type: Number, default: Date.now }
+      }],
+      default: []
+    }
+
+  },
+
+  // Id do companheiro atualmente ativo (auxilia exploração/expedições/coleta)
+  companheiroAtivo: {
+    type: String,
+    default: null
+  },
+
+  estatisticas: {
+
+    exploracoesTotais: {
       type: Number,
       default: 0
     },
 
-    derrotas: {
+    expedicoesTotais: {
       type: Number,
       default: 0
     },
 
-    maiorSequencia: {
+    itensFabricados: {
+      type: Number,
+      default: 0
+    },
+
+    criacoesPublicadas: {
+      type: Number,
+      default: 0
+    },
+
+    estrelasGanhasTotal: {
+      type: Number,
+      default: 0
+    },
+
+    estrelasGastasTotal: {
       type: Number,
       default: 0
     }
+
   },
 
-  batalhas: {
-
-    vencidas: {
-      type: Number,
-      default: 0
-    },
-
-    perdidas: {
-      type: Number,
-      default: 0
-    },
-
-    personagensDerrotados: {
-      type: Number,
-      default: 0
-    },
-
-    danoTotal: {
-      type: Number,
-      default: 0
-    },
-
-    curaTotal: {
-      type: Number,
-      default: 0
-    }
-  },
+  // ================================
+  // Sistemas independentes da economia
+  // ================================
 
   rankaventureiro: {
 
@@ -216,26 +211,10 @@ const userSchema = new Schema({
     }
   },
 
-  exploracao: {
-
-    mondstadt: {
-
-      tempo: {
-        type: Number,
-        default: 0
-      },
-
-      coletar: {
-        type: Number,
-        default: 0
-      }
-    }
-  },
-  
   missions: {
-  daily:  { type: Object, default: () => ({}) },
-  weekly: { type: Object, default: () => ({}) }
-}
+    daily:  { type: Object, default: () => ({}) },
+    weekly: { type: Object, default: () => ({}) }
+  }
 
 });
 
