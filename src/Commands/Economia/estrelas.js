@@ -1,43 +1,14 @@
 'use strict';
 
 const MessageEmbed    = require("../../function/Messages/EmbedBuild.js");
-const DiscordRequest  = require("../../function/DiscordRequest.js");
 const UserGlobalDb    = require("../../Mongodb/userglobal.js");
 const Economy         = require("../../function/Estrelas/Economy.js");
 const PremiumManager  = require("../../function/Utils/PremiumManager.js");
 const { getPlan }     = require("../../function/Utils/PremiumPlans.js");
+const { economyContext, respond, respondError } = require("../../function/Estrelas/interactionHelpers.js");
 
 const DAILY_BASE        = 150;
 const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-
-function economyContext(interaction, client) {
-  return {
-    client,
-    guildId: interaction.guild_id ?? null,
-    actor: interaction.member?.user ?? interaction.user ?? null
-  };
-}
-
-function respond(interaction, embed) {
-  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
-    method: "POST",
-    body: {
-      type: 4,
-      data: {
-        embeds: [embed.build ? embed.build() : embed]
-      }
-    }
-  });
-}
-
-function respondError(interaction, mensagem) {
-  const embed = new MessageEmbed()
-    .setTitle("⚠️ Não deu certo")
-    .setDescription(mensagem)
-    .setColor("Red");
-
-  return respond(interaction, embed);
-}
 
 module.exports = {
   info: {
