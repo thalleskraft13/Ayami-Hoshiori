@@ -19,14 +19,13 @@ class VideoManager {
         this._loader = new Loader({ publicDir, templatesDir });
         this._fonts  = new Fonts();
         this._avatar = new Avatar({ cache: new Cache({ ttl: 600_000, name: 'VideoAvatarCache' }) });
-        this._queue  = new Queue({ concurrency: this._concurrency, timeout: 240_000 }); 
+        this._queue  = new Queue({ concurrency: this._concurrency, timeout: 240_000 });
 
         this._templates = new Map();
         this._assets    = null;
         this._canvas    = null;
         this._ready     = false;
     }
-
 
     async init() {
         if (this._ready) return;
@@ -46,7 +45,6 @@ class VideoManager {
             `[VideoManager] Ready — templates: ${this._templates.size}`
         );
     }
-
 
     async render(options) {
         this._assertReady();
@@ -74,7 +72,6 @@ class VideoManager {
     stats() {
         return { queue: this._queue.stats() };
     }
-
 
     async _doRender(TemplateClass, data) {
         const context  = this._buildContext();
@@ -141,7 +138,7 @@ class VideoManager {
             return frames;
         } finally {
             try { await template.dispose?.(); } catch {}
-            global.gc?.(); 
+            global.gc?.();
         }
     }
 }

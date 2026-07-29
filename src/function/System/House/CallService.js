@@ -49,11 +49,6 @@ class CallService {
     return { ok: true, call };
   }
 
-  /**
-   * Encerra a chamada preenchendo automaticamente os ausentes com base na lista
-   * de membros esperados (ex.: membros com personagem atribuído na House) e
-   * devolve um resumo com a porcentagem de presença.
-   */
   async closeAndSummarize(guildId, expectedUserIds = []) {
     const call = await this.getOpen(guildId);
     if (!call) return { ok: false, reason: 'sem_chamada_aberta' };

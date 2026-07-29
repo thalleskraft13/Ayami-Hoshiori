@@ -13,13 +13,12 @@ class LogChannelManager {
 
     send(channelId, payload) {
        const envVar = CHANNEL_ENV_MAP[channelId];
-       const url = process.env[envVar]; 
+       const url = process.env[envVar];
         if (!envVar) {
             console.warn(`[LogChannel:${channelId}] Canal não mapeado em CHANNEL_ENV_MAP — log ignorado.`);
             return;
         }
 
-       
         if (!url) {
             console.warn(`[LogChannel:${channelId}] ${envVar} não configurada no .env — log ignorado.`);
             return;

@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { Schema, model } = require('mongoose');
 
 const guildMissionSchema = new Schema({
@@ -11,7 +10,7 @@ const guildMissionSchema = new Schema({
       generatedAt: { type: Number, default: 0 },
       expiresAt:   { type: Number, default: 0 },
       list:        { type: Array,  default: [] }
-      // cada item: { id, label, type, goal, progress, reward, done, contributors: [] }
+
     },
     event: {
       active:      { type: Boolean, default: false },

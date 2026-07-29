@@ -6,10 +6,6 @@ const RECEITAS     = require("./data/receitas.js");
 const REGIOES      = require("./data/regioes.js");
 const COMPANHEIROS = require("./data/companheiros.js");
 
-// Categorias nativas da V4. Novas categorias podem ser registradas livremente
-// via Collections.registrar(userId, categoria, itemId) mesmo sem estarem
-// listadas aqui — CATALOGOS só existe para mostrar "X/Y descobertos" quando
-// há um catálogo fechado de referência.
 const CATALOGOS = {
   recursos:     { nomes: RECURSOS,     resolver: (id) => RECURSOS[id]?.nome ?? id },
   itens:        { nomes: RECEITAS,     resolver: (id) => Object.values(RECEITAS).find(r => r.resultado.itemId === id)?.nome ?? id },

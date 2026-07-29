@@ -13,7 +13,6 @@ class GiveawayExport {
     }
   }
 
-
   static async _toHTML(doc) {
 
     const rows = doc.participants.map((p, i) => {
@@ -148,7 +147,6 @@ class GiveawayExport {
     };
   }
 
-
   static async _toCSV(doc) {
 
     const header = 'Posição,User ID,Servidor,Entrou em,Base,Bônus,Total,Status,Motivo\n';
@@ -173,11 +171,10 @@ class GiveawayExport {
 
     return {
       name:        `sorteio-${doc.giveawayId}.csv`,
-      data:        Buffer.from('\uFEFF' + csv, 'utf8'), // BOM para Excel reconhecer UTF-8
+      data:        Buffer.from('\uFEFF' + csv, 'utf8'),
       contentType: 'text/csv',
     };
   }
-
 
   static async _toXLSX(doc) {
 
@@ -217,7 +214,6 @@ class GiveawayExport {
     };
   }
 
-
   static async _toJSON(doc) {
 
     const payload = {
@@ -251,7 +247,6 @@ class GiveawayExport {
       contentType: 'application/json',
     };
   }
-
 
   static _esc(str) {
     return String(str ?? '')

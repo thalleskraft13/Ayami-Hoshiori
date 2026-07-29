@@ -9,7 +9,7 @@ module.exports = {
 
     modoCombate: {
         principal: true,
-        offField:  true, // Nahida pode agir off-field
+        offField:  true,
     },
 
     scaling: {
@@ -166,7 +166,7 @@ module.exports = {
                     tipo:     'dano',
                     alvo:     'proximo_ativo',
                     elemento: 'dendro',
-                    valor:    0.8, // 80% da proficiência de Nahida
+                    valor:    0.8,
                 },
             ],
         },

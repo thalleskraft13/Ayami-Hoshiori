@@ -10,7 +10,6 @@ class Queue {
         this._stats    = { completed: 0, failed: 0, queued: 0 };
     }
 
-
     add(fn) {
         return new Promise((resolve, reject) => {
             this._pending.push({ fn, resolve, reject });
@@ -27,7 +26,6 @@ class Queue {
             failed:    this._stats.failed,
         };
     }
-
 
     _tick() {
         while (this._running < this._concurrency && this._pending.length > 0) {

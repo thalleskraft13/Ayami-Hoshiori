@@ -86,7 +86,7 @@ class HouseSystem {
 
     if (interaction.__rootOverride) {
       const { channelId, messageId } = interaction.__rootOverride;
-      payload.flags = (payload.flags ?? 0) & ~64; // flag ephemeral não existe em mensagens reais de canal
+      payload.flags = (payload.flags ?? 0) & ~64;
       return DiscordRequest(`/channels/${channelId}/messages/${messageId}`, {
         method: 'PATCH', body: payload,
       });
@@ -745,7 +745,6 @@ class HouseSystem {
     return this.editOriginal(interaction, [CV2.container(blocks, { accentColor: ACCENT })]);
   }
 
-  /** Lista de userIds "esperados" na chamada — membros com personagem atribuído na House. */
   async _expectedCallMembers(guildId) {
     const occupied = await this.characters.listOccupied(guildId);
     return occupied.map(c => c.currentUserId).filter(Boolean);
@@ -835,7 +834,6 @@ class HouseSystem {
     return this.editOriginal(interaction, [CV2.container(blocks, { accentColor: ACCENT })]);
   }
 
-  /** Handler do botão permanente enviado nas chamadas automáticas ("Confirmar presença"). */
   async handleCallConfirmButton(interaction) {
     const guildId = interaction.guild_id;
     const userId  = interaction.member?.user?.id;

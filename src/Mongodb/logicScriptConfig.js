@@ -1,14 +1,13 @@
 'use strict';
 
-
 const { Schema, model, models } = require('mongoose');
 
 const logicScriptConfigSchema = new Schema({
   guildId: { type: String, required: true, unique: true, index: true },
-  prefix:  { type: String, default: '!' },        // prefixo de comandos
-  enabled: { type: Boolean, default: true },       // ativar/desativar todo o sistema
-  ignoreBots:    { type: Boolean, default: true }, // ignorar mensagens de bots
-  ignoredRoles:  { type: [String], default: [] },  // cargos que ignoram scripts
+  prefix:  { type: String, default: '!' },
+  enabled: { type: Boolean, default: true },
+  ignoreBots:    { type: Boolean, default: true },
+  ignoredRoles:  { type: [String], default: [] },
   updatedAt: { type: Date, default: Date.now },
 });
 

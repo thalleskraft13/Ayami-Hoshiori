@@ -9,7 +9,7 @@ module.exports = {
 
     modoCombate: {
         principal: false,
-        offField:  true, // Xingqiu é um clássico off-field
+        offField:  true,
     },
 
     scaling: {
@@ -147,7 +147,7 @@ module.exports = {
                     tipo:     'dano',
                     alvo:     'proximo_ativo',
                     elemento: 'hydro',
-                    valor:    1.1, // 110% ATK Xingqiu
+                    valor:    1.1,
                 },
                 {
                     tipo:   'cura',

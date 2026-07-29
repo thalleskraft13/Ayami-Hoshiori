@@ -7,7 +7,7 @@ class ClusterSyncManager {
     }
 
     watch(name, model, onChange, opts = {}) {
-        if (this._watchers.has(name)) return; 
+        if (this._watchers.has(name)) return;
 
         try {
             const stream = model.watch([], { fullDocument: 'updateLookup' });

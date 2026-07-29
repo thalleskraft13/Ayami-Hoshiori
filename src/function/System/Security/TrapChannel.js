@@ -2,8 +2,7 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-
-const MAX_TRACK_WINDOW_MINUTES = 30; 
+const MAX_TRACK_WINDOW_MINUTES = 30;
 const MAX_ENTRIES_PER_USER     = 40;
 
 class TrapChannel {
@@ -66,7 +65,7 @@ class TrapChannel {
   async _applyPunishment(guildId, userId, punishment) {
     if (punishment === "timeout") {
       if (!(await this.security._hasBotPerms(guildId, ["MODERATE_MEMBERS"]))) return { ok: false, missing: "MODERATE_MEMBERS" };
-      const until = new Date(Date.now() + 3_600_000).toISOString(); 
+      const until = new Date(Date.now() + 3_600_000).toISOString();
       await DiscordRequest(`/guilds/${guildId}/members/${userId}`, {
         method: "PATCH", body: { communication_disabled_until: until }
       }).catch(() => {});

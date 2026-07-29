@@ -2,18 +2,15 @@
 
 const { Schema, model } = require('mongoose');
 
-
 const libraryMessageSchema = new Schema({
   libId:        { type: String, required: true, unique: true },
-  authorId:     { type: String, required: true },   // userId Discord
+  authorId:     { type: String, required: true },
   authorName:   { type: String, default: '' },
 
   name:         { type: String, required: true },
   shortDesc:    { type: String, default: '', maxlength: 150 },
   fullDesc:     { type: String, default: '', maxlength: 2000 },
 
-  // 'embed'          -> content + embeds
-  // 'components_v2'  -> content + components (Components V2 container)
   type: {
     type: String,
     enum: ['embed', 'components_v2'],
@@ -85,13 +82,12 @@ libraryMessageRatingSchema.index({ libId: 1, userId: 1 }, { unique: true });
 const libraryMessageInstallSchema = new Schema({
   libId:          { type: String, required: true },
   guildId:        { type: String, required: true },
-  installedBy:    { type: String, required: true },   // userId
-  savedMessageId: { type: String, default: null },    // _id do SavedMessage criado neste guild
+  installedBy:    { type: String, required: true },
+  savedMessageId: { type: String, default: null },
   version:        { type: String, default: '1.0.0' },
   installedAt:    { type: Date, default: Date.now }
 });
 libraryMessageInstallSchema.index({ libId: 1, guildId: 1 });
-
 
 module.exports = {
   LibraryMessageModel:        model('LibraryMessage',        libraryMessageSchema),

@@ -173,7 +173,7 @@ class ExecutionContext {
     const val = Math.floor(Math.random() * (max - min + 1)) + min;
     this._vars.set(name, val);
   }
-  
+
   pushVar(name, value) {
   const current = this._vars.get(name);
   const list    = Array.isArray(current) ? current : [];

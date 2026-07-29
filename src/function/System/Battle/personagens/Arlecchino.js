@@ -75,7 +75,7 @@ module.exports = {
                 tipo:     'dano',
                 alvo:     'proximo_ativo',
                 elemento: 'pyro',
-                valor:    1.8, // 180% ATK
+                valor:    1.8,
             },
             {
                 tipo:  'marca',
@@ -101,7 +101,7 @@ module.exports = {
                 tipo:     'dano',
                 alvo:     'proximo_ativo',
                 elemento: 'pyro',
-                valor:    3.2, // 320% ATK
+                valor:    3.2,
             },
             {
                 tipo:     'dano',
@@ -134,7 +134,7 @@ module.exports = {
                 tipo:     'dano',
                 alvo:     'todos_inimigos',
                 elemento: 'pyro',
-                valor:    5.5, // 550% ATK
+                valor:    5.5,
             },
             {
                 tipo:    'debuff',
@@ -162,7 +162,7 @@ module.exports = {
                     tipo:   'cura',
                     alvo:   'self',
                     valor:  200,
-                    escala: 'hp', // 200 flat + escala de HP
+                    escala: 'hp',
                 },
             ],
         },

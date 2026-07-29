@@ -39,8 +39,6 @@ const HANDLED_EVENTS = new Set([
     'GUILD_EMOJIS_UPDATE',
 ]);
 
-
-
 class Guild {
 
     constructor(client, data) {
@@ -103,8 +101,6 @@ class Guild {
         };
     }
 }
-
-
 
 class GuildMember {
 
@@ -204,7 +200,6 @@ class GuildChannel {
     }
 }
 
-
 class GuildRole {
 
     constructor(client, guildId, data) {
@@ -278,8 +273,6 @@ class GuildEmoji {
     }
 }
 
-
-
 class GuildManager {
 
     constructor(client, options = {}) {
@@ -310,7 +303,6 @@ class GuildManager {
         for (const id of guildIds) this._sessionGuildIds.add(id);
     }
 
-
     handleDispatch(payload) {
         if (!HANDLED_EVENTS.has(payload.t)) return;
 
@@ -335,7 +327,6 @@ class GuildManager {
             case 'GUILD_EMOJIS_UPDATE':   this._syncEmojis(d.guild_id, d.emojis);          break;
         }
     }
-
 
     _onGuildCreate(data) {
         const guild = this._upsertGuild(data);
@@ -375,7 +366,6 @@ class GuildManager {
             console.error('[ServerLog] Erro não tratado em handleGuildDelete:', err)
         );
     }
-
 
     _upsertGuild(data) {
         const existing = this.cache.guilds.get(data.id);
@@ -430,7 +420,6 @@ class GuildManager {
         for (const emoji of emojis) this._upsertEmoji(guildId, emoji);
     }
 
-
     async fetch(guildId, force = false) {
         if (!force) {
             const cached = this.cache.guilds.get(guildId);
@@ -466,7 +455,6 @@ class GuildManager {
     clear() {
         for (const store of Object.values(this.cache)) store.clear();
     }
-
 
     async fetchMember(guildId, userId, force = false) {
         const key = this._memberKey(guildId, userId);
@@ -513,7 +501,6 @@ class GuildManager {
         this._removeMember(guildId, userId);
     }
 
-
     async fetchChannel(channelId, force = false) {
         if (!force) {
             const cached = this.cache.channels.get(channelId);
@@ -550,7 +537,6 @@ class GuildManager {
         this.cache.channels.delete(channelId);
     }
 
-
     async fetchRoles(guildId, force = false) {
         if (!force) {
             const cached = this._filterCache(this.cache.roles, r => r.guildId === guildId);
@@ -578,7 +564,6 @@ class GuildManager {
         this.cache.roles.delete(roleId);
     }
 
-
     async fetchEmojis(guildId, force = false) {
         if (!force) {
             const cached = this._filterCache(this.cache.emojis, e => e.guildId === guildId);
@@ -600,7 +585,6 @@ class GuildManager {
         await DiscordRequest(`/guilds/${guildId}/emojis/${emojiId}`, { method: 'DELETE' });
         this.cache.emojis.delete(emojiId);
     }
-
 
     _memberKey(guildId, userId) {
         return `${guildId}:${userId}`;

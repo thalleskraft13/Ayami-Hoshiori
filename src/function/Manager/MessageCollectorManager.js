@@ -12,8 +12,6 @@ const DiscordRequest = require('../DiscordRequest.js');
 const { STAFF_IDS }  = require('../Utils/StaffIds.js');
 const Economy         = require('../Estrelas/Economy.js');
 
-
-
 const MAX_ADVENTURE_LEVEL  = 60;
 const XP_PER_MESSAGE       = 5;
 const ESTRELAS_PER_LEVEL   = 800;
@@ -23,11 +21,7 @@ const COLLECTOR_DEFAULT_MS = 60_000;
 const STATUS_MAP = { online: 'online', ausente: 'idle', ocupado: 'dnd', invisivel: 'invisible' };
 const TYPE_MAP    = { jogando: 0, transmitindo: 1, ouvindo: 2, assistindo: 3, competindo: 5 };
 
-
-
 class NextMessageCollector {
-
-
 
     constructor(client) {
         this.client = client;
@@ -37,17 +31,13 @@ class NextMessageCollector {
         this._staffCommands = this._buildStaffCommandRegistry();
     }
 
-
-
     handle(payload) {
         if (payload.t !== 'MESSAGE_CREATE') return;
 
         const message = payload.d;
 
-       
         if (message.author?.id === process.env.CLIENT_ID) return;
         if (message.author.bot) return;
-
 
         this._runPipeline(message);
     }
@@ -57,7 +47,6 @@ class NextMessageCollector {
             const key     = this._collectorKey(channelId, userId);
             const expires = Date.now() + time;
 
-            
             this._cancelCollector(key);
 
             const timeout = setTimeout(() => {
@@ -69,7 +58,6 @@ class NextMessageCollector {
         });
     }
 
-
     async _runPipeline(message) {
         await this._handleLeaks(message);
         await this._handleAdventureXp(message);
@@ -78,8 +66,6 @@ class NextMessageCollector {
         this._handleCollectors(message);
     }
 
-
-
     async _handleLeaks(message) {
         try {
             await this.client.GenshinLeaksManager.handleMessage(message);
@@ -87,8 +73,6 @@ class NextMessageCollector {
             console.error('[MessagePipeline] Leaks handler error:', err);
         }
     }
-
-
 
     async _handleAdventureXp(message) {
         const userId = message.author?.id;
@@ -137,8 +121,6 @@ await this.client.missionManager.trackEvent(
         }
     }
 
-
-
     async _getOrCreateUser(userId) {
         let user = await UserGlobalDb.findOne({ userId });
 
@@ -185,8 +167,6 @@ await this.client.missionManager.trackEvent(
         user.rankaventureiro.xpRestante = ((nivelAtual + 1) * 1000) - xpTotal;
     }
 
-
-
     async _sendLevelUpDm(userId, user, levelBefore, levelAfter) {
         try {
             const userData = await this.client.users.getUser(userId);
@@ -199,7 +179,7 @@ await this.client.missionManager.trackEvent(
 
             await sendDm(userId, { embeds: [embed.build()] });
         } catch (err) {
-            
+
             console.error('[AdventureXP] Failed to send level-up DM:', err);
         }
     }
@@ -228,8 +208,6 @@ Continue.
 Eu estarei observando.`
         );
     }
-
-
 
     _handleMentionReply(message) {
     const clientId = process.env.CLIENT_ID;
@@ -274,8 +252,6 @@ Eu estarei observando.`
     });
 }
 
-
-
     _handleStaffCommands(message) {
         if (!message.content?.startsWith('!')) return;
 
@@ -294,7 +270,6 @@ Eu estarei observando.`
         });
     }
 
-
     _buildStaffCommandRegistry() {
         return new Map([
             ['useraddpremium',    this._cmdUserAddPremium.bind(this)],
@@ -307,7 +282,6 @@ Eu estarei observando.`
             ['manutencao',        this._cmdManutencao.bind(this)],
         ]);
     }
-
 
     async _cmdStatus(message, args) {
         if (!args.length) {
@@ -353,7 +327,6 @@ Eu estarei observando.`
             `✅ Presence atualizada em todos os clusters: **${texto}**`
         );
     }
-
 
     async _cmdBlacklist(message, args) {
         const [rawSub, rawTarget, ...rest] = args;
@@ -454,7 +427,6 @@ Eu estarei observando.`
             `Aviso que os usuários vão ver: ${customMsg || MaintenanceMode.DEFAULT_MESSAGE}`
         );
     }
-
 
     async _cmdUserAddPremium(message, args) {
         const [targetId, rawDays, rawPlan] = args;
@@ -559,7 +531,6 @@ Eu estarei observando.`
         }
     }
 
-
     _handleCollectors(message) {
         const key  = this._collectorKey(message.channel_id, message.author.id);
         const data = this._waiting.get(key);
@@ -581,13 +552,9 @@ Eu estarei observando.`
         data.resolve(message);
     }
 
-
-
-
     _isStaff(userId) {
         return STAFF_IDS.has(userId);
     }
-
 
     _extractUserId(raw) {
         if (!raw) return null;
@@ -600,11 +567,9 @@ Eu estarei observando.`
         return null;
     }
 
-    
     _collectorKey(channelId, userId) {
         return `${channelId}_${userId}`;
     }
-
 
     _cancelCollector(key) {
         const data = this._waiting.get(key);
@@ -613,7 +578,6 @@ Eu estarei observando.`
         this._waiting.delete(key);
     }
 
-    
     _send(channelId, content) {
         return DiscordRequest(`/channels/${channelId}/messages`, {
             method: 'POST',
@@ -621,18 +585,16 @@ Eu estarei observando.`
         });
     }
 
-
     async _deleteMessage(channelId, messageId) {
         try {
             await DiscordRequest(`/channels/${channelId}/messages/${messageId}`, {
                 method: 'DELETE',
             });
         } catch {
-            
+
         }
     }
 
-    
     _getAvatarUrl(user) {
         if (!user.avatar) {
             return 'https://cdn.discordapp.com/embed/avatars/0.png';

@@ -2,10 +2,9 @@
 
 const { Schema, model } = require('mongoose');
 
-
 const libraryFlowSchema = new Schema({
   libId:        { type: String, required: true, unique: true },
-  authorId:     { type: String, required: true },   // userId Discord
+  authorId:     { type: String, required: true },
   authorName:   { type: String, default: '' },
 
   name:         { type: String, required: true },
@@ -32,7 +31,7 @@ const libraryFlowSchema = new Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
-    default: 'approved'   
+    default: 'approved'
   },
 
   stats: {
@@ -41,7 +40,7 @@ const libraryFlowSchema = new Schema({
     dislikes:     { type: Number, default: 0 },
     avgRating:    { type: Number, default: 0 },
     ratingCount:  { type: Number, default: 0 },
-    weeklyScore:  { type: Number, default: 0 }  
+    weeklyScore:  { type: Number, default: 0 }
   },
 
   publishedAt: { type: Date, default: Date.now },
@@ -77,24 +76,20 @@ const creatorProfileSchema = new Schema({
   userId:      { type: String, required: true, unique: true },
   username:    { type: String, default: '' },
   bio:         { type: String, default: '', maxlength: 300 },
-  followers:   { type: [String], default: [] },   // userIds que seguem
-  following:   { type: [String], default: [] },   // userIds que este segue
+  followers:   { type: [String], default: [] },
+  following:   { type: [String], default: [] },
   publishedAt: { type: Date, default: Date.now }
 });
 
 const libraryInstallSchema = new Schema({
   libId:       { type: String, required: true },
   guildId:     { type: String, required: true },
-  installedBy: { type: String, required: true },   // userId
-  flowIds:     { type: [String], default: [] },    // IDs criados no guild
+  installedBy: { type: String, required: true },
+  flowIds:     { type: [String], default: [] },
   version:     { type: String, default: '1.0.0' },
   installedAt: { type: Date, default: Date.now }
 });
 libraryInstallSchema.index({ libId: 1, guildId: 1 });
-
-
-
-
 
 const conditionSchema = new Schema({
   id: { type: String, required: true },
@@ -111,7 +106,6 @@ const conditionSchema = new Schema({
 
 }, { _id: false });
 
-
 const actionSchema = new Schema({
   id: { type: String, required: true },
 
@@ -125,7 +119,6 @@ const actionSchema = new Schema({
 
 }, { _id: false });
 
-
 const triggerSchema = new Schema({
   category: { type: String, required: true },
 
@@ -134,7 +127,6 @@ const triggerSchema = new Schema({
   filters: { type: Schema.Types.Mixed, default: {} }
 
 }, { _id: false });
-
 
 const flowVariableSchema = new Schema({
   name:         { type: String, required: true },
@@ -146,7 +138,6 @@ const flowVariableSchema = new Schema({
   persistent:   { type: Boolean, default: false }
 
 }, { _id: false });
-
 
 const flowSchema = new Schema({
   flowId:   { type: String, required: true, unique: true },
@@ -182,12 +173,11 @@ const flowSchema = new Schema({
 
 flowSchema.index({ guildId: 1, 'trigger.category': 1, 'trigger.type': 1, enabled: 1 });
 
-
 const customCommandSchema = new Schema({
   commandId: { type: String, required: true, unique: true },
   guildId:   { type: String, required: true, index: true },
 
-  name:        { type: String, required: true },   // "daily", "pescar", "abrir"
+  name:        { type: String, required: true },
   aliases:     { type: [String], default: [] },
   description: { type: String, default: '' },
 
@@ -207,7 +197,6 @@ const customCommandSchema = new Schema({
 customCommandSchema.index({ guildId: 1, name: 1 });
 customCommandSchema.index({ guildId: 1, aliases: 1 });
 
-
 const persistentVarSchema = new Schema({
   guildId: { type: String, required: true },
   flowId:  { type: String, required: true },
@@ -218,7 +207,6 @@ const persistentVarSchema = new Schema({
 
 persistentVarSchema.index({ guildId: 1, name: 1 }, { unique: true });
 
-
 const flowRunLogSchema = new Schema({
   flowId:  { type: String, required: true, index: true },
   guildId: { type: String, required: true },
@@ -228,13 +216,12 @@ const flowRunLogSchema = new Schema({
   context: { type: Schema.Types.Mixed, default: {} },
 
   error:    { type: String, default: null },
-  duration: { type: Number, default: 0 },  // ms
+  duration: { type: Number, default: 0 },
 
-runAt: { type: Date, default: Date.now }  
+runAt: { type: Date, default: Date.now }
 });
 
 flowRunLogSchema.index({ runAt: 1 }, { expireAfterSeconds: 604800 });
-
 
 const userVarSchema = new Schema({
   guildId: { type: String, required: true },
@@ -248,9 +235,6 @@ const userVarSchema = new Schema({
 userVarSchema.index({ guildId: 1, userId: 1, flowId: 1, name: 1 }, { unique: true });
 
 const UserVarModel = model('UserVar', userVarSchema);
-
-
-
 
 module.exports = {
   FlowModel:          model('Flow',          flowSchema),

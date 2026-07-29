@@ -20,7 +20,6 @@ const SYSTEM_VERSIONS = [
   { label: 'Discord API',   value: 'V10' },
 ];
 
-
 function cv2Text(content) {
   return { type: 10, content };
 }

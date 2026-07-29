@@ -2,7 +2,6 @@
 
 class Effects {
 
-
     static blur(ctx, radius) {
         ctx.filter = `blur(${radius}px)`;
     }
@@ -22,7 +21,6 @@ class Effects {
     static resetFilter(ctx) {
         ctx.filter = 'none';
     }
-
 
     static shadow(ctx, opts = {}) {
         ctx.shadowColor   = opts.color   ?? 'rgba(0,0,0,0.5)';
@@ -45,7 +43,6 @@ class Effects {
         ctx.shadowOffsetY = 0;
     }
 
-
     static opacity(ctx, value) {
         ctx.globalAlpha = Math.min(1, Math.max(0, value));
     }
@@ -54,14 +51,12 @@ class Effects {
         ctx.globalAlpha = 1;
     }
 
-
     static tint(ctx, w, h, color) {
         ctx.save();
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, w, h);
         ctx.restore();
     }
-
 
     static clipCircle(ctx, cx, cy, r) {
         ctx.save();
@@ -86,7 +81,6 @@ class Effects {
         ctx.clip();
     }
 
-
     static flipH(ctx, w) {
         ctx.save();
         ctx.translate(w, 0);
@@ -105,7 +99,6 @@ class Effects {
         ctx.rotate(angle);
         ctx.translate(-px, -py);
     }
-
 
     static applyMask(ctx, maskImage, x, y, w, h) {
         ctx.save();

@@ -1,9 +1,5 @@
 'use strict';
 
-
-
-
-
 class Text {
     static draw(ctx, options) {
         const {
@@ -90,7 +86,6 @@ class Text {
         };
     }
 
-
     static _wrapText(ctx, text, maxWidth) {
         const words  = text.split(' ');
         const lines  = [];
@@ -120,7 +115,6 @@ class Text {
         return truncated + '…';
     }
 
-
     static _makeGradient(ctx, opts, x, y, w, h) {
         let grad;
 
@@ -142,7 +136,6 @@ class Text {
 
         return grad;
     }
-
 
     static _extractFontSize(font) {
         const match = font.match(/(\d+(\.\d+)?)(px|pt|em|rem)/);

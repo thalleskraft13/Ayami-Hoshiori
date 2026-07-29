@@ -34,7 +34,7 @@ class VideoRenderer {
                     path.join(frameDir, `frame_${String(i).padStart(6, '0')}.png`),
                     frame
                 );
-                // `frame` sai de escopo aqui e fica elegível pro GC imediatamente.
+
             }
 
             const audioPath = TemplateClass.audioSourcePath ?? TemplateClass._audioSourcePath ?? null;

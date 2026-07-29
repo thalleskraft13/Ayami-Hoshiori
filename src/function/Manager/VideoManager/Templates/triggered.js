@@ -11,7 +11,7 @@ class TriggeredTemplate extends BaseVideo {
         return {
             fps:      15,
             width:    256,
-            height:   300, // extra space for the TRIGGERED bar at the bottom
+            height:   300,
             duration: 1.5,
             format:   'gif',
         };
@@ -35,7 +35,7 @@ class TriggeredTemplate extends BaseVideo {
             avatarImg = await this.loadAvatar(context, avatarUrl, avatarSize);
         }
 
-        const shakeX = Math.floor(Math.random() * 20) - 10; 
+        const shakeX = Math.floor(Math.random() * 20) - 10;
         const shakeY = Math.floor(Math.random() * 20) - 10;
 
         if (avatarImg) {
@@ -45,12 +45,12 @@ class TriggeredTemplate extends BaseVideo {
             ctx.fillRect(0, 0, W, avatarSize);
         }
 
-        const redIntensity = 0.2 + Math.random() * 0.25; 
+        const redIntensity = 0.2 + Math.random() * 0.25;
         ctx.fillStyle = `rgba(255, 0, 0, ${redIntensity})`;
         ctx.fillRect(0, 0, W, avatarSize);
 
         const barY = avatarSize;
-        const barH = H - avatarSize; 
+        const barH = H - avatarSize;
 
         ctx.fillStyle = '#FF0000';
         ctx.fillRect(0, barY, W, barH);

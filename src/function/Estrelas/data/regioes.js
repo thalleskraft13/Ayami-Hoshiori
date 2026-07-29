@@ -1,8 +1,5 @@
 'use strict';
 
-// Catálogo estático de regiões de exploração.
-// dificuldade influencia diretamente a recompensa (Estrelas e recursos).
-// companheiro: id do companheiro descoberto na primeira expedição concluída na região (não é gacha, é fixo).
 module.exports = {
 
   floresta_nebulosa: {

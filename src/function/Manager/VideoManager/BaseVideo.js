@@ -1,9 +1,6 @@
 'use strict';
 
-
-
 class BaseVideo {
-
 
     static get templateName() { return 'base_video'; }
 
@@ -19,14 +16,12 @@ class BaseVideo {
         };
     }
 
-
     async renderFrame(frameIndex, totalFrames, data, context) {
         throw new Error(
             `[BaseVideo] Template "${this.constructor.templateName}" ` +
             `must implement renderFrame(frameIndex, totalFrames, data, context).`
         );
     }
-
 
     progress(frameIndex, totalFrames) {
         return totalFrames <= 1 ? 1 : frameIndex / (totalFrames - 1);

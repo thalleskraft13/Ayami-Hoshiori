@@ -1,7 +1,5 @@
 'use strict';
 
-
-
 class Cache {
     constructor(options = {}) {
         this._ttl             = options.ttl             ?? 300_000;
@@ -14,9 +12,8 @@ class Cache {
         this._stats = { hits: 0, misses: 0, evicted: 0 };
 
         this._timer = setInterval(() => this._sweep(), this._cleanupInterval);
-        this._timer.unref?.(); 
+        this._timer.unref?.();
     }
-
 
     set(key, value, ttl) {
         const resolvedTtl = ttl ?? this._ttl;
@@ -82,7 +79,6 @@ class Cache {
         clearInterval(this._timer);
         this._store.clear();
     }
-
 
     _isExpired(entry) {
         return entry.expiresAt > 0 && Date.now() > entry.expiresAt;

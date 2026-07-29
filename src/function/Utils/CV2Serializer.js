@@ -1,18 +1,5 @@
 'use strict';
 
-/**
- * Converte a árvore de blocos salva pelo Editor de Components V2
- * (formato "kind": text | gallery | section | separator | action_row |
- * select_menu | container — o mesmo formato usado pelo Component Builder
- * do site) para o formato oficial de Components V2 da API do Discord
- * (objetos com `type` numérico).
- *
- * IMPORTANTE: SavedMessageModel.components guarda os blocos no formato
- * "kind" (não no formato final da API). Sempre serialize com este
- * módulo antes de mandar pra API do Discord (envio real OU preview
- * ephemeral) — nunca passe `entry.components` direto pro payload.
- */
-
 const IS_COMPONENTS_V2 = 1 << 15;
 
 const CTYPE = Object.freeze({
@@ -109,18 +96,10 @@ function serializeBlock(block) {
   }
 }
 
-/**
- * @param {Array} blocks — entry.components (formato "kind")
- * @returns {Array} — componentes prontos pra API do Discord
- */
 function serializeBlocks(blocks) {
   return (blocks || []).map(serializeBlock).filter(Boolean);
 }
 
-/**
- * Monta o payload pronto pra `POST /channels/{id}/messages` ou pra um
- * INTERACTION_CALLBACK, incluindo a flag IS_COMPONENTS_V2 (+ ephemeral opcional).
- */
 function buildCV2Payload(blocks, { ephemeral = false } = {}) {
   return {
     flags:      IS_COMPONENTS_V2 | (ephemeral ? 64 : 0),

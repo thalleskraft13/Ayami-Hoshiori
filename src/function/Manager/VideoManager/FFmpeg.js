@@ -180,12 +180,11 @@ class FFmpeg {
             return fs.readFileSync(audioPath);
 
         } catch {
-            return null; 
+            return null;
         } finally {
             try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
         }
     }
-
 
     static _buildArgs({ tmpDir, outputPath, fps, width, height, format, extraArgs }) {
         const inputPattern = path.join(tmpDir, 'frame_%06d.png');

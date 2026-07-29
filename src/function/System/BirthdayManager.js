@@ -14,7 +14,6 @@ class BirthdayManager {
     this.client = client;
   }
 
-
   async checkAll(guildId) {
     try {
       const now   = new Date();
@@ -37,7 +36,6 @@ class BirthdayManager {
       console.error(`[BirthdayManager] checkAll error (${guildId}):`, err);
     }
   }
-
 
   async _processGuild(guild, guildId, day, month) {
     console.log(`[BirthdayManager] Buscando — guildId: "${guildId}" | day: ${day} | month: ${month}`);
@@ -63,7 +61,6 @@ class BirthdayManager {
       await this._repostFixedButton(guildId, guild.birthdayConfig.channel);
     }
   }
-
 
   async _sendBirthdayMessage(guild, member) {
     const cfg     = guild.birthdayConfig;
@@ -165,13 +162,12 @@ class BirthdayManager {
           method: 'POST',
           body: {
             name:                  `🎂 Feliz aniversário, ${memberName}!`,
-            auto_archive_duration: 1440 
+            auto_archive_duration: 1440
           }
         }
       ).catch(() => {});
     }
   }
-
 
   async registerBirthday(guildId, userId, day, month, year = null) {
     if (day < 1 || day > 31 || month < 1 || month > 12) {
@@ -205,7 +201,6 @@ class BirthdayManager {
       }
     );
   }
-
 
   async startSetup(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -260,7 +255,6 @@ class BirthdayManager {
     });
   }
 
-
   async toggleSystem(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
     const cfg   = guild.birthdayConfig;
@@ -289,7 +283,6 @@ class BirthdayManager {
 
     return this.startSetup(interaction);
   }
-
 
   async setChannel(interaction) {
     await this.followUpEphemeral(interaction, {
@@ -338,7 +331,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-
   async setPing(interaction) {
     await this.followUpEphemeral(interaction, {
       content: "📨 Envie o cargo ou ID do cargo que deseja pingar nos aniversários.\n\nEnvie `0` para desativar o ping."
@@ -378,7 +370,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-
   async setMensagem(interaction) {
     await this.followUpEphemeral(interaction, {
       content:
@@ -408,7 +399,6 @@ class BirthdayManager {
     await this.followUpEphemeral(interaction, { content: "✅ Mensagem atualizada!" });
     return this.startSetup(interaction);
   }
-
 
   async setHorario(interaction) {
     await this.followUpEphemeral(interaction, {
@@ -463,7 +453,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-
   async toggleWebhook(interaction) {
     const premium = await this._isPremium(interaction.guild_id);
 
@@ -505,7 +494,6 @@ class BirthdayManager {
 
     return this.startSetup(interaction);
   }
-
 
   async toggleButtonMode(interaction) {
     const premium = await this._isPremium(interaction.guild_id);
@@ -549,7 +537,6 @@ class BirthdayManager {
     return this.startSetup(interaction);
   }
 
-
   async toggleBirthdayThread(interaction) {
     const premium = await this._isPremium(interaction.guild_id);
 
@@ -571,7 +558,6 @@ class BirthdayManager {
 
     return this.startSetup(interaction);
   }
-
 
   async setupWebhookConfig(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -670,7 +656,6 @@ class BirthdayManager {
     return this.setupWebhookConfig(interaction);
   }
 
-
   async _postFixedButton(channelId) {
     const msg = await DiscordRequest(
       `/channels/${channelId}/messages`,
@@ -688,7 +673,7 @@ class BirthdayManager {
               type:      2,
               style:     1,
               label:     "🎂 Cadastrar meu Aniversário",
-              custom_id: BIRTHDAY_BTN_ID   
+              custom_id: BIRTHDAY_BTN_ID
             }]
           }]
         }
@@ -736,7 +721,6 @@ class BirthdayManager {
     guildDoc.birthdayConfig._pinMsgId = newMsgId;
     await guildDoc.save();
   }
-
 
   async handleButtonRegister(interaction) {
     const userId = interaction.member.user.id;
@@ -828,7 +812,6 @@ class BirthdayManager {
     await this.client.interactions.showModal(interaction, modalData);
   }
 
-
   async handleCommand(interaction) {
     const opts  = this._getOptions(interaction);
     const day   = opts.day;
@@ -850,7 +833,6 @@ class BirthdayManager {
       content: `✅ Aniversário cadastrado para **${String(day).padStart(2,'0')}/${String(month).padStart(2,'0')}**${year ? `/${year}` : ""}! 🎉`
     });
   }
-
 
   async _ensureTask(guild) {
     console.log(`[BirthdayManager] _ensureTask chamado — guild: ${guild.guildId}`);
@@ -886,7 +868,6 @@ class BirthdayManager {
       { $set: { status: 'cancelled' } }
     );
   }
-
 
   async _getOrCreateWebhook(channelId, name = "🎂 Aniversários") {
     try {
@@ -948,7 +929,6 @@ class BirthdayManager {
       color: 0xf4a8c7
     };
   }
-
 
   async reply(interaction, data) {
     return DiscordRequest(

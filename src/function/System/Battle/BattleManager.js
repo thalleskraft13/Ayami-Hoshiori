@@ -11,7 +11,6 @@ class BattleManager {
         this._timeouts = new Map();
     }
 
-
     criar(opts) {
         const sessao = new BattleSession(opts);
 
@@ -26,7 +25,6 @@ class BattleManager {
         return sessao;
     }
 
-
     getSessao(userId) {
         return this._sessoes.get(userId) ?? null;
     }
@@ -34,7 +32,6 @@ class BattleManager {
     emBatalha(userId) {
         return this._sessoes.has(userId);
     }
-
 
     encerrar(userAId, userBId) {
         this._sessoes.delete(userAId);
@@ -45,7 +42,6 @@ class BattleManager {
         this._limparTimeout(userBId);
     }
 
-
     _resetarTimeout(userAId, userBId) {
         this._limparTimeout(userAId);
         this._limparTimeout(userBId);
@@ -53,7 +49,7 @@ class BattleManager {
         const timer = setTimeout(() => {
             console.log(`[BattleManager] Encerrando batalha por inatividade: ${userAId} vs ${userBId}`);
             this.encerrar(userAId, userBId);
-        }, 10 * 60 * 1000); 
+        }, 10 * 60 * 1000);
 
         this._timeouts.set(userAId, timer);
         this._timeouts.set(userBId, timer);
@@ -72,7 +68,6 @@ class BattleManager {
         if (!sessao) return;
         this._resetarTimeout(sessao.userAId, sessao.userBId);
     }
-
 
     get totalSessoes() {
         return this._sessoes.size / 2;

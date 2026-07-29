@@ -1,12 +1,13 @@
 'use strict';
 
-
 const getPerm         = require('../../function/Utils/GetPerm.js');
 const DiscordRequest  = require('../../function/DiscordRequest.js');
 const PremiumManager  = require('../../function/Utils/PremiumManager.js');
 const { LogicScriptModel, LogicRunLogModel } = require('../../Mongodb/logicScript.js');
 const { LogicScriptConfig } = require('../../Mongodb/logicScriptConfig.js');
+const { LogicEndpointModel } = require('../../Mongodb/logicEndpoint.js');
 const { localeCtx } = require('../../function/Utils/ctxLocale.js');
+const crypto = require('crypto');
 
 const DASHBOARD_BASE_URL = 'https://ayami-hoshiori.cpufael.com';
 
@@ -21,6 +22,19 @@ function cv2Payload(blocks, opts = {}) {
 function row(...components) { return { type: 1, components }; }
 function linkButton(label, url, emoji) {
   return { type: 2, style: 5, label, url, ...(emoji ? { emoji: { name: emoji } } : {}) };
+}
+function actionButton(label, customId, { style = 2, emoji, disabled = false } = {}) {
+  return { type: 2, style, label, custom_id: customId, disabled, ...(emoji ? { emoji: { name: emoji } } : {}) };
+}
+function stringSelect(customId, placeholder, options) {
+  return { type: 3, custom_id: customId, placeholder, options: options.slice(0, 25) };
+}
+
+function generateEndpointSecret() {
+  return 'ayep_' + crypto.randomBytes(24).toString('base64url');
+}
+function hashEndpointSecret(secret) {
+  return crypto.createHash('sha256').update(String(secret)).digest('hex');
 }
 
 function countFunctions(content) {
@@ -178,6 +192,46 @@ module.exports = {
     const guildUrl = `${DASHBOARD_BASE_URL}/dashboard/${guildId}`;
     const manageUrl = `${DASHBOARD_BASE_URL}/dashboard/${guildId}/logicscript`;
 
+    const fileIds = scripts.map(s => s.fileId).filter(Boolean);
+    const endpointCfgs = fileIds.length
+      ? await LogicEndpointModel.find({ guildId, logicScriptId: { $in: fileIds } }).lean()
+      : [];
+    const endpointByFile = new Map(endpointCfgs.map(e => [e.logicScriptId, e]));
+
+    const endpointsEnabled = !!plan.endpoints?.enabled;
+    let endpointBlocks = [];
+
+    if (endpointsEnabled && scripts.length) {
+      const linesEndpoints = scripts.slice(0, 10).map(s => {
+        const cfg = endpointByFile.get(s.fileId);
+        const badge = !cfg ? '⚪ sem Endpoint' : cfg.enabled ? '🟢 ativo' : '🔴 inativo';
+        return `• \`${s.path}\` — \`${s.fileId ?? '—'}\` — ${badge}`;
+      }).join('\n');
+
+      const selectOptions = scripts
+        .filter(s => s.fileId)
+        .slice(0, 25)
+        .map(s => ({
+          label: s.name.slice(0, 100),
+          value: s.fileId,
+          description: (s.path ?? '').slice(0, 100) || undefined,
+        }));
+
+      endpointBlocks = [
+        cv2Divider(),
+        cv2Text(
+          `**📡 Endpoints** (Lua Crescente/Constellation) — até ${fmtLimit(plan.endpoints?.maxEndpoints ?? 0)} ativos, ` +
+          `${fmtLimit(plan.endpoints?.rateLimitPerMinute ?? 0)} req/min, histórico de ${fmtLimit(plan.endpoints?.historyLimit ?? 0)}\n${linesEndpoints}`
+        ),
+        ...(selectOptions.length ? [row(stringSelect('ls_secret:select', 'Selecione um arquivo para gerenciar o Endpoint', selectOptions))] : []),
+      ];
+    } else if (scripts.length) {
+      endpointBlocks = [
+        cv2Divider(),
+        cv2Text('**📡 Endpoints** — 🔒 disponível a partir do plano Lua Crescente. Veja `/premium`.'),
+      ];
+    }
+
     return [
       cv2Text(client.t('logic.panel_header', {
         ...ctx,
@@ -207,11 +261,104 @@ module.exports = {
       cv2Text(client.t('logic.warnings_label', { ...ctx, errorsText })),
       cv2Divider(),
       cv2Text(client.t('logic.recent_errors_label', { ...ctx, recentErrorsText })),
+      ...endpointBlocks,
       cv2Divider(),
       row(
         linkButton(client.t('logic.btn_dashboard', ctx), guildUrl, '📊'),
         linkButton(client.t('logic.btn_manage', ctx), manageUrl, '⚙️'),
       ),
     ];
+  },
+
+  async handleSecretButton(interaction, client) {
+    const guildId  = interaction.guild_id;
+    const [, action, actionFileId] = (interaction.data.custom_id || '').split(':');
+    const respond = (body, updateInPlace = false) => DiscordRequest(
+      `/interactions/${interaction.id}/${interaction.token}/callback`,
+      { method: 'POST', body: { type: updateInPlace ? 7 : 4, data: body } }
+    );
+
+    if (action === 'select') {
+      const fileId = interaction.data.values?.[0];
+      if (!fileId) return;
+      const blocks = await module.exports._buildEndpointFilePanel(guildId, fileId, interaction, client);
+      return respond({ flags: 32768 | 64, components: [cv2Container(blocks, {})] }, true);
+    }
+
+    if (action !== 'create' && action !== 'regen') return;
+    const fileId = actionFileId;
+
+    const guild   = client.guilds?.get(guildId);
+    const isOwner = !!guild && guild.ownerId === interaction.member?.user?.id;
+    if (!isOwner) {
+      return respond({ content: '🔒 Só o(a) dono(a) do servidor pode criar ou regenerar o Secret do Endpoint.', flags: 64 });
+    }
+
+    const script = await LogicScriptModel.findOne({ guildId, fileId, isFolder: false }).lean();
+    if (!script) {
+      return respond({ content: '⚠️ Arquivo não encontrado — ele pode ter sido excluído.', flags: 64 });
+    }
+
+    if (action === 'create') {
+      const existing = await LogicEndpointModel.findOne({ guildId, logicScriptId: fileId }).lean();
+      if (existing?.secretHash) {
+        return respond({ content: '⚠️ Esse arquivo já tem um Secret. Use **Regenerar Secret** para trocar por um novo.', flags: 64 });
+      }
+    }
+
+    const secret = generateEndpointSecret();
+    await LogicEndpointModel.findOneAndUpdate(
+      { guildId, logicScriptId: fileId },
+      {
+        $set: {
+          secretHash:      hashEndpointSecret(secret),
+          secretCreatedAt: new Date(),
+          secretCreatedBy: interaction.member.user.id,
+          updatedAt:       new Date(),
+        },
+        $setOnInsert: { enabled: false, requestCount: 0, ipWhitelist: [] },
+      },
+      { upsert: true }
+    );
+
+    return respond({
+      content:
+        `🔑 **Secret ${action === 'create' ? 'criado' : 'regenerado'} com sucesso!**\n\n` +
+        `\`\`\`\n${secret}\n\`\`\`\n` +
+        `⚠️ **Guarde esse valor agora** — ele não será mostrado novamente. Envie-o em uma das duas formas:\n` +
+        `• Header \`Authorization: Bearer ${secret}\`\n` +
+        `• Header \`X-Ayami-Secret: ${secret}\`\n\n` +
+        (action === 'regen' ? '⚠️ O Secret anterior parou de funcionar imediatamente.' : 'Ative o Endpoint pelo Dashboard depois de configurar o Secret.'),
+      flags: 64,
+    });
+  },
+
+  async _buildEndpointFilePanel(guildId, fileId, interaction, client) {
+    const script = await LogicScriptModel.findOne({ guildId, fileId, isFolder: false }).lean();
+    if (!script) return [cv2Text('⚠️ Arquivo não encontrado.')];
+
+    const cfg = await LogicEndpointModel.findOne({ guildId, logicScriptId: fileId }).lean();
+    const guild = client.guilds?.get(guildId);
+    const isOwner = !!guild && guild.ownerId === interaction.member?.user?.id;
+
+    const url = `https://ayami-hoshiori.cpufael.com/endpoints/${guildId}/${fileId}`;
+
+    const lines = [
+      `**📡 Endpoint de \`${script.path}\`**`,
+      `ID do arquivo: \`${fileId}\``,
+      `URL: \`${url}\``,
+      `Status: ${cfg?.enabled ? '🟢 ativo' : '🔴 inativo'}`,
+      `Secret: ${cfg?.secretHash ? '✅ configurado' : '❌ não criado'}`,
+      `Requisições: ${cfg?.requestCount ?? 0}`,
+    ];
+
+    const buttons = isOwner
+      ? row(
+          actionButton(cfg?.secretHash ? 'Secret já criado' : 'Criar Secret', `ls_secret:create:${fileId}`, { style: 3, emoji: '🔑', disabled: !!cfg?.secretHash }),
+          actionButton('Regenerar Secret', `ls_secret:regen:${fileId}`, { style: 4, emoji: '♻️', disabled: !cfg?.secretHash }),
+        )
+      : row(actionButton('Somente o(a) dono(a) pode gerenciar', 'ls_secret:noop', { style: 2, disabled: true }));
+
+    return [cv2Text(lines.join('\n')), cv2Divider(), buttons];
   },
 };

@@ -5,7 +5,7 @@ const { Schema, model, models } = require('mongoose');
 const expeditionSchema = new Schema({
   userId:      { type: String, required: true, index: true },
   regiaoId:    { type: String, required: true },
-  duracao:     { type: String, required: true }, // '15min' | '1h' | '6h' | '12h'
+  duracao:     { type: String, required: true },
   companheiroId: { type: String, default: null },
   iniciadoEm:  { type: Number, required: true },
   finalizaEm:  { type: Number, required: true },

@@ -1,6 +1,5 @@
 'use strict';
 
-
 const ELEMENTOS = Object.freeze({
     PYRO:    'pyro',
     HYDRO:   'hydro',
@@ -109,7 +108,6 @@ class ReactionManager {
         }
     }
 
-
     _vaporizacao(danoBase, multiplicador, proficiencia, nome) {
         const bonus      = 2.78 * proficiencia / (proficiencia + 1400);
         const multiplicadorFinal = multiplicador * (1 + bonus);
@@ -143,7 +141,7 @@ class ReactionManager {
     }
 
     _supercondutor(alvo, proficiencia) {
-        const reducaoDef = 40; 
+        const reducaoDef = 40;
         alvo.aplicarDebuff({ tipo: 'def', valor: reducaoDef, duracao: 2, fonte: 'supercondutor' });
         return {
             nome: 'Supercondutor',
@@ -173,7 +171,7 @@ class ReactionManager {
     }
 
     _reducao(alvo, elemento, proficiencia) {
-        const reducaoRes = 40; 
+        const reducaoRes = 40;
         alvo.aplicarDebuff({ tipo: `res_${elemento}`, valor: reducaoRes, duracao: 2, fonte: 'reducao' });
         return {
             nome: `Redução (${elemento})`,
@@ -192,7 +190,6 @@ class ReactionManager {
             descricao: `**Cristalização!** Escudo elemental de ${valorEscudo} gerado`,
         };
     }
-
 
     processarNucleoSecundario(elemento, nucleo, proficiencia) {
         if (elemento === ELEMENTOS.ELECTRO) {

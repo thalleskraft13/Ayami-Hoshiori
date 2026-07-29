@@ -1,6 +1,5 @@
 'use strict';
 
-
 const DiscordRequest = require('../../DiscordRequest.js');
 
 const COMPONENT_TYPES = new Set(['select', 'multiple', 'checkbox', 'member', 'role', 'channel']);
@@ -15,7 +14,6 @@ class SeqQuestionsManager {
   _t(key, extra = {}) {
     return this.client.t(`ticket.${key}`, { ...this._ctx, ...extra });
   }
-
 
   async run({ panel, channelId, userId, ctx = {}, messages = {} }) {
     this._ctx = ctx;
@@ -68,7 +66,6 @@ class SeqQuestionsManager {
     return answers;
   }
 
-
   async _askQuestion({ channelId, userId, question, index, total, timeout }) {
 
     if (COMPONENT_TYPES.has(question.tipo)) {
@@ -104,7 +101,7 @@ class SeqQuestionsManager {
         time: timeout
       });
     } catch {
-      return null; 
+      return null;
     }
 
     if (msg.content?.toLowerCase() === 'cancelar') return null;
@@ -138,7 +135,7 @@ class SeqQuestionsManager {
     try {
       msg = await this.client.NextMessageCollector.wait({ channelId, userId, time: timeout });
     } catch {
-      return null; 
+      return null;
     }
 
     if (msg.content?.toLowerCase() === 'cancelar') return null;
@@ -208,7 +205,6 @@ class SeqQuestionsManager {
     });
   }
 
-
   async _sendAnswersSummary({ cfg, panel, channelId, userId, answers, resumoTitulo }) {
 
     const formatAnswer = (q, value) => {
@@ -269,7 +265,6 @@ class SeqQuestionsManager {
       }).catch(err => console.error('[SeqQuestions] Erro ao enviar no log:', err));
     }
   }
-
 
   _validate(question, value) {
     if (!value && question.required) return false;

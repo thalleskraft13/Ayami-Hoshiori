@@ -7,10 +7,10 @@ const FlowBuilder     = require('./FlowBuilder.js');
 const CommandBuilder  = require('./CommandBuilder.js');
 
 const COLOR = {
-  main:    0x7C8FFF,   // azul principal
-  gold:    0xFFD966,   // dourado
-  dark:    0x243B7A,   // azul escuro
-  hair:    0xA9D6FF,   // azul cabelo
+  main:    0x7C8FFF,
+  gold:    0xFFD966,
+  dark:    0x243B7A,
+  hair:    0xA9D6FF,
   danger:  0xED4245,
   success: 0x57F287,
 };
@@ -53,7 +53,6 @@ class FlowUI {
   _guideButton(ctx = {}) {
     return { type: 2, style: 5, label: this.t('guide_button', ctx), url: GUIDE_URL };
   }
-
 
   async reply(interaction, data) {
     return DiscordRequest(
@@ -105,7 +104,6 @@ async editMessageById(channelId, messageId, data) {
     );
   }
 
-
   btn(user, label, style, func, opts = {}) {
     return this.client.interactions.createButton({
       user,
@@ -125,7 +123,6 @@ async editMessageById(channelId, messageId, data) {
   row(...components) {
     return { type: 1, components };
   }
-
 
   cv2Text(content) {
     return { type: 10, content };
@@ -170,7 +167,6 @@ async editMessageById(channelId, messageId, data) {
       components: [this.cv2Container(blocks, opts)]
     };
   }
-
 
   modalSelect(customId, label, options, opts = {}) {
     return {
@@ -217,7 +213,6 @@ async editMessageById(channelId, messageId, data) {
     return text?.match(/\d{17,19}/)?.[0];
   }
 
-
   _clampPage(page, total) {
     const maxPage  = Math.max(0, Math.ceil(total / 25) - 1);
     const safePage = Math.min(Math.max(0, page), maxPage);
@@ -240,7 +235,6 @@ async editMessageById(channelId, messageId, data) {
     return this.row(btnPrev, btnNext);
   }
 
-
   static CACHE_TTL = 60_000;
 
   _isCacheValid(guildId, key) {
@@ -262,7 +256,6 @@ async editMessageById(channelId, messageId, data) {
   invalidateCache(guildId) {
     delete this._listCache[guildId];
   }
-
 
   async open(interaction) {
     const user    = interaction.member?.user?.id || interaction.user?.id;
@@ -317,7 +310,6 @@ async editMessageById(channelId, messageId, data) {
 
     return this.cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main });
   }
-
 
   async flowList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
@@ -395,7 +387,6 @@ async editMessageById(channelId, messageId, data) {
 
     return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
-
 
   async flowMenu(interaction, user, flowId) {
     const guildId = interaction.guild_id;
@@ -493,7 +484,6 @@ async editMessageById(channelId, messageId, data) {
     }));
   }
 
-
   async _confirmDelete(interaction, user, flowId, flowName) {
     const ctx = this._tctx(interaction);
 
@@ -523,7 +513,6 @@ async editMessageById(channelId, messageId, data) {
       accentColor: COLOR.danger
     }));
   }
-
 
   async commandList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
@@ -601,7 +590,6 @@ async editMessageById(channelId, messageId, data) {
 
     return this.editOriginal(interaction, this.cv2Payload(blocks, { ephemeral: false }));
   }
-
 
   _triggerLabel(trigger, ctx = {}) {
     if (!trigger) return this.t('trigger_not_configured', ctx);

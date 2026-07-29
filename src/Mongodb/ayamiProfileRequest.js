@@ -6,7 +6,7 @@ const { Schema } = mongoose;
 const ayamiProfileRequestSchema = new Schema({
   guildId:   { type: String, required: true, index: true },
   guildName: { type: String, default: null },
-  guildIcon: { type: String, default: null }, // hash do ícone (não URL pronta)
+  guildIcon: { type: String, default: null },
 
   ownerId:   { type: String, default: null },
   ownerName: { type: String, default: null },
@@ -17,8 +17,8 @@ const ayamiProfileRequestSchema = new Schema({
   changes: {
     avatar: {
       requested: { type: Boolean, default: false },
-      url:       { type: String, default: null }, // imagem já normalizada (hospedada) pronta pra aplicar
-      previousUrl: { type: String, default: null }, // avatar atual no momento da solicitação (pra exibir no diff)
+      url:       { type: String, default: null },
+      previousUrl: { type: String, default: null },
     },
     banner: {
       requested: { type: Boolean, default: false },
@@ -32,7 +32,7 @@ const ayamiProfileRequestSchema = new Schema({
     },
   },
 
-  reason: { type: String, default: null }, // motivo opcional informado por quem solicitou
+  reason: { type: String, default: null },
 
   status: {
     type: String,
@@ -46,7 +46,7 @@ const ayamiProfileRequestSchema = new Schema({
 
   notifyChannelId: { type: String, default: null },
 
-  resolvedBy:     { type: String, default: null }, // userId de quem aprovou/recusou
+  resolvedBy:     { type: String, default: null },
   denialReason:   { type: String, default: null },
   appliedChanges: {
     avatar: { type: Boolean, default: false },
@@ -56,7 +56,7 @@ const ayamiProfileRequestSchema = new Schema({
 
   resolvedAt: { type: Date, default: null },
 }, {
-  timestamps: true, // createdAt = data da solicitação
+  timestamps: true,
   collection: 'ayami_profile_requests',
 });
 

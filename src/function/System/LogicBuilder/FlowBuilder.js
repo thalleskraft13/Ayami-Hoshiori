@@ -44,7 +44,6 @@ const COLOR = {
 
 const GUIDE_URL = 'https://ayami-hoshiori.cpufael.com/logic-builder';
 
-
 const TRIGGER_CATALOG = [
   { category: 'time',      type: 'scheduled_trigger',       label: '🕐 Horário agendado',       description: 'Dispara em um horário específico todo dia' },
   { category: 'command',   type: 'command_executed',         label: '🔧 Comando executado',       description: 'Disparado quando um comando personalizado é usado' },
@@ -253,8 +252,6 @@ function booleanParams(t, ctx) {
   };
 }
 
-
-
 class FlowBuilder {
 
   constructor(client, ui) {
@@ -312,7 +309,6 @@ class FlowBuilder {
     return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
   }
 
-
   async startCreate(interaction, user) {
     const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
@@ -346,7 +342,6 @@ class FlowBuilder {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async triggerMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -703,8 +698,6 @@ class FlowBuilder {
     return renderPanel(interaction, filters);
   }
 
-
-
   async conditionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow  = await this._getFlow(interaction.guild_id, flowId);
     if (!flow) return;
@@ -944,8 +937,6 @@ class FlowBuilder {
     await this.client.logicEngine.updateFlow(flowId, interaction.guild_id, { conditions: conds });
     return this.conditionsMenu(interaction, user, flowId, { successMsg: this.t('fb_condition_updated', this._tctx(interaction)) });
   }
-
-
 
   async actionsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow    = await this._getFlow(interaction.guild_id, flowId);
@@ -1225,7 +1216,6 @@ class FlowBuilder {
     return this.actionsMenu(interaction, user, flowId, { successMsg: msg });
   }
 
-
   async _askEmbedOrSave(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existingEmbed = params.embedObj ?? existingAction?.params?.embedObj ?? null;
     const hasEmbed      = !!existingEmbed;
@@ -1467,7 +1457,7 @@ class FlowBuilder {
           this.ui.row(colorSel),
           this.ui.row(btnConfirm, btnRemove, btnCancel),
         ],
-        flags: 64, // ephemeral — SEM flag CV2, pois embed real não roda junto com Components V2
+        flags: 64,
       };
 
       return DiscordRequest(
@@ -1510,8 +1500,6 @@ class FlowBuilder {
     if (isEdit) return this._applyActionEdit(interaction, user, flowId, existingAction.id, params);
     return this._saveAction(interaction, user, flowId, meta.category, meta.type, params);
   }
-
-
 
   async _askInteractionOrFinish(interaction, user, flowId, meta, params, isEdit, existingAction, needsSelect) {
     const existing    = params.interactionObj ?? existingAction?.params?.interactionObj ?? null;
@@ -1612,7 +1600,6 @@ class FlowBuilder {
     const blocks = [this.ui.cv2Text(this.t('fb_flow_picker_header', { ...ctx, page: safePage + 1, maxPage: maxPage + 1 })), this.ui.cv2Divider(), ...components];
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
-
 
   async _resolveSelectParams(interaction, user, flowId, meta, params, mode) {
     const needsChannel = meta.params.some(p => NEEDS_CHANNEL_SELECT.includes(p)) && params.channelId === undefined;
@@ -1723,8 +1710,6 @@ class FlowBuilder {
     }
   }
 
-
-
   async _validateIds(guildId, params, ctx = {}) {
     const warnings = [];
 
@@ -1754,7 +1739,6 @@ class FlowBuilder {
 
     return warnings;
   }
-
 
   async variablesMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
@@ -2010,8 +1994,6 @@ class FlowBuilder {
     });
   }
 
-
-
   async settingsMenu(interaction, user, flowId, { successMsg } = {}) {
     const flow = await this._getFlow(interaction.guild_id, flowId);
     const ctx  = this._tctx(interaction);
@@ -2153,7 +2135,6 @@ class FlowBuilder {
 
     return this.ui.editOriginal(interaction, this._cv2(blocks, { accentColor: COLOR.main }));
   }
-
 
   async _getFlow(guildId, flowId) {
     return FlowModel.findOne({ flowId, guildId }).lean();

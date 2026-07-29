@@ -2,17 +2,15 @@
 
 const MessageStats = require('../../../../Mongodb/giveawayMessageStats.js');
 
-
 class GiveawayMessageTracker {
 
   constructor() {
-    this._buffer  = new Map(); 
+    this._buffer  = new Map();
     this._flushMs = 30_000;
-    this._flushAt = 50;       
+    this._flushAt = 50;
 
     setInterval(() => this._flush(), this._flushMs).unref();
   }
-
 
   onMessage(message) {
 
@@ -26,7 +24,6 @@ class GiveawayMessageTracker {
       this._flush();
     }
   }
-
 
   async _flush() {
 
@@ -61,7 +58,6 @@ class GiveawayMessageTracker {
     }
   }
 
-
   async getCount(userId, guildId) {
 
     const bufferCount = this._buffer.get(`${userId}:${guildId}`) || 0;
@@ -70,12 +66,10 @@ class GiveawayMessageTracker {
     return (doc?.count || 0) + bufferCount;
   }
 
-
   async resetUser(userId, guildId) {
     this._buffer.delete(`${userId}:${guildId}`);
     await MessageStats.deleteOne({ userId, guildId });
   }
-
 
   async shutdown() {
     await this._flush();

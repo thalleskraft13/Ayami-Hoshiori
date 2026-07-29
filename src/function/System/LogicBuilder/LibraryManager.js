@@ -10,8 +10,6 @@ const {
   LibraryInstallModel
 } = require('../../../Mongodb/flow.js');
 
-
-
 class LibraryManager {
 
   constructor(client) {
@@ -31,7 +29,6 @@ class LibraryManager {
     this._startWeeklyDecay();
     console.log('[LibraryManager] Iniciado.');
   }
-
 
   async publish({ authorId, name, shortDesc, fullDesc, category, tags, flowIds, guildId, ctx = {} }) {
     const { FlowModel } = require('../../../Mongodb/flow.js');
@@ -153,7 +150,7 @@ class LibraryManager {
       version:     e.version,
       status:      e.status,
       lastChangelog: e.lastChangelog || '',
-      versionHistory: (e.versionHistory || []).slice(-5), // últimas 5 versões
+      versionHistory: (e.versionHistory || []).slice(-5),
       stats: {
         installs:  e.stats.installs,
         likes:     e.stats.likes,
@@ -164,7 +161,6 @@ class LibraryManager {
       updatedAt:   e.updatedAt
     }));
   }
-
 
   async search({ query, category, tag, authorId, sort = 'installs', page = 0, limit = 10 } = {}) {
     const filter = { status: 'approved' };
@@ -221,7 +217,6 @@ class LibraryManager {
     return { trending, topInstalls, topRated, recent };
   }
 
-
   async install({ libId, guildId, userId, varValues = {}, ctx = {} }) {
     const entry = await LibraryFlowModel.findOne({ libId, status: 'approved' });
     if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found_library', ctx));
@@ -253,7 +248,7 @@ class LibraryManager {
     await LibraryFlowModel.updateOne({ libId }, {
       $inc: {
         'stats.installs':    1,
-        'stats.weeklyScore': 5   
+        'stats.weeklyScore': 5
       }
     });
 
@@ -276,7 +271,6 @@ class LibraryManager {
 
     return { currentVersion: install.version, newVersion: entry.version };
   }
-
 
   async vote(libId, userId, vote) {
     const existing = await LibraryRatingModel.findOne({ libId, userId });
@@ -345,7 +339,6 @@ class LibraryManager {
     return LibraryRatingModel.findOne({ libId, userId }).lean();
   }
 
-
   async getCreatorProfile(authorId) {
     const [profile, entries] = await Promise.all([
       CreatorProfileModel.findOne({ userId: authorId }).lean(),
@@ -391,7 +384,6 @@ class LibraryManager {
     );
   }
 
-
   async toggleFollow(followerId, targetId, ctx = {}) {
     if (followerId === targetId) throw new Error(this.client.t('logicbuilder.err_cannot_follow_self', ctx));
 
@@ -418,7 +410,6 @@ class LibraryManager {
     return profile?.followers || [];
   }
 
-
   async moderate(libId, status, ctx = {}) {
     if (!['approved', 'rejected'].includes(status)) throw new Error(this.client.t('logicbuilder.err_invalid_status', ctx));
     return LibraryFlowModel.findOneAndUpdate(
@@ -433,7 +424,6 @@ class LibraryManager {
     if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found', ctx));
     await this._deleteEntry(libId);
   }
-
 
   _sanitizeFlow(flow) {
     const clean = { ...flow };
@@ -528,7 +518,7 @@ class LibraryManager {
           }
         });
       } catch {
-        // falha silenciosa — DMs podem estar fechadas
+
       }
     }
   }
@@ -553,8 +543,7 @@ class LibraryManager {
       this._decayInterval = setInterval(decay, MS_IN_WEEK);
     }, 60_000);
   }
-  
-  
+
   async installPrepared({ libId, guildId, userId, flows, version, ctx = {} }) {
   const entry = await LibraryFlowModel.findOne({ libId, status: 'approved' });
   if (!entry) throw new Error(this.client.t('logicbuilder.err_entry_not_found_library', ctx));
@@ -587,6 +576,5 @@ class LibraryManager {
   return createdIds;
 }
 }
-
 
 module.exports = LibraryManager;

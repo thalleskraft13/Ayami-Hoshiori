@@ -101,7 +101,7 @@ module.exports = {
                 tipo:   'debuff',
                 alvo:   'self',
                 stat:   'hp',
-                valor:  1500, // Sacrifica HP
+                valor:  1500,
                 duracao: 1,
             },
             {

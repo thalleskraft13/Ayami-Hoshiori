@@ -7,7 +7,6 @@ class Renderer {
         this._context = context;
     }
 
-
     async run(TemplateClass, data) {
         const elapsed = Utils.timer();
 

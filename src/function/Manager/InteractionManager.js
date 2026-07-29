@@ -5,11 +5,8 @@ const DiscordRequest = require('../DiscordRequest.js');
 const { localeCtx }  = require('../Utils/ctxLocale.js');
 const ms             = require('ms');
 
-
-
 const DEFAULT_TTL_MS       = ms('10min');
 const CACHE_SWEEP_INTERVAL = ms('5min');
-
 
 const CALLBACK_TYPE = Object.freeze({
     REPLY:        4,
@@ -17,15 +14,11 @@ const CALLBACK_TYPE = Object.freeze({
     MODAL:        9,
 });
 
-
 const FLAGS = Object.freeze({
     EPHEMERAL: 64,
 });
 
-
-
 class InteractionManager {
-
 
     constructor(client) {
         this.client = client;
@@ -36,7 +29,6 @@ class InteractionManager {
 
         this._startCacheSweep();
     }
-
 
     createButton({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
         const id = this._register({ user, funcao }, tempo);
@@ -114,8 +106,6 @@ class InteractionManager {
         };
     }
 
-
-
     async showModal(interaction, modalData) {
         await this._callback(interaction, {
             type: CALLBACK_TYPE.MODAL,
@@ -131,8 +121,6 @@ class InteractionManager {
         state.deferred = true;
     }
 
-
-
     async handleComponent(interaction) {
         const customId = interaction.data?.custom_id;
         if (!customId) return;
@@ -142,7 +130,7 @@ class InteractionManager {
         try {
 
             const parsed = this._tryParseJson(customId);
-           
+
 console.log(parsed)
 if (parsed?.t === 'giveaway_join')  return this.client.giveaway.join(interaction);
 if (parsed?.t === 'auth_approve')   return this.client.giveaway.handleAuthResponse(interaction, true);
@@ -196,7 +184,7 @@ if (parsed?.t === 'ayami_profile_reject')  return this.client.ayamiProfile.handl
 
 if (parsed?.t === 'flow_trigger' && parsed?.f) {
   if (typeof parsed.f !== 'string' || !parsed.f.length) return;
-  
+
   return await this.client.logicEngine.runById(parsed.f, {
     guildId:     interaction.guild_id,
     channelId:   interaction.channel_id,
@@ -210,7 +198,7 @@ if (parsed?.t === 'cv2_select') {
   if (!selectedValue) return;
   let valueParsed;
   try { valueParsed = JSON.parse(selectedValue); } catch { return; }
-  
+
   if (valueParsed?.t === 'flow_trigger') {
     return await this.client.logicEngine.runById(valueParsed.f, {
       guildId:     interaction.guild_id,
@@ -231,15 +219,12 @@ if (interaction.data?.custom_id === "house_call_confirm") {
     .catch((err) => this._replyError(interaction, err, 'House Call Confirm'));
 }
 
+if (interaction.data?.custom_id?.startsWith('ls_secret:')) {
+  const { handleSecretButton } = require('../../Commands/Manager/logic.js');
+  return handleSecretButton(interaction, this.client)
+    .catch((err) => this._replyError(interaction, err, 'Logic Script Secret'));
+}
 
-            // Só é "nosso" se foi registrado via createButton/createSelect
-            // (prefixo temp_). Qualquer outro formato que chegou até aqui
-            // (ex.: Button().setCustomId() do Logic Script, que é permanente
-            // por design e tratado à parte por on(buttonClick)/on(selectMenu))
-            // NÃO deve ser respondido como "expirado" — isso roubaria a
-            // interação de quem realmente ia tratá-la, fazendo o botão
-            // parecer quebrado mesmo funcionando. Se não é um dos nossos
-            // formatos conhecidos, simplesmente não fazemos nada aqui.
             if (!customId.startsWith('temp_')) return;
 
             const entry = this._cache.get(customId);
@@ -283,8 +268,6 @@ if (interaction.data?.custom_id === "house_call_confirm") {
         }
     }
 
-
-
     _register(data, ttl) {
         const id      = this._generateId();
         const expires = Date.now() + ttl;
@@ -311,29 +294,24 @@ if (interaction.data?.custom_id === "house_call_confirm") {
             if (removed > 0)
                 console.debug(`[InteractionManager] Cache sweep removed ${removed} expired entries.`);
 
-        }, CACHE_SWEEP_INTERVAL).unref(); 
+        }, CACHE_SWEEP_INTERVAL).unref();
     }
-
-
 
     _getState(interactionId) {
         if (!this._states.has(interactionId)) {
             this._states.set(interactionId, { replied: false, deferred: false });
 
-            
             setTimeout(() => this._states.delete(interactionId), ms('15min')).unref();
         }
 
         return this._states.get(interactionId);
     }
 
-
-
     async _callback(interaction, body) {
         const state = this._getState(interaction.id);
 
         if (state.replied) {
-            
+
             return;
         }
 
@@ -349,14 +327,13 @@ if (interaction.data?.custom_id === "house_call_confirm") {
         const state = this._getState(interaction.id);
 
         if (!state.replied && !state.deferred) {
-            
+
             return this._callback(interaction, {
                 type: CALLBACK_TYPE.REPLY,
                 data: { content, flags: FLAGS.EPHEMERAL },
             });
         }
 
-        
         return DiscordRequest(
             `/webhooks/${this.client.clientId}/${interaction.token}`,
             {
@@ -365,8 +342,6 @@ if (interaction.data?.custom_id === "house_call_confirm") {
             }
         );
     }
-
-
 
     _replyUnavailable(interaction) {
     const emoji = this.client.emoji;
@@ -415,7 +390,6 @@ async _replyError(interaction, err, context = 'Erro interno') {
     }
 }
 
-
     isReservedCustomId(customId) {
         if (!customId) return false;
 
@@ -456,12 +430,10 @@ async _replyError(interaction, err, context = 'Erro interno') {
         return interaction.member?.user?.id === expectedUserId;
     }
 
-
     _generateId() {
         return 'temp_' + crypto.randomBytes(6).toString('hex');
     }
 
-    
     _errorId() {
         return crypto.randomBytes(4).toString('hex');
     }
@@ -482,7 +454,7 @@ async _replyError(interaction, err, context = 'Erro interno') {
 
             if (Array.isArray(comp.values)) {
                 fields[comp.custom_id] = comp.values[0] ?? '';
-                fields[comp.custom_id + '_all'] = comp.values; 
+                fields[comp.custom_id + '_all'] = comp.values;
             } else {
                 fields[comp.custom_id] = comp.value ?? '';
             }

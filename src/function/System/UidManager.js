@@ -188,7 +188,7 @@ class UidManager {
           "🔒 Apenas servidores premium podem usar webhook."
       });
     }
-    
+
     if (!guild.uidSend.channel || guild.uidSend.channel === "0") {
 
     return this.followUpEphemeral(interaction, {
@@ -196,7 +196,7 @@ class UidManager {
         "❌ Configure um canal primeiro."
     });
   }
-    
+
     const perms = await getPerm({
     guildId: interaction.guild_id,
     channel: true,
@@ -205,7 +205,6 @@ class UidManager {
     client: this.client
   });
 
-    
     const required = [
     "VIEW_CHANNEL",
     "SEND_MESSAGES",
@@ -279,7 +278,7 @@ class UidManager {
         content: "❌ Canal inválido"
       });
     }
-    
+
     const perms = await getPerm({
     guildId: interaction.guild_id,
     channel: true,
@@ -430,7 +429,7 @@ class UidManager {
       }
     );
   }
-  
+
   async checkAndSendUid(data) {
 
   const guild = await this.getGuild(data.guildId);

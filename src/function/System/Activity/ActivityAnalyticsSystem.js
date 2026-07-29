@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { GuildDb }         = require("../../../Mongodb/guild.js");
 const DiscordRequest      = require("../../DiscordRequest.js");
 const TTLCache             = require("../../Utils/TTLCache.js");
@@ -20,9 +19,9 @@ const {
 const WEEKDAY_LABELS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
 const ACTIVITY_SPIKE_TYPE   = { INICIANDO: 1, ENCERRADO: 2 };
-const SPIKE_WINDOW_MS       = 60_000;   
-const SPIKE_THRESHOLD       = 8;        
-const SPIKE_INACTIVITY_MS   = 120_000;  
+const SPIKE_WINDOW_MS       = 60_000;
+const SPIKE_THRESHOLD       = 8;
+const SPIKE_INACTIVITY_MS   = 120_000;
 
 class ActivityAnalyticsSystem {
 
@@ -34,7 +33,6 @@ class ActivityAnalyticsSystem {
 
     this._activeChats = new Map();
   }
-
 
   _toV2(data) {
     if (!data || !data.embeds) return data;
@@ -156,7 +154,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-
   isIgnored(cfg, { channelId, roles, userId, isBot }) {
     if (isBot && cfg.ignoreBots !== false) return true;
     if (cfg.ignoredChannels?.includes(channelId)) return true;
@@ -178,7 +175,7 @@ class ActivityAnalyticsSystem {
           { upsert: true }
         );
       }
-    } catch { /* best-effort */ }
+    } catch {  }
   }
 
   async _isPremiumEventsEnabled(guildId) {
@@ -247,7 +244,7 @@ class ActivityAnalyticsSystem {
         state.timestamps = [];
         this._emitActivitySpike(guildId, channelId, ACTIVITY_SPIKE_TYPE.ENCERRADO, 0);
       }, SPIKE_INACTIVITY_MS);
-      state.timer.unref?.(); 
+      state.timer.unref?.();
     }
   }
 
@@ -378,7 +375,6 @@ class ActivityAnalyticsSystem {
     } catch (err) { console.error("[ActivityAnalytics] handleMemberRemove:", err); }
   }
 
-
   async _dailyStatsRange(guildId, days) {
     const startKey = dateKeyDaysAgo(days - 1);
     const endKey   = dateKey();
@@ -418,7 +414,7 @@ class ActivityAnalyticsSystem {
 
     const baselineMap = new Map(baselineRows.map(r => [r._id, r.total]));
     const scored = recentRows
-      .filter(r => r.total >= 3) 
+      .filter(r => r.total >= 3)
       .map(r => {
         const before = baselineMap.get(r._id) || 0;
         const growth = before === 0 ? r.total : (r.total - before) / before;
@@ -429,7 +425,6 @@ class ActivityAnalyticsSystem {
 
     return scored;
   }
-
 
   async startSetup(interaction) {
     const guild = await this.getGuild(interaction.guild_id);
@@ -491,7 +486,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-
   async topActiveUsers(interaction, guild, user) {
     const startKey = dateKeyDaysAgo(6);
     const rows = await ActivityDailyUser.aggregate([
@@ -528,7 +522,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-
   async channelRanking(interaction, guild, user, top) {
     const rows = await ActivityChannelStat
       .find({ guildId: interaction.guild_id })
@@ -546,7 +539,6 @@ class ActivityAnalyticsSystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
 
   async peakHours(interaction, guild, user) {
     const cfg = this.getConfig(guild);
@@ -592,7 +584,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-
   async averageMessages(interaction, guild, user) {
     const stats = await this._dailyStatsRange(interaction.guild_id, 30);
     const daysWithData = stats.filter(s => s.messageCount > 0);
@@ -620,7 +611,6 @@ class ActivityAnalyticsSystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
 
   async growthMenu(interaction, guild, user) {
     const select = this.select(
@@ -672,7 +662,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-
   async discussedTopics(interaction, guild, user) {
     const top = await this._topTermsInWindow(interaction.guild_id, "word", 7, 10);
     const desc = top.length
@@ -720,7 +709,6 @@ class ActivityAnalyticsSystem {
     });
   }
 
-
   async topCommands(interaction, guild, user) {
     const since = new Date(Date.now() - 30 * 86400000);
     const rows = await CommandLog.aggregate([
@@ -737,7 +725,6 @@ class ActivityAnalyticsSystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
 
   async generalSummary(interaction, guild, user) {
     const guildId = interaction.guild_id;
@@ -766,7 +753,6 @@ class ActivityAnalyticsSystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
 
   async settingsMenu(interaction, guild, user) {
     const cfg = this.getConfig(guild);

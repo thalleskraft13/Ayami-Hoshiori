@@ -34,7 +34,6 @@ class BattleSession {
         this.logAtual = [];
     }
 
-
     processarAcao(userId, tipoAcao, opcoes = {}) {
         if (!this.engine.emAndamento) return { log: [], snapshot: this.engine.gerarSnapshot(), fim: true };
 
@@ -62,7 +61,6 @@ class BattleSession {
         };
     }
 
-
     get vezAtual() {
         return this.engine.vezAtual === 'A' ? this.userAId : this.userBId;
     }
@@ -71,14 +69,12 @@ class BattleSession {
     get timeDefensor()  { return this.engine.timeDefensor; }
     get emAndamento()   { return this.engine.emAndamento; }
 
-
     getPersonagensParaTroca(userId) {
         const time = userId === this.userAId ? this.engine.timeA : this.engine.timeB;
         return time.personagens
             .map((p, i) => ({ personagem: p, indice: i }))
             .filter(({ personagem, indice }) => personagem.vivo && indice !== time.indiceAtivo);
     }
-
 
     getAcoesDisponiveis(userId) {
         const time  = userId === this.userAId ? this.engine.timeA : this.engine.timeB;

@@ -3,13 +3,11 @@
 const fs   = require('fs');
 const path = require('path');
 
-
 class Fonts {
     constructor() {
         this._fonts = new Map();
         this._registered = false;
     }
-
 
     registerAll(fontMap, canvas) {
         for (const [, filePath] of fontMap) {
@@ -33,7 +31,6 @@ class Fonts {
     isReady() {
         return this._registered;
     }
-
 
     _registerOne(filePath, canvas) {
         if (!fs.existsSync(filePath)) return;

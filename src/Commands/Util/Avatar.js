@@ -41,8 +41,8 @@ module.exports = {
 
     async execute(interaction, client) {
       let options = interaction.data.options;
-      let userId = options[0].options[0].value; 
-      
+      let userId = options[0].options[0].value;
+
       let user = await client.users.getUser(userId);
 
       const ctx = localeCtx(interaction, { name: user.global_name ? user.global_name : user.username });
@@ -52,7 +52,7 @@ module.exports = {
       .setImage(getAvatarURL(user))
       .randomColor()
       .build();
-      
+
     let botaoLink = new ComponentBuilder()
        .newRow()
        .addButton({
@@ -61,24 +61,23 @@ module.exports = {
            url: getAvatarURL(user)
          })
         .build();
-      
+
       await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`,{
         method: "POST",
         body: {
             "type": 5
         }
       })
-      
+
       await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
                 method: "POST",
-                body: { 
+                body: {
                    content: `<@${interaction.member.user.id}>`,
                    embeds: [embed],
                    components: botaoLink
                   }
                });
-     
-      
+
     }
 };
 

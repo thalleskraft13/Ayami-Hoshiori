@@ -6,8 +6,8 @@ const { Schema } = mongoose;
 const activityTermStatSchema = new Schema({
   guildId: { type: String, required: true },
   kind:    { type: String, enum: ['word', 'emoji', 'reaction'], required: true },
-  term:    { type: String, required: true }, // palavra normalizada, ID/nome do emoji, ou nome da reação
-  date:    { type: String, required: true }, // 'YYYY-MM-DD' (UTC)
+  term:    { type: String, required: true },
+  date:    { type: String, required: true },
 
   count: { type: Number, default: 0 },
 

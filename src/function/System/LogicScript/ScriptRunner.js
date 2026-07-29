@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { Lexer, LexerError }            = require('./Lexer.js');
 const { Parser, ParseError }            = require('./Parser.js');
 const { Interpreter, RuntimeError }     = require('./Interpreter.js');
@@ -8,20 +7,20 @@ const { db: lsDb }                      = require('./Database.js');
 const { LogicScriptModel, LogicRunLogModel } = require('../../../Mongodb/logicScript.js');
 const { LogicScriptConfig }             = require('../../../Mongodb/logicScriptConfig.js');
 
-const SCRIPT_CACHE_TTL  = 30_000;   
-const CONFIG_CACHE_TTL  = 60_000;   
+const SCRIPT_CACHE_TTL  = 30_000;
+const CONFIG_CACHE_TTL  = 60_000;
 
 class ScriptRunner {
   constructor(client) {
     this.client = client;
 
-    this._handlerCache  = new Map();  
-    this._cacheExpiry   = new Map();  
+    this._handlerCache  = new Map();
+    this._cacheExpiry   = new Map();
 
-    this._configCache   = new Map();  
-    this._configExpiry  = new Map();  
+    this._configCache   = new Map();
+    this._configExpiry  = new Map();
 
-    this._concurrent    = new Map();  
+    this._concurrent    = new Map();
     this._MAX_CONCURRENT = 20;
   }
 
@@ -339,7 +338,6 @@ class ScriptRunner {
     return new Parser(tokens).parse();
   }
 
-
   invalidateCache(guildId) {
     this._handlerCache.delete(guildId);
     this._cacheExpiry.delete(guildId);
@@ -386,6 +384,81 @@ class ScriptRunner {
     const handlers = await this._getEventHandlers(guildId);
     for (const h of (handlers.get(eventName) ?? [])) {
       await this._runHandler(h, { guildId, prefix: config.prefix, ...discordCtx }, eventName);
+    }
+  }
+
+  async runEndpoint(guildId, fileId, request = {}) {
+    const script = await LogicScriptModel.findOne({ guildId, fileId, isFolder: false }).lean();
+    if (!script) return { found: false };
+    if (!script.enabled) return { found: true, disabled: true };
+
+    let ast;
+    try {
+      ast = this._compile(script.content, script.path);
+    } catch (err) {
+      return { found: true, ok: false, error: `Erro ao compilar o script: ${err.message}`, logs: [] };
+    }
+
+    const onEndpoint = ast.body.find(n => n.type === 'OnEvent' && n.event === 'endpoint');
+    if (!onEndpoint) return { found: true, noHandler: true };
+
+    const setup   = ast.body.filter(n => n.type !== 'OnEvent');
+    const imports = ast.body.filter(n => n.type === 'Import').map(n => n.source);
+
+    const config  = await this._getConfig(guildId);
+    const modules = await this._loadModules(guildId, imports);
+    const interp  = new Interpreter({
+      client:     this.client,
+      discordCtx: { guildId, prefix: config.prefix },
+      db:         lsDb,
+      modules,
+    });
+
+    let responseStatus  = 200;
+    const responseHeaders = {};
+    let responseBody    = null;
+    let replied          = false;
+
+    const eventObj = {
+      body:      request.body      ?? {},
+      headers:   request.headers   ?? {},
+      query:     request.query     ?? {},
+      method:    request.method    ?? 'POST',
+      ip:        request.ip        ?? null,
+      userAgent: request.userAgent ?? null,
+      timestamp: Date.now(),
+
+      status: (code) => { responseStatus = Number(code) || 200; return null; },
+      header: (key, value) => { responseHeaders[String(key)] = String(value); return null; },
+      reply:  (data) => { responseBody = data; replied = true; return null; },
+    };
+
+    const startMs = Date.now();
+    try {
+      if (setup.length) await interp._execBlock(setup, interp._globals);
+
+      const param = (onEndpoint.params ?? [])[0];
+      if (param) interp._globals.define(param, eventObj);
+
+      await interp._execBlock(onEndpoint.body, interp._globals);
+
+      return {
+        found: true, ok: true,
+        status:  responseStatus,
+        headers: responseHeaders,
+        body:    replied ? responseBody : { success: true },
+        logs:    interp._printLog,
+        steps:   interp._steps,
+        durationMs: Date.now() - startMs,
+      };
+    } catch (err) {
+      return {
+        found: true, ok: false,
+        error: err.message,
+        errorLine: err.line ?? null,
+        logs: interp._printLog,
+        durationMs: Date.now() - startMs,
+      };
     }
   }
 }

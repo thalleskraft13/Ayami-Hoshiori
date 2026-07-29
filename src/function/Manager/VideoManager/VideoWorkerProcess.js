@@ -1,6 +1,5 @@
 'use strict';
 
-
 const VideoManager = require('./VideoManager');
 
 process.once('message', async (msg) => {

@@ -1,14 +1,13 @@
 'use strict';
 
-
 const dns = require('dns').promises;
 const { URL } = require('url');
 
-const DEFAULT_TIMEOUT_MS     = 10_000;       
-const MAX_RESPONSE_BYTES     = 2 * 1024 * 1024; 
-const MAX_REQUESTS_PER_RUN   = 10;           
-const RATE_LIMIT_WINDOW_MS   = 60_000;       
-const RATE_LIMIT_MAX_REQUESTS = 30;          
+const DEFAULT_TIMEOUT_MS     = 10_000;
+const MAX_RESPONSE_BYTES     = 2 * 1024 * 1024;
+const MAX_REQUESTS_PER_RUN   = 10;
+const RATE_LIMIT_WINDOW_MS   = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
 
 const _rateLimitBuckets = new Map();
 
@@ -19,25 +18,24 @@ class SafeHttpError extends Error {
   }
 }
 
-
 function isPrivateOrReservedIp(ip) {
   const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (v4) {
     const [a, b] = [Number(v4[1]), Number(v4[2])];
-    if (a === 127) return true;                          
-    if (a === 10) return true;                            
-    if (a === 172 && b >= 16 && b <= 31) return true;      
-    if (a === 192 && b === 168) return true;               
-    if (a === 169 && b === 254) return true;               
-    if (a === 0) return true;                              
-    if (a === 100 && b >= 64 && b <= 127) return true;      
+    if (a === 127) return true;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 0) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
     return false;
   }
 
   const lower = ip.toLowerCase();
-  if (lower === '::1') return true;                        
-  if (lower.startsWith('fe80:')) return true;               
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; 
+  if (lower === '::1') return true;
+  if (lower.startsWith('fe80:')) return true;
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
   if (lower.startsWith('::ffff:')) {
     const mapped = lower.split(':').pop();
     if (mapped && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(mapped)) {
@@ -87,7 +85,6 @@ async function assertUrlIsSafe(rawUrl) {
   }
 }
 
-
 function checkRateLimit(guildId) {
   const now = Date.now();
   let bucket = _rateLimitBuckets.get(guildId) ?? [];
@@ -103,7 +100,6 @@ function checkRateLimit(guildId) {
   bucket.push(now);
   _rateLimitBuckets.set(guildId, bucket);
 }
-
 
 async function readBodyWithLimit(response, maxBytes) {
   if (!response.body) return await response.text();
@@ -189,7 +185,7 @@ async function safeRequest(rawUrl, opts = {}) {
   const text = await readBodyWithLimit(response, maxResponseBytes);
 
   let json = null;
-  try { json = JSON.parse(text); } catch { /* não é JSON, tudo bem */ }
+  try { json = JSON.parse(text); } catch {  }
 
   return {
     ok: response.ok,

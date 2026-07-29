@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { Schema, model } = require('mongoose');
 
 const adventureGroupSchema = new Schema({

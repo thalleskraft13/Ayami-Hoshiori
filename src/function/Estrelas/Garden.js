@@ -173,7 +173,6 @@ class Garden {
     garden.decoracoes.push(decoracaoId);
     await garden.save();
 
-    // Decorar contribui para a reputação (colecionismo).
     await UserGlobalDb.updateOne({ userId: this.userId }, { $inc: { reputacao: 5 } });
 
     await Missions.progress(this.userId, this.context, 'decorar', 1);

@@ -10,16 +10,15 @@ const ExecutionContext   = require('./ExecutionContext.js');
 const DiscordRequest = require("../../DiscordRequest.js")
 const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
-
 const AUDIT_LOG_CHANNEL = '1511462019545563237';
-const MAX_CONCURRENT_FLOWS = 50; 
+const MAX_CONCURRENT_FLOWS = 50;
 
 function parseDuration(input) {
   if (input === undefined || input === null || input === '') return 0;
   if (typeof input === 'number') return Math.max(0, input);
 
   const str = String(input).trim().toLowerCase();
-  if (/^\d+$/.test(str)) return Number(str); 
+  if (/^\d+$/.test(str)) return Number(str);
 
   const UNIT_MS = { d: 86_400_000, h: 3_600_000, m: 60_000, s: 1_000 };
   const regex   = /(\d+)\s*(d|h|m|s)/g;
@@ -72,12 +71,11 @@ class LogicEngine {
     this.conditionEval   = new ConditionEvaluator(client);
     this.actionRunner    = new ActionRunner(client);
 
-    this._concurrentMap = new Map();  
+    this._concurrentMap = new Map();
 
-    this._flowCache    = new Map();   
+    this._flowCache    = new Map();
     this._CACHE_TTL_MS = 30_000;
   }
-
 
   start() {
     if (this._running) return;
@@ -101,11 +99,9 @@ class LogicEngine {
     console.log('[LogicEngine] Parado.');
   }
 
-
   handleGateway(payload) {
     this.triggerRegistry.handle(payload);
   }
-
 
   async _onTrigger(triggerCategory, triggerType, guildId, discordCtx) {
     if (!guildId) return;
@@ -133,7 +129,6 @@ class LogicEngine {
     await Promise.allSettled(promises);
   }
 
-
   async _runFlow(flow, discordCtx) {
     const start = Date.now();
     let result  = 'success';
@@ -151,9 +146,8 @@ class LogicEngine {
       }
 
       const ctx = new ExecutionContext({ flow, discordCtx, client: this.client });
-     ctx.runtimeVars = await this._loadGlobalVars(discordCtx.guildId); 
+     ctx.runtimeVars = await this._loadGlobalVars(discordCtx.guildId);
       await ctx.loadPersistent();
-      
 
       const condOk = await this.conditionEval.evaluate(flow.conditions, ctx);
       if (!condOk) {
@@ -225,18 +219,11 @@ class LogicEngine {
     }
   }
 
-
   async runById(flowId, discordCtx) {
     const flow = await FlowModel.findOne({ flowId, enabled: true }).lean();
 
     if (!flow) {
-      // Diagnóstico: antes disso o clique falhava em silêncio (Discord
-      // mostrava erro genérico, sem nenhum log nosso). Isso tornava
-      // impossível saber, na prática, POR QUE um botão permanente parou
-      // de funcionar — se o flowId nunca existiu, se o fluxo foi
-      // apagado, ou se está só desativado. Agora registramos os 3 casos
-      // separadamente e avisamos quem clicou, em vez de deixar o Discord
-      // mostrar "a interação falhou" sem explicação nenhuma.
+
       const anyVersion = await FlowModel.findOne({ flowId }).lean();
       const reason = !anyVersion ? 'not_found' : 'disabled';
       console.warn(
@@ -283,7 +270,6 @@ class LogicEngine {
     return { ok: true };
   }
 
-
   _flowMatchesFilters(flow, discordCtx) {
     const category = flow.trigger?.category;
     const filters  = flow.trigger?.filters || {};
@@ -325,7 +311,6 @@ class LogicEngine {
       if (key.startsWith(`${guildId}:`)) this._flowCache.delete(key);
     }
   }
-
 
   _hookCustomCommands() {
 
@@ -397,7 +382,6 @@ async _getCustomCommands(guildId) {
   return commands;
 }
 
-
   _hookTaskManager() {
     const tm = this.client.taskManager;
     if (!tm) return;
@@ -436,7 +420,6 @@ async _getCustomCommands(guildId) {
     console.log('[LogicEngine] TaskManager hooked.');
   }
 
-
   async createFlow(data) {
     const { randomUUID } = require('crypto');
     const flow = await FlowModel.create({
@@ -452,7 +435,7 @@ async _getCustomCommands(guildId) {
       cooldown:      data.cooldown || 0,
       createdBy:     data.createdBy || null
     });
-    
+
     this._auditLog('flow_create', data.guildId, {
   name:       flow.name,
   flowId:     flow.flowId,
@@ -472,7 +455,7 @@ async _getCustomCommands(guildId) {
       { ...updates, updatedAt: new Date() },
       { new: true }
     );
-    
+
     if (flow) {
   this._auditLog('flow_update', guildId, {
     name:       flow.name,
@@ -486,7 +469,7 @@ async _getCustomCommands(guildId) {
     if (flow) this.invalidateGuildCache(guildId);
     return flow;
   }
-  
+
   async deleteFlow(flowId, guildId) {
   const flow = await FlowModel.findOne({ flowId, guildId }).lean();
   await FlowModel.deleteOne({ flowId, guildId });
@@ -500,8 +483,6 @@ async _getCustomCommands(guildId) {
   }
 }
 
-  
-
   async getFlows(guildId) {
     return FlowModel.find({ guildId }).lean();
   }
@@ -511,7 +492,7 @@ async _getCustomCommands(guildId) {
   if (!flow) return null;
   flow.enabled = !flow.enabled;
   await flow.save();
-  
+
   this._auditLog('flow_toggle', guildId, {
   name:    flow.name,
   flowId:  flow.flowId,
@@ -540,7 +521,6 @@ async _getCustomCommands(guildId) {
   this.invalidateGuildCache(guildId);
   return flow;
 }
-
 
 async _auditLog(action, guildId, data) {
   try {
@@ -628,7 +608,6 @@ async _auditLog(action, guildId, data) {
   }
 }
 
-
   async createCommand(data) {
     const { randomUUID } = require('crypto');
     const cmd = await CustomCommandModel.create({
@@ -643,7 +622,7 @@ async _auditLog(action, guildId, data) {
       permissions:   data.permissions || [],
       requiredRoles: data.requiredRoles || []
     });
-    
+
     this._auditLog('cmd_create', data.guildId, {
   commandName: cmd.name,
   prefix:      cmd.prefix,
@@ -668,7 +647,7 @@ async _auditLog(action, guildId, data) {
     this._flowCache.delete(`cmd:${guildId}`);
     return true;
   }
-  
+
   async _loadGlobalVars(guildId) {
   const vars = await PersistentVarModel.find({ guildId });
 

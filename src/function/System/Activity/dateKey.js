@@ -1,6 +1,5 @@
 'use strict';
 
-
 function dateKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
@@ -38,7 +37,7 @@ function shiftDateKey(key, days) {
 }
 
 function localizeDailyStats(dailyStats, offsetHours = 0) {
-  const offset = ((Number(offsetHours) || 0) % 24 + 24) % 24; 
+  const offset = ((Number(offsetHours) || 0) % 24 + 24) % 24;
   const hourTotals = Array(24).fill(0);
   const weekdayTotals = Array(7).fill(0);
   const byLocalDate = new Map();

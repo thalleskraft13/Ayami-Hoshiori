@@ -1,6 +1,5 @@
 'use strict';
 
-
 const DEFAULT_MESSAGE =
   '⚠️ A Ayami entrará em atualização em breve. Alguns recursos poderão ficar temporariamente indisponíveis durante a manutenção.';
 
@@ -29,7 +28,7 @@ async function loadFromDb() {
     const BotConfig = require('../../Mongodb/botConfig.js');
     const cfg = await BotConfig.findOne({ key: 'global' }).lean();
     if (cfg?.maintenance) applyLocalState(cfg.maintenance);
-  } catch { /* Mongo pode não estar pronto ainda — assume inativo */ }
+  } catch {  }
   return _state;
 }
 

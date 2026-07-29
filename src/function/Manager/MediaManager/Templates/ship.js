@@ -95,7 +95,6 @@ class ShipTemplate extends BaseImage {
         return Canvas.toBuffer(canvas);
     }
 
-
     _drawBackground(ctx, W, H) {
         const grad = ctx.createLinearGradient(0, 0, W, H);
         grad.addColorStop(0,    '#0d0015');
@@ -247,7 +246,6 @@ class ShipTemplate extends BaseImage {
         ctx.fill();
         ctx.restore();
     }
-
 
     async _resolveImage(context, url, buffer, size) {
         if (buffer) return context.loadImage(buffer);

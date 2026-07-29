@@ -1,8 +1,6 @@
 'use strict';
 
-
 class BaseImage {
-
 
     static get templateName() {
         return 'base';
@@ -12,14 +10,12 @@ class BaseImage {
         return '';
     }
 
-
     async render(data, context) {
         throw new Error(
             `[BaseImage] Template "${this.constructor.templateName ?? this.constructor.name}" ` +
             `must implement the render(data, context) method.`
         );
     }
-
 
     async loadAsset(context, category, name) {
         const assetMap = context.assets[category];

@@ -54,13 +54,11 @@ async function main() {
         require('../function/Utils/MaintenanceMode.js').applyLocalState(msg.state ?? {});
     }
 });
-    
+
     client.once('ready', () => {
     parentPort.postMessage({ type: 'CLUSTER_READY' });
     console.log(`[ClusterWorker ${clusterId}] Pronto!`);
 });
-
-
 
     await client.connect();
 }

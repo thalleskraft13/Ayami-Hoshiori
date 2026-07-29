@@ -15,16 +15,6 @@ function avatarURL(user) {
   return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=256`;
 }
 
-/**
- * Serviço central da economia da Ayami (Estrelas).
- * Toda movimentação de saldo global deve passar por esta classe,
- * garantindo log consistente (Mongo + canal de auditoria) e evitando saldo negativo.
- *
- * context (opcional, passado no construtor):
- *   - client:  instância do DiscordGatewayClient (usada para resolver ícone/nome do servidor)
- *   - guildId: id do servidor onde a ação foi originada (null se em DM)
- *   - actor:   { id, username, avatar } — quem executou a ação (ex: interaction.member.user)
- */
 class Economy {
 
   constructor(userId, context = {}) {
@@ -337,12 +327,6 @@ class Economy {
     return log;
   }
 
-  /**
-   * Transfere Estrelas deste usuário para outro usuário.
-   * Nunca cria saldo do nada — falha se o remetente não tiver saldo suficiente.
-   * O contexto (actor/guild/client) do remetente é propagado ao log do destinatário,
-   * para que fique registrado quem iniciou a transferência.
-   */
   async transferTo(destinationUserId, amount, motivo = null) {
     if (amount <= 0)
       throw new Error("Quantidade deve ser maior que 0.");
@@ -363,7 +347,7 @@ class Economy {
         metadata: { motivo, from: this.userId }
       });
     } catch (err) {
-      // Rollback: se o crédito ao destinatário falhar, devolve ao remetente.
+
       await this.add(amount, {
         action: "add",
         metadata: { motivo: "rollback_transfer", to: destinationUserId }
@@ -375,10 +359,6 @@ class Economy {
 
     return { origin: this.userId, destination: destinationUserId, amount, motivo };
   }
-
-  // ================================
-  // Recursos (madeira, pedra, ferro, cristais, flores, livros, relíquias, cogumelos, poeira estelar)
-  // ================================
 
   async addResource(nome, quantidade) {
     if (quantidade <= 0)
@@ -456,10 +436,6 @@ class Economy {
     }
     return resultado;
   }
-
-  // ================================
-  // Itens de inventário (produzidos na Oficina, obtidos na Exploração, etc.)
-  // ================================
 
   async addItem(itemId, quantidade = 1) {
     if (quantidade <= 0)
@@ -553,12 +529,6 @@ class Economy {
     return resultado;
   }
 
-  /**
-   * Migra o saldo legado de "primogemas" (removido do schema, mas que pode
-   * ainda existir em documentos antigos no MongoDB) para Estrelas.
-   * Idempotente: uma vez migrado, marca `estrelas.migrado = true` e nunca repete.
-   * Conversão 1:1 — nenhum valor é criado ou perdido.
-   */
   async migrateLegacyPrimogemas() {
     const user = await this._getOrCreate();
 
@@ -566,7 +536,6 @@ class Economy {
       return { migrated: false, reason: 'already_migrated', amount: 0 };
     }
 
-    // Acesso via driver puro: o valor pode existir no banco mesmo sem estar no schema atual.
     const raw = await UserGlobalSchema.collection.findOne(
       { userId: this.userId },
       { projection: { primogemas: 1 } }

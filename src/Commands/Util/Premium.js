@@ -6,7 +6,6 @@ const { localeCtx } = require("../../function/Utils/ctxLocale.js");
 
 const SITE_URL = "https://ayami-hoshiori.cpufael.com";
 
-
 function cv2Text(content) {
   return { type: 10, content };
 }
@@ -156,7 +155,6 @@ module.exports = {
   }
 };
 
-
 async function renderBuy(interaction, client, emoji) {
 
   const ctx = localeCtx(interaction, {
@@ -177,7 +175,7 @@ async function renderBuy(interaction, client, emoji) {
       type: 2,
       style: 5,
       label: client.t("premium.buy_button", ctx),
-      url: `${SITE_URL}/premium` 
+      url: `${SITE_URL}/premium`
     }),
   ];
 
@@ -192,7 +190,6 @@ async function renderBuy(interaction, client, emoji) {
     }
   );
 }
-
 
 async function renderPanel(interaction, client, userId, edit = false) {
 

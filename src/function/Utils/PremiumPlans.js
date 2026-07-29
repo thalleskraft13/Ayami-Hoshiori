@@ -1,6 +1,5 @@
 'use strict';
 
-
 const PLAN_KEYS = {
   FREE:          'FREE',
   NOVA_ESTRELA:  'NOVA_ESTRELA',
@@ -29,7 +28,7 @@ const PLANS = {
     priceLabel: 'Grátis',
 
     premiumGuildLimit: 0,
-    guildLimit: 0, // alias (nome usado no bot)
+    guildLimit: 0,
 
     logicBuilderFlowLimit: 10,
 
@@ -42,9 +41,22 @@ const PLANS = {
       premiumEvents: false,
     },
 
+    endpoints: {
+      enabled: false,
+      maxEndpoints: 0,
+      memoryBytes: 0,
+      rateLimitPerMinute: 0,
+      maxRequestBytes: 0,
+      historyLimit: 0,
+      errorLogs: false,
+      ipWhitelist: false,
+      advancedStats: false,
+      priorityProcessing: false,
+    },
+
     tickets: {
       maxQuestions: 5,
-      advancedTypeLimit: 0, // seleção / múltipla escolha / checkbox / anexos / membro / cargo / canal
+      advancedTypeLimit: 0,
       modalEnabled: false,
     },
 
@@ -55,7 +67,7 @@ const PLANS = {
     bonusRewards: false,
     summonBonus: false,
     dailyBonusMultiplier: 1,
-    dailyMultiplier: 1, // alias (multiplicador de recompensa diária de Estrelas)
+    dailyMultiplier: 1,
     fiveStarExtraChance: BASE_FIVE_STAR_EXTRA_CHANCE,
 
     earlyAccess: false,
@@ -77,10 +89,23 @@ const PLANS = {
     logicScriptFileLimit: 15,
     logicScript: {
       maxFunctionsPerFile: 40,
-      httpAccess: false,   // "HTTP bloqueado" — seção 2
-      webhookAccess: false, // "Webhooks bloqueados" — seção 2
+      httpAccess: false,
+      webhookAccess: false,
       canRunFlowById: false,
-      premiumEvents: true, // primeiro plano pago já libera ticketUpdate/activitySpike/abrirTicket()
+      premiumEvents: true,
+    },
+
+    endpoints: {
+      enabled: false,
+      maxEndpoints: 0,
+      memoryBytes: 0,
+      rateLimitPerMinute: 0,
+      maxRequestBytes: 0,
+      historyLimit: 0,
+      errorLogs: false,
+      ipWhitelist: false,
+      advancedStats: false,
+      priorityProcessing: false,
     },
 
     tickets: {
@@ -96,7 +121,7 @@ const PLANS = {
     bonusRewards: false,
     summonBonus: false,
     dailyBonusMultiplier: 1.25,
-    dailyMultiplier: 1.25, // alias (multiplicador de recompensa diária de Estrelas)
+    dailyMultiplier: 1.25,
     fiveStarExtraChance: 4 / 20,
 
     earlyAccess: false,
@@ -118,9 +143,22 @@ const PLANS = {
     logicScriptFileLimit: 35,
     logicScript: {
       maxFunctionsPerFile: Infinity,
-      httpAccess: true,    // "HTTP liberado"
-      webhookAccess: true, // "Webhooks liberados" (personalizados)
+      httpAccess: true,
+      webhookAccess: true,
       canRunFlowById: true,
+    },
+
+    endpoints: {
+      enabled: true,
+      maxEndpoints: 3,
+      memoryBytes: 512 * 1024,
+      rateLimitPerMinute: 30,
+      maxRequestBytes: 128 * 1024,
+      historyLimit: 20,
+      errorLogs: true,
+      ipWhitelist: false,
+      advancedStats: false,
+      priorityProcessing: false,
     },
 
     tickets: {
@@ -136,7 +174,7 @@ const PLANS = {
     bonusRewards: true,
     summonBonus: true,
     dailyBonusMultiplier: 1.6,
-    dailyMultiplier: 1.6, // alias (multiplicador de recompensa diária de Estrelas)
+    dailyMultiplier: 1.6,
     fiveStarExtraChance: 5.5 / 20,
 
     earlyAccess: false,
@@ -163,6 +201,19 @@ const PLANS = {
       canRunFlowById: true,
     },
 
+    endpoints: {
+      enabled: true,
+      maxEndpoints: 9,
+      memoryBytes: 4 * 1024 * 1024,
+      rateLimitPerMinute: 120,
+      maxRequestBytes: 1024 * 1024,
+      historyLimit: 200,
+      errorLogs: true,
+      ipWhitelist: true,
+      advancedStats: true,
+      priorityProcessing: true,
+    },
+
     tickets: {
       maxQuestions: Infinity,
       advancedTypeLimit: Infinity,
@@ -176,7 +227,7 @@ const PLANS = {
     bonusRewards: true,
     summonBonus: true,
     dailyBonusMultiplier: 2,
-    dailyMultiplier: 2, // alias (multiplicador de recompensa diária de Estrelas)
+    dailyMultiplier: 2,
     fiveStarExtraChance: 7 / 20,
 
     earlyAccess: true,

@@ -227,7 +227,6 @@ module.exports = [
   { id: "trigger_button_clicked", render: () => "🖱️ Botão clicado" },
   { id: "trigger_scheduled", render: () => "🕐 Agendado" },
 
-  // ---- Biblioteca de Embeds & Components V2 ----
   { id: "err_no_permission", render: () => "Sem permissão." },
   { id: "err_version_must_be_higher", render: (ctx) => `A versão ${ctx.newVersion} deve ser maior que a atual (${ctx.currentVersion}).` },
   { id: "embeds_err_message_not_found", render: () => "Mensagem salva não encontrada neste servidor." },

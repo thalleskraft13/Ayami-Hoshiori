@@ -20,7 +20,6 @@ class EffectManager {
         return log;
     }
 
-
     _resolverAlvos(tipoAlvo, fonte, timeAliado, timeInimigo) {
         switch (tipoAlvo) {
             case 'self':
@@ -45,14 +44,13 @@ class EffectManager {
                 return timeInimigo.vivos();
 
             case 'aliado_morto':
-                return timeAliado.derrotados().slice(0, 1); 
+                return timeAliado.derrotados().slice(0, 1);
 
             default:
                 console.warn(`[EffectManager] Alvo desconhecido: ${tipoAlvo}`);
                 return [];
         }
     }
-
 
     _aplicarEfeito(efeito, fonte, alvo, timeAliado, timeInimigo) {
         switch (efeito.tipo) {
@@ -86,7 +84,6 @@ class EffectManager {
                 return null;
         }
     }
-
 
     _aplicarDano(efeito, fonte, alvo) {
         let valor = this._calcularValor(efeito, fonte);
@@ -127,7 +124,6 @@ class EffectManager {
                     });
                 }
 
-                // Aplica debuff de supercondutor (já aplicado no reactionManager)
             }
         }
 
@@ -137,7 +133,6 @@ class EffectManager {
         const critStr = isCrit ? ' ⚡**CRÍTICO!**' : '';
         return `${alvo.nome} recebeu **${danoReal}** dano${critStr}${reacaoLog}`;
     }
-
 
     _aplicarCura(efeito, fonte, alvo) {
         let valor = this._calcularValor(efeito, fonte);
@@ -151,7 +146,6 @@ class EffectManager {
         return `${alvo.nome} recuperou **${curaReal}** HP 💚`;
     }
 
-
     _aplicarBuff(efeito, fonte, alvo) {
         alvo.aplicarBuff({
             stat:    efeito.stat,
@@ -163,7 +157,6 @@ class EffectManager {
         return `${alvo.nome} recebeu buff: **${efeito.stat}** +${efeito.valor} por ${efeito.duracao ?? 2} turnos ✨`;
     }
 
-
     _aplicarDebuff(efeito, fonte, alvo) {
         alvo.aplicarDebuff({
             tipo:    efeito.stat ?? efeito.tipo,
@@ -174,7 +167,6 @@ class EffectManager {
 
         return `${alvo.nome} sofreu debuff: **${efeito.stat ?? efeito.tipo}** -${efeito.valor} por ${efeito.duracao ?? 2} turnos 🔻`;
     }
-
 
     _aplicarEscudo(efeito, fonte, alvo) {
         const valor = this._calcularValor(efeito, fonte);
@@ -188,12 +180,10 @@ class EffectManager {
         return `${alvo.nome} recebeu escudo de **${valor}** por ${efeito.duracao ?? 3} turnos 🛡️`;
     }
 
-
     _aplicarEnergia(efeito, alvo) {
         alvo.adicionarEnergia(efeito.valor);
         return `${alvo.nome} recebeu **${efeito.valor}** de energia ⚡`;
     }
-
 
     _aplicarReviver(efeito, alvo) {
         if (alvo.vivo) return null;
@@ -202,7 +192,6 @@ class EffectManager {
         alvo.reviver(hp);
         return `${alvo.nome} foi **revivido** com **${hp}** HP 🌟`;
     }
-
 
     _aplicarMarca(efeito, fonte, alvo) {
         alvo.aplicarMarca({
@@ -214,7 +203,6 @@ class EffectManager {
 
         return `${alvo.nome} recebeu a marca **${efeito.id ?? 'marca'}** 🔖`;
     }
-
 
     _calcularValor(efeito, fonte) {
         if (typeof efeito.valor === 'number') {

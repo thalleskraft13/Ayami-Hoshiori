@@ -3,8 +3,8 @@
 const BASE_URL      = 'https://discord.com/api/v10';
 const LOG_CHANNEL   = '1500087209536000190';
 
-const RATE_LIMIT_RETRY_LIMIT = 3;      
-const REQUEST_TIMEOUT_MS     = 15_000; 
+const RATE_LIMIT_RETRY_LIMIT = 3;
+const REQUEST_TIMEOUT_MS     = 15_000;
 
 const METHOD_COLOR = Object.freeze({
     GET:    0x57F287,
@@ -14,8 +14,6 @@ const METHOD_COLOR = Object.freeze({
     DELETE: 0xED4245,
 });
 const DEFAULT_COLOR = 0x95A5A6;
-
-
 
 async function DiscordRequest(route, options = {}) {
     _assertToken();
@@ -32,8 +30,6 @@ async function DiscordRequest(route, options = {}) {
     const config = _buildRequestConfig(method, options);
 
     let response;
-    
-    
 
     try {
         response = await _fetchWithTimeout(url, config);
@@ -55,7 +51,6 @@ async function DiscordRequest(route, options = {}) {
         return DiscordRequest(route, { ...options, _retries: retries + 1 });
     }
 
-
     if (!response.ok) {
         const apiError = await _safeParseJson(response);
 
@@ -72,7 +67,6 @@ async function DiscordRequest(route, options = {}) {
         );
     }
 
-    
     _sendLog({
         title:  `🌐 Discord API • ${method}`,
         color:  METHOD_COLOR[method] ?? DEFAULT_COLOR,
@@ -84,8 +78,6 @@ async function DiscordRequest(route, options = {}) {
     return _safeParseJson(response);
 }
 
-
-
 function _assertToken() {
     if (!process.env.DISCORD_TOKEN)
         throw new Error('[DiscordRequest] DISCORD_TOKEN is not defined.');
@@ -96,16 +88,13 @@ function _buildRequestConfig(method, options) {
         Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
     };
 
-
     if (options.files?.length) {
         const form = new FormData();
 
-       
         if (options.body) {
             form.append('payload_json', JSON.stringify(options.body));
         }
 
-        
         for (let i = 0; i < options.files.length; i++) {
             const file = options.files[i];
             const blob = file.data instanceof Blob
@@ -118,7 +107,6 @@ function _buildRequestConfig(method, options) {
         return { method, headers: baseHeaders, body: form };
     }
 
-
     const headers = { ...baseHeaders, 'Content-Type': 'application/json' };
     const config  = { method, headers };
 
@@ -128,8 +116,6 @@ function _buildRequestConfig(method, options) {
 
     return config;
 }
-
-
 
 async function _fetchWithTimeout(url, config) {
     const controller = new AbortController();
@@ -141,8 +127,6 @@ async function _fetchWithTimeout(url, config) {
         clearTimeout(timer);
     }
 }
-
-
 
 async function _safeParseJson(response) {
     try {
@@ -159,7 +143,6 @@ function _formatError(apiError) {
     return `${code ? `[${code}] ` : ''}${msg || JSON.stringify(apiError)}`.slice(0, 1000);
 }
 
-
 function _parseRetryAfter(response) {
     const header = response.headers?.get('retry-after');
     if (!header) return 1000;
@@ -169,8 +152,6 @@ function _parseRetryAfter(response) {
 function _sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-
 
 function _sendLog({ title, color, method, safeRoute, origin, elapsed, extra = [] }) {
     const embed = {
@@ -186,16 +167,7 @@ function _sendLog({ title, color, method, safeRoute, origin, elapsed, extra = []
         timestamp: new Date().toISOString(),
     };
 
-   // fetch(`${BASE_URL}/channels/${LOG_CHANNEL}/messages`, {
-      //  method:  'POST',
-    //  headers: {
-      //      Authorization:  `Bot ${process.env.DISCORD_TOKEN}`,
-  //        'Content-Type': 'application/json',
-       // },
-     //   body: JSON.stringify({ embeds: [embed] }),
- //   }).catch(() => {}); ,
 }
-
 
 function _logInternal({ method, safeRoute, origin, elapsed, err }) {
     _sendLog({
@@ -211,8 +183,6 @@ function _resolveStatus(title) {
     if (title.startsWith('💥')) return '💥 Fatal';
     return '✅ OK';
 }
-
-
 
 function _getCaller() {
     const stack = new Error().stack?.split('\n') ?? [];
@@ -234,13 +204,10 @@ function _getCaller() {
         .trim();
 }
 
-
-
 function _sanitizeRoute(route) {
     return route
         .replace(/interactions\/(\d+)\/([^/]+)/, 'interactions/$1/[TOKEN]')
         .replace(/webhooks\/(\d+)\/([^/]+)/,     'webhooks/$1/[TOKEN]');
 }
- 
 
 module.exports = DiscordRequest;

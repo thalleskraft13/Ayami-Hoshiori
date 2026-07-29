@@ -9,7 +9,6 @@ class TicketSystem {
     this.client = client;
   }
 
-
   async reply(interaction, data) {
     return DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -42,7 +41,6 @@ class TicketSystem {
     return this.followUp(interaction, { ...data, flags: 64 });
   }
 
-
   async getGuild(guildId) {
     let g = await GuildDb.findOne({ guildId });
     if (!g) g = await GuildDb.create({ guildId });
@@ -66,7 +64,6 @@ class TicketSystem {
     return p.status;
   }
 
-
   btn(user, label, style, func) {
     return this.client.interactions.createButton({
       user,
@@ -86,7 +83,6 @@ class TicketSystem {
   row(...c) {
     return { type: 1, components: c };
   }
-
 
   buildEmbeds(panel) {
 
@@ -114,7 +110,6 @@ class TicketSystem {
 
     return [config, preview];
   }
-
 
   async startSetup(interaction) {
 
@@ -153,7 +148,6 @@ class TicketSystem {
     });
   }
 
-
   async createPanel(interaction, guild, user) {
 
     const id = "panel_" + Date.now();
@@ -191,7 +185,6 @@ class TicketSystem {
       "Configurar",
       async (i) => {
 
-        
         const v = i.data.values[0];
         if (v === "json") return this.setJson(i, guild, panelId, user);
         await this.deferUpdate(i);
@@ -218,15 +211,13 @@ class TicketSystem {
     });
   }
 
-  
   async create(interaction) {
   try {
-    
+
     const guild = await this.getGuild(interaction.guild_id);
     const data = JSON.parse(interaction.data.custom_id);
     const panel = this.getPanel(guild, data.p);
 
-    
    const permCheck = await this.checkBotPermissions(interaction, panel);
 
 if (!permCheck.ok) {
@@ -236,9 +227,8 @@ if (!permCheck.ok) {
       permCheck.missing.map(p => `• ${p}`).join("\n"),
     flags: 64
   });
-} 
+}
 
-    
     if (!panel) {
       return this.reply(interaction, {
         content: "❌ Painel não encontrado",
@@ -455,7 +445,6 @@ async createTicketNormally(interaction, guild, panel) {
     );
   }
 
-  // ================= THREAD PÚBLICA =================
   else if (panel.tipoDeCriacao === 1) {
 
     channel = await DiscordRequest(
@@ -464,14 +453,13 @@ async createTicketNormally(interaction, guild, panel) {
         method: "POST",
         body: {
           name: ticketName,
-          type: 11, // public thread
+          type: 11,
           auto_archive_duration: 1440
         }
       }
     );
   }
 
-  // ================= THREAD PRIVADA =================
   else if (panel.tipoDeCriacao === 2) {
 
     channel = await DiscordRequest(
@@ -480,7 +468,7 @@ async createTicketNormally(interaction, guild, panel) {
         method: "POST",
         body: {
           name: ticketName,
-          type: 12, // private thread
+          type: 12,
           auto_archive_duration: 1440,
           invitable: false
         }
@@ -536,10 +524,6 @@ async createTicketNormally(interaction, guild, panel) {
   return channel;
 }
 
-
-
-
-
   async close(interaction) {
   try {
 
@@ -561,7 +545,6 @@ async createTicketNormally(interaction, guild, panel) {
     console.error("close ticket error:", err);
   }
 }
-
 
   async setJson(interaction, guild, panelId, user) {
 
@@ -705,7 +688,7 @@ async createTicketNormally(interaction, guild, panel) {
         content: "Defina um canal primeiro"
       });
     }
-    
+
    const permCheck = await this.checkSendPanelPermissions(
     guild.guildId,
     panel.canalId
@@ -717,7 +700,7 @@ async createTicketNormally(interaction, guild, panel) {
         "❌ Não tenho permissões suficientes no canal:\n\n" +
         permCheck.missing.map(p => `• ${p}`).join("\n")
     });
-  } 
+  }
 
     await DiscordRequest(`/channels/${panel.canalId}/messages`, {
       method: "POST",
@@ -745,7 +728,7 @@ async createTicketNormally(interaction, guild, panel) {
       content: "✅ Painel enviado!"
     });
   }
-  
+
  async setTipo(interaction, guild, panelId, user) {
 
   const premium = await this.isPremium(guild.guildId);
@@ -772,7 +755,7 @@ async createTicketNormally(interaction, guild, panel) {
     panel.tipoDeCriacao = value;
 
     await this.save(guild);
-    
+
     this.followUpEphemeral(i, {
     content: "✅ Tipo de canal configurado!"
   });
@@ -784,7 +767,7 @@ async createTicketNormally(interaction, guild, panel) {
     content: "Selecione o tipo de criação:",
     components: [this.row(select)]
   });
-} 
+}
 
   async setStaff(interaction, guild, panelId, user) {
 
@@ -841,14 +824,14 @@ async createTicketNormally(interaction, guild, panel) {
     panel.canalId = id;
 
     await this.save(guild);
-    
+
     this.followUpEphemeral(interaction, {
     content: "✅ Canal configurado!"
   });
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
-  
+
   async setNome(interaction, guild, panelId, user) {
 
   const premium = await this.isPremium(guild.guildId);
@@ -883,18 +866,16 @@ async createTicketNormally(interaction, guild, panel) {
 
   const panel = this.getPanel(guild, panelId);
 
-  panel.ticketChatName = msg.content.slice(0, 90); 
+  panel.ticketChatName = msg.content.slice(0, 90);
 
   await this.save(guild);
-  
+
   this.followUpEphemeral(interaction, {
     content: "Nome do ticket configurado!"
   });
 
   return this.panelMenu(interaction, guild, panelId, user);
 }
-  
-  
 
   async setCategoria(interaction, guild, panelId, user) {
 
@@ -920,14 +901,14 @@ async createTicketNormally(interaction, guild, panel) {
     panel.categoriaId = id;
 
     await this.save(guild);
-    
+
     this.followUpEphemeral(interaction, {
     content: "✅ Cartegoria onfigurado!"
   });
 
     return this.panelMenu(interaction, guild, panelId, user);
   }
-  
+
   async modalMenu(interaction, guild, panelId, user) {
 
   const panel = this.getPanel(guild, panelId);
@@ -1003,7 +984,6 @@ async addModalField(interaction, guild, panelId, user) {
     };
   }
 
-  
   if (panel.modalConfig.fields.length >= 15) {
     return this.followUpEphemeral(interaction, {
       content: "❌ Você pode adicionar no máximo 5 perguntas."
@@ -1022,7 +1002,7 @@ async addModalField(interaction, guild, panelId, user) {
           label: "Pergunta (máx. 45 caracteres)",
           style: 1,
           required: true,
-          max_length: 45 
+          max_length: 45
         }]
       },
       {
@@ -1052,7 +1032,6 @@ async addModalField(interaction, guild, panelId, user) {
 
       const panelAtual = this.getPanel(guild, panelId);
 
-      
       if (panelAtual.modalConfig.fields.length >= 15) {
         return DiscordRequest(
           `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
@@ -1069,7 +1048,6 @@ async addModalField(interaction, guild, panelId, user) {
         );
       }
 
-      
       const label = fields.label?.trim();
 
       if (!label || label.length > 45) {
@@ -1106,7 +1084,7 @@ async addModalField(interaction, guild, panelId, user) {
         `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
         {
           method: "POST",
-          body: { type: 6 } 
+          body: { type: 6 }
         }
       );
 
@@ -1116,7 +1094,6 @@ async addModalField(interaction, guild, panelId, user) {
 
   return this.client.interactions.showModal(interaction, modal);
 }
-
 
 async toggleModal(interaction, guild, panelId, user) {
 
@@ -1181,7 +1158,7 @@ async setModalTitle(interaction, guild, panelId, user) {
         `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
         {
           method: "POST",
-          body: { type: 6 } 
+          body: { type: 6 }
         }
       );
 
@@ -1191,7 +1168,6 @@ async setModalTitle(interaction, guild, panelId, user) {
 
   return this.client.interactions.showModal(interaction, modal);
 }
-
 
 async setModalSendMode(interaction, guild, panelId, user) {
 
@@ -1209,10 +1185,8 @@ async setModalSendMode(interaction, guild, panelId, user) {
 
 async setModalLogChannel(interaction, guild, panelId, user) {
 
-  
   await this.deferUpdate(interaction);
 
-  
   await this.followUpEphemeral(interaction, {
     content: "Envie o canal de log (menção ou ID)"
   });
@@ -1251,11 +1225,11 @@ async setModalLogChannel(interaction, guild, panelId, user) {
   panel.modalConfig.logChannelId = id;
 
   await this.save(guild);
-  
+
   this.followUpEphemeral(interaction, {
     content: "✅ Canal de log configurado!"
   });
-  
+
   return this.panelMenu(interaction, guild, panelId, user);
 }
 
@@ -1283,7 +1257,6 @@ async removeLastField(interaction, guild, panelId, user) {
 
     return this.startSetup(interaction);
   }
-   
 
 async checkBotPermissions(interaction, panel) {
   try {
@@ -1308,7 +1281,7 @@ async checkBotPermissions(interaction, panel) {
     });
 
     const required = new Set();
-    
+
     if (panel.tipoDeCriacao === 0) {
       required.add("VIEW_CHANNEL");
       required.add("SEND_MESSAGES");

@@ -1,11 +1,10 @@
 'use strict';
 
-
 const DiscordRequest = require('../../DiscordRequest.js');
 const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 const MAX_MESSAGES_PER_FETCH = 100;
-const MAX_TOTAL_MESSAGES     = 2000; 
+const MAX_TOTAL_MESSAGES     = 2000;
 
 class TranscriptManager {
 
@@ -17,7 +16,6 @@ class TranscriptManager {
   _t(key, extra = {}) {
     return this.client.t(`ticket.${key}`, { ...this._ctx, ...extra });
   }
-
 
   async generate({ interaction, panel, closedBy, messages = {} }) {
     this._ctx = localeCtx(interaction);
@@ -63,7 +61,6 @@ class TranscriptManager {
     }
   }
 
-
   async _fetchAllMessages(channelId) {
     const messages = [];
     let   before   = null;
@@ -86,7 +83,6 @@ class TranscriptManager {
 
     return messages.reverse();
   }
-
 
   _buildHtml(messages, channel, closedBy) {
     const rows = messages.map(m => this._messageToHtmlRow(m)).join('\n');
@@ -206,7 +202,6 @@ ${rows}
     </div>`;
   }
 
-
   _buildTxt(messages, channel, closedBy) {
     const header = [
       this._t('tr_txt_header_title'),
@@ -241,7 +236,6 @@ ${rows}
     return header + body;
   }
 
-
   async _sendDmTranscript(userId, filename, buffer, contentType, channelName, messages = {}) {
     const dm = await DiscordRequest('/users/@me/channels', {
       method: 'POST',
@@ -260,7 +254,6 @@ ${rows}
       files: [{ name: filename, data: buffer, contentType }]
     });
   }
-
 
   _findTicketOpener(messages) {
     const botId = process.env.CLIENT_ID;

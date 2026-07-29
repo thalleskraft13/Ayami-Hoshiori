@@ -21,9 +21,6 @@ async function connectMongo() {
         isConnected = true;
         mongoose.set("strictQuery", false);
 
-        
-
-        
         return mongoose.connection;
 
     } catch (error) {

@@ -32,7 +32,6 @@ class GiveawaySystem {
     return this.client.t(`sorteio.${key}`, localeCtx(interaction, extra));
   }
 
-
   async reply(interaction, data) {
     return DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -87,7 +86,6 @@ class GiveawaySystem {
     return { type: 1, components };
   }
 
-
   async _ask(interaction, draft, questionEmbed) {
 
     await this.editOriginal(interaction, {
@@ -124,7 +122,6 @@ class GiveawaySystem {
       return null;
     }
   }
-
 
   _getDraft(userId) {
     if (!this._drafts.has(userId)) {
@@ -199,7 +196,6 @@ class GiveawaySystem {
     };
   }
 
-
   async startMenu(interaction) {
 
     const user    = interaction.member.user.id;
@@ -236,7 +232,6 @@ class GiveawaySystem {
       components: actives.length ? [this.row(selectSorteio)] : [],
     });
   }
-
 
   async criar(interaction) {
 
@@ -281,7 +276,7 @@ class GiveawaySystem {
               data: {
                 embeds: [this._embedDraft(draft, mi)],
                 components: [],
-              //  flags: 64,
+
               }
             }
           }
@@ -293,7 +288,6 @@ class GiveawaySystem {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async _criarStep_Canal(interaction, user) {
 
@@ -323,7 +317,6 @@ class GiveawaySystem {
     return this._criarStep_Vencedores(interaction, user);
   }
 
-
   async _criarStep_Vencedores(interaction, user) {
 
     const draft = this._getDraft(user);
@@ -351,7 +344,6 @@ class GiveawaySystem {
     draft.winners = n;
     return this._criarStep_Duracao(interaction, user);
   }
-
 
   async _criarStep_Duracao(interaction, user) {
 
@@ -382,7 +374,6 @@ class GiveawaySystem {
 
     return this._telaExtras(interaction, user);
   }
-
 
   async _telaExtras(interaction, user) {
 
@@ -420,8 +411,6 @@ class GiveawaySystem {
       components: [this.row(select)],
     });
   }
-
-
 
   async _telaBonus(interaction, user) {
 
@@ -487,7 +476,6 @@ class GiveawaySystem {
     draft.bonusEntries.push({ roleId, entries, label: '' });
     return this._telaBonus(interaction, user);
   }
-
 
   async _telaReqs(interaction, user, premium) {
 
@@ -637,7 +625,6 @@ class GiveawaySystem {
     return this._telaReqs(interaction, user, premium);
   }
 
-
   async _telaVisual(interaction, user) {
 
     const draft = this._getDraft(user);
@@ -667,7 +654,6 @@ class GiveawaySystem {
     return this._telaExtras(interaction, user);
   }
 
-
   async _telaMsg(interaction, user) {
 
     const draft = this._getDraft(user);
@@ -681,7 +667,6 @@ class GiveawaySystem {
 
     return this._telaExtras(interaction, user);
   }
-
 
   async _telaMulti(interaction, user, premium) {
 
@@ -786,7 +771,6 @@ class GiveawaySystem {
     return this._telaMulti(interaction, user, premium);
   }
 
-
   async _publicar(interaction, user) {
 
     const draft = this._getDraft(user);
@@ -856,7 +840,6 @@ class GiveawaySystem {
     }];
   }
 
-
   async join(interaction) {
     try {
       const data = JSON.parse(interaction.data.custom_id);
@@ -917,7 +900,6 @@ class GiveawaySystem {
     });
   }
 
-
   async giveawayMenu(interaction, doc, user) {
 
     const statusMap = {
@@ -967,7 +949,6 @@ class GiveawaySystem {
       components: [this.row(select), this.row(btnBack)],
     });
   }
-
 
   async endGiveaway(interaction, doc) {
     if (doc.status === 'ended') {
@@ -1106,7 +1087,6 @@ class GiveawaySystem {
     return this.giveawayMenu(interaction, doc, user);
   }
 
-
   async exportMenu(interaction, doc, user) {
 
     const select = this.select(user, [
@@ -1162,7 +1142,6 @@ class GiveawaySystem {
     }
   }
 
-
   async showStats(interaction, doc, user) {
 
     const total      = doc.participants.length;
@@ -1201,7 +1180,6 @@ class GiveawaySystem {
     });
   }
 
-
   async _sendEndReport(doc, result) {
     const embed = GiveawayEmbed.buildEndReport(doc, result, this.client);
 
@@ -1220,7 +1198,6 @@ class GiveawaySystem {
       }).catch(() => {});
     }
   }
-
 
   async _checkBotInGuild(guildId) {
     try { await DiscordRequest(`/guilds/${guildId}`, { method: 'GET' }); return true; }
@@ -1380,7 +1357,7 @@ class GiveawaySystem {
   async _findTextChannel(guildId) {
     try {
       const channels = await DiscordRequest(`/guilds/${guildId}/channels`, { method: 'GET' });
-      const text = channels.find(c => c.type === 0); 
+      const text = channels.find(c => c.type === 0);
       return text?.id || null;
     } catch {
       return null;
@@ -1431,7 +1408,6 @@ class GiveawaySystem {
       }
     );
   }
-
 
   _parseDuration(str) {
     const match = str?.trim().match(/^(\d+)(d|h|m|s)$/i);

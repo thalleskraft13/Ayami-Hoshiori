@@ -276,7 +276,6 @@ module.exports = {
   }
 };
 
-
 function getAvatarURL(user) {
   if (!user.avatar)
     return `https://cdn.discordapp.com/embed/avatars/0.png`;

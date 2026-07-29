@@ -10,7 +10,6 @@ const Avatar   = require('./Avatar');
 const Renderer = require('./Renderer');
 const Utils    = require('./Utils');
 
-
 class ImageManager {
     constructor(options = {}) {
         this._root        = options.root        ?? process.cwd();
@@ -37,7 +36,6 @@ class ImageManager {
         this._ready = false;
     }
 
-
     async init() {
         if (this._ready) return;
 
@@ -61,7 +59,6 @@ class ImageManager {
             `backgrounds: ${this._assets.backgrounds.size}`
         );
     }
-
 
     async render(options) {
         this._assertReady();
@@ -107,7 +104,6 @@ class ImageManager {
             avatarCache: this._avatar._cache.stats(),
         };
     }
-
 
     async _doRender(TemplateClass, data) {
         const context = this._buildContext();

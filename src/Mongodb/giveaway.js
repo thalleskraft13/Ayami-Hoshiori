@@ -2,7 +2,6 @@
 
 const mongoose = require('mongoose');
 
-
 const BonusEntrySchema = new mongoose.Schema({
   roleId:   { type: String, required: true },
   entries:  { type: Number, required: true, min: 1 },
@@ -31,19 +30,19 @@ const RequirementSchema = new mongoose.Schema({
       'HAS_SUPPORTER_ROLE',
     ]
   },
-  value:    { type: mongoose.Schema.Types.Mixed, default: null }, // roleId, guildId, número...
-  guildId:  { type: String, default: null },   // para requisitos de outro servidor
+  value:    { type: mongoose.Schema.Types.Mixed, default: null },
+  guildId:  { type: String, default: null },
   label:    { type: String, default: '' },
 }, { _id: false });
 
 const ParticipantSchema = new mongoose.Schema({
   userId:       { type: String, required: true },
-  guildId:      { type: String, required: true }, // guild de origem da participação
+  guildId:      { type: String, required: true },
   baseEntries:  { type: Number, default: 1 },
   bonusEntries: { type: Number, default: 0 },
   totalEntries: { type: Number, default: 1 },
   joinedAt:     { type: Date,   default: Date.now },
-  drawPosition: { type: Number, default: null },   // posição em que foi sorteado
+  drawPosition: { type: Number, default: null },
   status: {
     type: String,
     enum: ['participating', 'winner', 'disqualified', 'would_have_won'],
@@ -55,7 +54,7 @@ const ParticipantSchema = new mongoose.Schema({
 const MultiServerConfigSchema = new mongoose.Schema({
   guildId:  { type: String, required: true },
   label:    { type: String, default: '' },
-  winners:  { type: Number, default: 0 }, // 0 = modo global
+  winners:  { type: Number, default: 0 },
   messageId: { type: String, default: null },
   channelId: { type: String, default: null },
 }, { _id: false });
@@ -63,21 +62,20 @@ const MultiServerConfigSchema = new mongoose.Schema({
 const ModalFieldSchema = new mongoose.Schema({
   customId:    { type: String, required: true },
   label:       { type: String, required: true },
-  style:       { type: Number, default: 1 },     // 1=curta, 2=longa
+  style:       { type: Number, default: 1 },
   required:    { type: Boolean, default: true },
   placeholder: { type: String, default: '' },
   minLength:   { type: Number, default: 0 },
   maxLength:   { type: Number, default: 4000 },
 }, { _id: false });
 
-
 const GiveawaySchema = new mongoose.Schema({
 
-  giveawayId:  { type: String, required: true, unique: true }, // "giveaway_<timestamp>"
+  giveawayId:  { type: String, required: true, unique: true },
   guildId:     { type: String, required: true },
   channelId:   { type: String, required: true },
   messageId:   { type: String, default: null },
-  createdBy:   { type: String, required: true }, // userId
+  createdBy:   { type: String, required: true },
 
   prize:       { type: String, required: true },
   description: { type: String, default: '' },
@@ -87,10 +85,10 @@ const GiveawaySchema = new mongoose.Schema({
   banner:      { type: String, default: null },
   customMessage: { type: String, default: null },
 
-  duration:    { type: Number, default: null },   // ms
+  duration:    { type: Number, default: null },
   endsAt:      { type: Date,   required: true },
   pausedAt:    { type: Date,   default: null },
-  pausedDuration: { type: Number, default: 0 },   // ms acumulados em pausa
+  pausedDuration: { type: Number, default: 0 },
 
   status: {
     type: String,
@@ -112,14 +110,6 @@ const GiveawaySchema = new mongoose.Schema({
 
   endedAt:       { type: Date, default: null },
   drawHistory:   { type: mongoose.Schema.Types.Mixed, default: [] },
-  /*
-    drawHistory: Array<{
-      position: number,
-      userId: string,
-      status: 'winner' | 'disqualified' | 'would_have_won',
-      reason: string | null
-    }>
-  */
 
 }, {
   timestamps: true,

@@ -4,13 +4,12 @@ const { randomUUID }   = require('crypto');
 const DiscordRequest   = require('../../DiscordRequest.js');
 const LibraryRewards   = require('../../Estrelas/LibraryRewards.js');
 const { SavedMessageModel } = require('../../../Mongodb/savedMessage.js');
-const { CreatorProfileModel } = require('../../../Mongodb/flow.js'); // perfil de criador é compartilhado com a Biblioteca de Fluxos
+const { CreatorProfileModel } = require('../../../Mongodb/flow.js');
 const {
   LibraryMessageModel,
   LibraryMessageRatingModel,
   LibraryMessageInstallModel
 } = require('../../../Mongodb/messageLibrary.js');
-
 
 class MessageLibraryManager {
 
@@ -23,7 +22,6 @@ class MessageLibraryManager {
     this._startWeeklyDecay();
     console.log('[MessageLibraryManager] Iniciado.');
   }
-
 
   async publish({ authorId, name, shortDesc, fullDesc, category, tags, savedMessageId, guildId, ctx = {} }) {
     const source = await SavedMessageModel.findOne({ _id: savedMessageId, guildId }).lean();
@@ -151,7 +149,6 @@ class MessageLibraryManager {
     }));
   }
 
-
   async search({ query, category, tag, authorId, type, sort = 'installs', page = 0, limit = 10 } = {}) {
     const filter = { status: 'approved' };
 
@@ -208,7 +205,6 @@ class MessageLibraryManager {
     return { trending, topInstalls, topRated, recent };
   }
 
-
   async install({ libId, guildId, channelId, userId, ctx = {} }) {
     const entry = await LibraryMessageModel.findOne({ libId, status: 'approved' });
     if (!entry) throw new Error(this.client.t('biblioteca.embeds_err_entry_not_found_library', ctx));
@@ -253,7 +249,6 @@ class MessageLibraryManager {
 
     return { currentVersion: install.version, newVersion: entry.version };
   }
-
 
   async vote(libId, userId, vote) {
     const existing = await LibraryMessageRatingModel.findOne({ libId, userId });
@@ -322,7 +317,6 @@ class MessageLibraryManager {
     return LibraryMessageRatingModel.findOne({ libId, userId }).lean();
   }
 
-
   async getCreatorProfile(authorId) {
     const [profile, entries] = await Promise.all([
       CreatorProfileModel.findOne({ userId: authorId }).lean(),
@@ -360,7 +354,6 @@ class MessageLibraryManager {
       }))
     };
   }
-
 
   _sanitizeMessage(doc) {
     return {
@@ -423,7 +416,7 @@ class MessageLibraryManager {
           }
         });
       } catch {
-        // falha silenciosa — DMs podem estar fechadas
+
       }
     }
   }
@@ -449,6 +442,5 @@ class MessageLibraryManager {
     }, 60_000);
   }
 }
-
 
 module.exports = MessageLibraryManager;

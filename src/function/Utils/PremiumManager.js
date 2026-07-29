@@ -9,7 +9,6 @@ function resolveStoredPlan(rawPlanId) {
 
 class PremiumManager {
 
-
   async addUserPremium(userId, dias, planId = DEFAULT_PLAN) {
 
     const tempoMs = dias * 86400000;
@@ -102,7 +101,6 @@ class PremiumManager {
     if (!user.premium_guilds)
       user.premium_guilds = [];
 
-
     const limite = premium.plan.guildLimit;
 
     if (user.premium_guilds.length >= limite) {
@@ -121,7 +119,7 @@ class PremiumManager {
 
     guild.premiumUser = userId;
     guild.premiumTime = expireAt;
-    guild.premiumPlan = premium.planId; 
+    guild.premiumPlan = premium.planId;
 
     await guild.save();
 
@@ -270,7 +268,6 @@ class PremiumManager {
 
     return { status: true, plan: getPlan(key.plan) };
   }
-
 
   async createKey(type, dias, planId = DEFAULT_PLAN) {
 

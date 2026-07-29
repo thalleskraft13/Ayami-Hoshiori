@@ -5,7 +5,7 @@ const http   = require('http');
 const Cache  = require('./Cache');
 
 const DEFAULT_SIZE    = 256;
-const DEFAULT_TIMEOUT = 10_000; 
+const DEFAULT_TIMEOUT = 10_000;
 
 class Avatar {
     constructor(options = {}) {
@@ -13,7 +13,6 @@ class Avatar {
         this._size    = options.size    ?? DEFAULT_SIZE;
         this._timeout = options.timeout ?? DEFAULT_TIMEOUT;
     }
-
 
     async fetch(url, size) {
         const targetSize = size ?? this._size;
@@ -32,7 +31,6 @@ class Avatar {
     async prefetch(urls, size) {
         await Promise.allSettled(urls.map((u) => this.fetch(u, size)));
     }
-
 
     _download(url) {
         return new Promise((resolve, reject) => {

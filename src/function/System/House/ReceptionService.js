@@ -39,11 +39,6 @@ class ReceptionService {
     });
   }
 
-  /**
-   * Envia um evento da recepção para o canal de logs configurado.
-   * Recurso exclusivo de assinantes — se o servidor não tiver assinatura ativa,
-   * ou nenhum canal estiver definido, nada é enviado.
-   */
   async _sendLogChannel(guildId, cfg, { title, description, color = ACCENT } = {}) {
     const channelId = cfg?.reception?.logChannelId;
     if (!channelId) return;
@@ -110,8 +105,6 @@ class ReceptionService {
 
     const mention = (text) => (text || '').replaceAll('{user}', `<@${userId}>`);
 
-    // O conteúdo (fora do embed) sempre menciona o membro de verdade —
-    // menções escritas dentro de um embed não disparam notificação no Discord.
     const body = {
       content: mention(msg.content) || this.client.t('house.welcome_default_content', { userId }),
       components: [{ type: 1, components: [startBtn] }],
@@ -132,11 +125,6 @@ class ReceptionService {
     });
   }
 
-  /**
-   * Envia a mensagem final configurada (recurso grátis) logo após a recepção ser
-   * concluída. Nada é enviado se nenhum conteúdo/embed tiver sido configurado, ou
-   * se não houver canal de recepção definido.
-   */
   async sendFinalMessage(guildId, cfg, userId, vars = {}) {
     const channelId = cfg?.reception?.channelId;
     if (!channelId) return;
@@ -165,13 +153,6 @@ class ReceptionService {
     });
   }
 
-  /**
-   * Executa um teste real e completo do sistema configurado: aplica o cargo de
-   * não registrado no próprio staff que testou e envia a mensagem inicial no
-   * canal de recepção configurado, com o botão "Iniciar Recepção" totalmente
-   * funcional (escolha de personagem, decoração e cargos serão aplicados de
-   * verdade se o teste for concluído).
-   */
   async runTest(interaction, guildId, userId) {
     const cfg = await this.config.get(guildId);
 
@@ -221,7 +202,7 @@ class ReceptionService {
           })),
         });
       } else {
-        // Nenhum personagem cadastrado: deixa o membro digitar qualquer nome livremente.
+
         steps.push({
           id: '__character_select',
           name: charSel.stepName || t('house.default_character_step_name'),
@@ -235,8 +216,6 @@ class ReceptionService {
       }
     }
 
-    // Decoração de nome — exclusiva de assinantes. Aparece logo após a escolha de
-    // personagem, deixando o próprio membro decidir se quer usar uma decoração ou não.
     if (cfg.decoration?.enabled && (await this.premium.hasSubscription(guildId))) {
       const formats = cfg.decoration.formats?.length
         ? cfg.decoration.formats
@@ -258,7 +237,7 @@ class ReceptionService {
           isDecoration: true,
           options: [
             ...formats.map((f, idx) => ({
-              // '🔸' é só uma prévia de onde o emoji escolhido pelo membro vai entrar.
+
               label: this.decoration.build(f, { name: characterName, character: characterName, emoji: emojiOn ? '🔸' : '' }).slice(0, 100),
               value: `fmt_${idx}`,
             })),
@@ -266,8 +245,6 @@ class ReceptionService {
           ],
         });
 
-        // Se a opção escolhida usar {emoji} e o servidor tiver a função ativada, uma etapa
-        // extra deixa o próprio membro enviar qual emoji ele quer usar naquele espaço.
         if (emojiOn) {
           const chosenFormat = state?.answers?.__decoration_select;
           if (chosenFormat && typeof chosenFormat === 'string' && chosenFormat.includes('{emoji}')) {
@@ -377,16 +354,14 @@ class ReceptionService {
       blocks.push(CV2.row(modalBtn));
 
     } else {
-      // 'texto' — inclui o fallback de personagem livre quando não há personagens cadastrados
+
       blocks.push(CV2.text(t('house.free_text_note')));
     }
 
     const container = CV2.container(blocks, { accentColor: ACCENT });
 
     if (opts.fresh) {
-      // A resposta inicial (que carrega a etapa de "Qual seu personagem?") não pode ser
-      // ephemeral: uma vez definida na primeira resposta, a visibilidade fica fixa para
-      // todas as edições seguintes dessa mesma mensagem — então é aqui que se decide.
+
       await this._replyFresh(interaction, [container], { ephemeral: false });
     } else {
       await this._editOriginal(interaction, [container]);
@@ -452,8 +427,7 @@ class ReceptionService {
     }
 
     if (step.isDecoration) {
-      // Guarda o formato de fato escolhido (ou null se o membro optou por não usar decoração),
-      // em vez de só o índice — assim o resultado fica fixo mesmo que a lista mude depois.
+
       if (value && value !== '__none' && value.startsWith('fmt_')) {
         const cfg     = await this.config.get(guildId);
         const formats = cfg.decoration.formats?.length
@@ -483,18 +457,14 @@ class ReceptionService {
       addRoleId:    cfg?.reception?.registeredRoleId,
     });
 
-    // Nome do personagem escolhido (ou digitado livremente, se não houver personagens
-    // cadastrados) — vale independentemente de decoração estar ativa ou não.
     const character      = await this.characters.findByUser(guildId, userId);
     const freeName        = state?.answers?.__character_select;
     const characterName  = character?.name || (typeof freeName === 'string' ? freeName : '');
 
     if (characterName) {
-      // Decorações de nome são exclusivas de assinantes — checa a assinatura no momento
-      // de aplicar, e não só na tela de configuração, para respeitar planos que expiraram.
+
       if (cfg?.decoration?.enabled && (await this.premium.hasSubscription(guildId))) {
-        // Formato escolhido pelo próprio membro na etapa de decoração. Se ele optou por não
-        // usar decoração (ou a etapa não chegou a rodar), aplica só o nome do personagem.
+
         const chosenFormat = state?.answers?.__decoration_select;
         const emoji         = state?.answers?.__emoji_select || '';
         const nickname = chosenFormat
@@ -503,13 +473,11 @@ class ReceptionService {
 
         await this.decoration.applyNickname(guildId, userId, nickname);
       } else {
-        // Sem decoração (ou sem assinatura ativa): o apelido do membro passa a ser
-        // diretamente o nome do personagem escolhido.
+
         await this.decoration.applyNickname(guildId, userId, characterName);
       }
     }
 
-    // Mensagem final — recurso grátis, opcional. Só envia se algo de fato foi configurado.
     await this.sendFinalMessage(guildId, cfg, userId, { character: characterName }).catch(err => {
       console.warn('[House/Reception] Falha ao enviar mensagem final:', err?.message);
     });

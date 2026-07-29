@@ -1,6 +1,5 @@
 'use strict';
 
-
 const TokenType = {
   NUMBER:     'NUMBER',
   STRING:     'STRING',
@@ -181,7 +180,7 @@ class Lexer {
   }
 
   _readString(quote) {
-    this.pos++; 
+    this.pos++;
     let str = '';
     while (this.pos < this.source.length) {
       const ch = this.source[this.pos];

@@ -1,7 +1,5 @@
 'use strict';
 
-// Construções expandem o jardim (mais canteiros). Decorações são só estéticas
-// (contam para reputação/colecionismo, sem efeito mecânico em V2).
 module.exports = {
 
   construcoes: {

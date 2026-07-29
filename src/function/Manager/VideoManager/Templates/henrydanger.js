@@ -78,10 +78,10 @@ class HenryDangerTemplate extends BaseVideo {
 function _getSlot(frameIndex) {
 
     if (frameIndex > 31 && frameIndex < 40) return {
-        x: 0, y: 0,   // posição do canto sup esquerdo
-        w: 410, h: 300,  // largura e altura
-        skewX: -0.15,    // inclinação horizontal
-        skewY:  0.02,    // inclinação vertical
+        x: 0, y: 0,
+        w: 410, h: 300,
+        skewX: -0.15,
+        skewY:  0.02,
     };
 
     if (frameIndex > 39 && frameIndex < 50) return {
@@ -152,10 +152,10 @@ function _calcCoords({ x, y, w, h, skewX, skewY }) {
         },
         topDir: {
             x: x + w,
-            y: y + w * skewX,       // skewX inclina o topo
+            y: y + w * skewX,
         },
         baixEsq: {
-            x: x + h * skewY,       // skewY inclina o lado esquerdo
+            x: x + h * skewY,
             y: y + h,
         },
     };

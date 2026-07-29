@@ -225,7 +225,6 @@ module.exports = [
   { id: "trigger_button_clicked", render: () => "🖱️ Botón pulsado" },
   { id: "trigger_scheduled", render: () => "🕐 Programado" },
 
-  // ---- Biblioteca de Embeds y Components V2 ----
   { id: "err_no_permission", render: () => "Sin permiso." },
   { id: "err_version_must_be_higher", render: (ctx) => `La versión ${ctx.newVersion} debe ser mayor que la actual (${ctx.currentVersion}).` },
   { id: "embeds_err_message_not_found", render: () => "Mensaje guardado no encontrado en este servidor." },

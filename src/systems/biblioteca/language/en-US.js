@@ -225,7 +225,6 @@ module.exports = [
   { id: "trigger_button_clicked", render: () => "🖱️ Button clicked" },
   { id: "trigger_scheduled", render: () => "🕐 Scheduled" },
 
-  // ---- Embeds & Components V2 Library ----
   { id: "err_no_permission", render: () => "No permission." },
   { id: "err_version_must_be_higher", render: (ctx) => `Version ${ctx.newVersion} must be higher than the current one (${ctx.currentVersion}).` },
   { id: "embeds_err_message_not_found", render: () => "Saved message not found on this server." },

@@ -1,8 +1,5 @@
 'use strict';
 
-// Catálogo estático dos recursos existentes na economia da Ayami.
-// Mantido separado para permitir autocomplete e cálculo de progresso de Coleções
-// sem acoplar a outros services.
 module.exports = {
   madeira:       { id: 'madeira',       nome: 'Madeira',        emoji: '🪵' },
   pedra:         { id: 'pedra',         nome: 'Pedra',          emoji: '🪨' },

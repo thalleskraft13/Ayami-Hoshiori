@@ -13,7 +13,6 @@ class ConditionEvaluator {
     return localeCtx(discord?.interaction);
   }
 
-
   async evaluate(conditions, ctx) {
     if (!conditions || conditions.length === 0) return true;
 
@@ -32,7 +31,6 @@ class ConditionEvaluator {
 
     return result;
   }
-
 
   async _evalOne(cond, ctx) {
     let result;
@@ -69,7 +67,6 @@ class ConditionEvaluator {
         return true;
     }
   }
-
 
   async _user(type, p, ctx) {
     const { guildId, userId } = ctx.discord;
@@ -145,7 +142,6 @@ class ConditionEvaluator {
     }
   }
 
-
   async _channel(type, p, ctx) {
     const channelId = ctx.discord.channelId;
 
@@ -163,7 +159,6 @@ class ConditionEvaluator {
       default: return true;
     }
   }
-
 
   _message(type, p, ctx) {
     const content = ctx.discord.message?.content || '';
@@ -186,7 +181,6 @@ class ConditionEvaluator {
     }
   }
 
-
   async _economy(type, p, ctx) {
     const eco = this.client.economyManager;
     if (!eco) return true;
@@ -200,7 +194,6 @@ class ConditionEvaluator {
       default: return true;
     }
   }
-
 
   _variable(type, p, ctx) {
     const val = ctx.getVar(p.name);
@@ -221,7 +214,7 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
         const progression = Number(p.progressionBase) || 0;
         const base         = p.baseValue !== undefined && p.baseValue !== ''
           ? Number(p.baseValue)
-          : 1000; 
+          : 1000;
 
         const goal = progression * base;
         return current >= goal;
@@ -231,7 +224,6 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
     }
   }
 
-
   _probability(type, p) {
     switch (type) {
       case 'chance':  return Math.random() * 100 < Number(p.percent);
@@ -239,7 +231,6 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
       default: return true;
     }
   }
-
 
   _date(type, p) {
     const now = Date.now();
@@ -255,9 +246,7 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
       default: return true;
     }
   }
-  
 
-  
   async _reaction(type, p, ctx) {
   const channelId = ctx.discord.channelId;
   const messageId = ctx.discord.message?.id;
@@ -310,7 +299,6 @@ case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
   }
 }
 
-
   _time(type, p) {
     const now      = new Date();
     const nowMins  = now.getHours() * 60 + now.getMinutes();
@@ -325,7 +313,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
       default: return true;
     }
   }
-
 
   async _permission(type, p, ctx) {
     const getPerm = require('../../Utils/GetPerm.js');
@@ -347,7 +334,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
     }
   }
 
-
   async _inventory(type, p, ctx) {
     const inv = this.client.inventoryManager;
     if (!inv) return true;
@@ -361,7 +347,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
       default: return true;
     }
   }
-
 
   _command(type, p, ctx) {
     switch (type) {
@@ -380,7 +365,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
       default: return true;
     }
   }
-
 
   async _args(type, p, ctx) {
     const args    = ctx.discord.customData?.args || [];
@@ -459,7 +443,6 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
       default: return true;
     }
   }
-
 
   async _getMember(guildId, userId) {
     try {

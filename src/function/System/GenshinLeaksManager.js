@@ -361,7 +361,7 @@ class GenshinLeaksManager {
     for (const guild of guilds) {
 
       try {
-        
+
         const config = guild.genshinAnuncios?.vazamentos;
 
 if (!config?.chat || config.chat === "0") continue;

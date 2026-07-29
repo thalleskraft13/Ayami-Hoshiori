@@ -2,7 +2,6 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-
 const WEIGHTS = Object.freeze({
   joinRate:          25,
   newAccounts:        20,
@@ -21,16 +20,16 @@ const FACTOR_LABEL = Object.freeze({
   massInvites:         'Convites em massa',
 });
 
-const JOIN_WINDOW_MS    = 60_000;   
-const MSG_WINDOW_MS     = 30_000;   
-const CALM_CHECK_MS     = 60_000;   
+const JOIN_WINDOW_MS    = 60_000;
+const MSG_WINDOW_MS     = 30_000;
+const CALM_CHECK_MS     = 60_000;
 const INVITE_REGEX      = /(discord\.gg\/|discord(?:app)?\.com\/invite\/)[a-z0-9-]+/i;
 
 function normalizeContent(content) {
   return (content || '')
     .toLowerCase()
-    .replace(/<a?:\w+:\d+>/g, '')      
-    .replace(/https?:\/\/\S+/g, '')    
+    .replace(/<a?:\w+:\d+>/g, '')
+    .replace(/https?:\/\/\S+/g, '')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -41,14 +40,14 @@ function snowflakeToTimestamp(id) {
     const DISCORD_EPOCH = 1420070400000n;
     return Number((BigInt(id) >> 22n) + DISCORD_EPOCH);
   } catch {
-    return Date.now(); 
+    return Date.now();
   }
 }
 
 class RaidIntelligence {
   constructor(security) {
     this.security = security;
-    this._state = {}; 
+    this._state = {};
     this._calmTimer = setInterval(() => this._checkAutoRestoreAll().catch(() => {}), CALM_CHECK_MS);
     this._calmTimer.unref?.();
   }
@@ -64,7 +63,6 @@ class RaidIntelligence {
     st.messages = st.messages.filter(m => now - m.t < MSG_WINDOW_MS);
     return st;
   }
-
 
   async registerJoin(guild, guildId, sec, userId) {
     const now = Date.now();
@@ -86,7 +84,6 @@ class RaidIntelligence {
     if (st.messages.length < 3) return null;
     return this._evaluate(guild, guildId, sec, now);
   }
-
 
   _scoreJoinRate(st, cfg) {
     if (!cfg?.enabled) return null;
@@ -196,7 +193,6 @@ class RaidIntelligence {
     return this._trigger(guild, guildId, sec, score, active, now);
   }
 
-
   async _trigger(guild, guildId, sec, score, active, now) {
     const raid = sec.raid;
 
@@ -265,14 +261,13 @@ class RaidIntelligence {
         } else if (action === 'quarantine' && raid.quarantineRoleId && await this.security._hasBotPerms(guildId, ['MANAGE_ROLES'])) {
           await DiscordRequest(`/guilds/${guildId}/members/${userId}/roles/${raid.quarantineRoleId}`, { method: 'PUT' });
         }
-      } catch { /* usuário pode já ter saído, permissão pode faltar — segue para o próximo */ }
+      } catch {  }
     }
   }
 
   async _maybeAlert(guildId, message) {
-    try { await this.security.sendSecurityAlert(guildId, message); } catch { /* noop */ }
+    try { await this.security.sendSecurityAlert(guildId, message); } catch {  }
   }
-
 
   async _checkAutoRestoreAll() {
     for (const guildId of Object.keys(this._state)) {

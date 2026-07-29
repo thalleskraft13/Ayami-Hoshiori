@@ -1,8 +1,5 @@
 'use strict';
 
-// Catálogo estático de sementes plantáveis no Jardim.
-// custoRecursos: o que é consumido do inventário para plantar.
-// colheita: recursos gerados quando a planta está pronta e é colhida.
 module.exports = {
 
   flor_estelar: {

@@ -3,7 +3,6 @@
 const fs   = require('fs');
 const path = require('path');
 
-
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
 
 const FONT_EXTS  = new Set(['.ttf', '.otf', '.woff', '.woff2']);
@@ -15,7 +14,6 @@ class Loader {
         this._publicDir    = publicDir;
         this._templatesDir = templatesDir;
     }
-
 
     loadAssets() {
         return {
@@ -56,7 +54,6 @@ class Loader {
 
         return templates;
     }
-
 
     _scanDir(dir, exts) {
         const map = new Map();

@@ -5,7 +5,6 @@ const { localeCtx }  = require('../../Utils/ctxLocale.js');
 
 const COLOR_GOLD = 0xFFD966;
 
-
 function t(client, key, ctx) {
   return client.t(`ticket.${key}`, ctx);
 }
@@ -220,7 +219,7 @@ const EmbedBuilderUI = {
           { type: 1, components: [colorSel] },
           { type: 1, components: [btnConfirm, btnRemove, btnCancel] },
         ],
-        flags: 64, // ephemeral — SEM flag CV2, pois embed real não roda junto com Components V2
+        flags: 64,
       };
 
       return DiscordRequest(

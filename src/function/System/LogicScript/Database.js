@@ -1,12 +1,11 @@
 'use strict';
 
-
 const { Schema, model } = require('mongoose');
 
 const lsVarSchema = new Schema({
   guildId: { type: String, required: true, index: true },
   scope:   { type: String, enum: ['global', 'user', 'guild'], default: 'global' },
-  ownerId: { type: String, default: null },  // userId para scope 'user'
+  ownerId: { type: String, default: null },
   key:     { type: String, required: true },
   value:   { type: Schema.Types.Mixed, default: null },
   updatedAt: { type: Date, default: Date.now },
@@ -16,7 +15,6 @@ lsVarSchema.index({ guildId: 1, scope: 1, ownerId: 1, key: 1 }, { unique: true }
 const LSVariable = model('LogicScriptVar', lsVarSchema);
 
 class LogicScriptDB {
-
 
   async setGlobal(guildId, key, value) {
     await LSVariable.findOneAndUpdate(
@@ -38,7 +36,6 @@ class LogicScriptDB {
   async deleteGlobal(guildId, key) {
     await LSVariable.deleteOne({ guildId, scope: 'global', ownerId: null, key });
   }
-
 
   async setUser(guildId, userId, key, value) {
     await LSVariable.findOneAndUpdate(
@@ -64,7 +61,6 @@ class LogicScriptDB {
     return next;
   }
 
-
   async setGuild(guildId, key, value) {
     await LSVariable.findOneAndUpdate(
       { guildId, scope: 'guild', ownerId: null, key },
@@ -77,7 +73,6 @@ class LogicScriptDB {
     const doc = await LSVariable.findOne({ guildId, scope: 'guild', ownerId: null, key }).lean();
     return doc?.value ?? null;
   }
-
 
   async listAll(guildId, opts = {}) {
     const query = { guildId };

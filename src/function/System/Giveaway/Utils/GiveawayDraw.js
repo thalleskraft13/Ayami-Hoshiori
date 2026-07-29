@@ -12,7 +12,7 @@ class GiveawayDraw {
 
     const winners        = [];
     const disqualified   = [];
-    const wouldHaveWon   = []; 
+    const wouldHaveWon   = [];
     const drawHistory    = [];
 
     let position = 0;
@@ -80,7 +80,6 @@ class GiveawayDraw {
       disqualifiedCount:  disqualified.length,
     };
   }
-
 
   static _buildPool(doc, reroll = false) {
 

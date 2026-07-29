@@ -20,7 +20,7 @@ class LanguageManager {
       shardId: this.shardId,
     });
 
-    this._loadedSystems = new Map(); 
+    this._loadedSystems = new Map();
 
     this.sync.listenReloads((systemId, version) => {
       console.info(
@@ -30,7 +30,6 @@ class LanguageManager {
       this._reloadSystem(systemId);
     });
   }
-
 
   translate(key, ctx = {}) {
     const { systemId, entryId } = this._parseKey(key);
@@ -56,7 +55,6 @@ class LanguageManager {
 
     return this._safe(key);
   }
-
 
   preload(...systemIds) {
     for (const id of systemIds) {
@@ -94,7 +92,6 @@ class LanguageManager {
       syncMode:       this.sync.mode,
     };
   }
-
 
   _ensureLoaded(systemId) {
     if (this._loadedSystems.has(systemId)) return;

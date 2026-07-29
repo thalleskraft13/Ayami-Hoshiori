@@ -47,7 +47,6 @@ class CommandBuilder {
     return this.ui.cv2Payload(blocks, { ephemeral: false, ...opts });
   }
 
-
   async startCreate(interaction, user) {
     const ctx = this._tctx(interaction);
     const flows = await FlowModel.find({
@@ -219,7 +218,6 @@ class CommandBuilder {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async commandMenu(interaction, user, commandId, { successMsg } = {}) {
     const guildId = interaction.guild_id;

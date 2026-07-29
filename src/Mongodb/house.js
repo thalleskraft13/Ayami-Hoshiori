@@ -38,36 +38,36 @@ const receptionSchema = new Schema({
   unregisteredRoleId: { type: String, default: null },
   registeredRoleId:   { type: String, default: null },
   channelId:           { type: String, default: null },
-  logChannelId:         { type: String, default: null }, // canal de logs da recepção — exclusivo de assinantes
+  logChannelId:         { type: String, default: null },
   welcomeMessage:      { type: welcomeMessageSchema, default: () => ({}) },
-  finalMessage:         { type: welcomeMessageSchema, default: () => ({}) }, // enviada ao fim da recepção — recurso grátis
+  finalMessage:         { type: welcomeMessageSchema, default: () => ({}) },
   characterSelection:   { type: characterSelectionSchema, default: () => ({}) },
   steps:               { type: [stepSchema], default: [] },
 }, { _id: false });
 
 const decorationSchema = new Schema({
   enabled:      { type: Boolean, default: false },
-  format:       { type: String, default: '{name}' }, // formato legado (mantido por compatibilidade)
-  formats:      { type: [String], default: [] },      // até 25 opções de decoração — exclusivo de assinantes
-  emojiEnabled: { type: Boolean, default: false },      // permite ao membro escolher um emoji para usar em {emoji}
+  format:       { type: String, default: '{name}' },
+  formats:      { type: [String], default: [] },
+  emojiEnabled: { type: Boolean, default: false },
 }, { _id: false });
 
 const callScheduleSchema = new Schema({
-  enabled: { type: Boolean, default: false }, // chamada automática diária — exclusivo de assinantes
+  enabled: { type: Boolean, default: false },
   hour:    { type: Number, default: null },
   minute:  { type: Number, default: 0 },
 }, { _id: false });
 
 const callInactivitySchema = new Schema({
-  enabled: { type: Boolean, default: false }, // ativa a checagem automática de inatividade
-  days:    { type: Number, default: 7 },       // dias sem confirmar presença até ser considerado inativo
-  punish:  { type: Boolean, default: true },   // true = expulsa do servidor; false = apenas registra/avisa
+  enabled: { type: Boolean, default: false },
+  days:    { type: Number, default: 7 },
+  punish:  { type: Boolean, default: true },
 }, { _id: false });
 
 const callConfigSchema = new Schema({
-  channelId:    { type: String, default: null }, // canal onde a chamada é enviada/gerenciada
-  notifyRoleId: { type: String, default: null }, // cargo mencionado ao abrir uma chamada
-  logChannelId: { type: String, default: null }, // canal de logs da chamada (com % de presença) — exclusivo de assinantes
+  channelId:    { type: String, default: null },
+  notifyRoleId: { type: String, default: null },
+  logChannelId: { type: String, default: null },
   schedule:     { type: callScheduleSchema, default: () => ({}) },
   inactivity:   { type: callInactivitySchema, default: () => ({}) },
 }, { _id: false });

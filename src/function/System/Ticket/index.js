@@ -25,7 +25,6 @@ const COLOR = {
   success: 0x57F287,
 };
 
-
 function cv2Text(content) {
   return { type: 10, content };
 }
@@ -116,7 +115,6 @@ class TicketSystem {
       { label: this.t('qtype_attachment_label', ctx), value: 'attachment', description: this.t('qtype_attachment_desc', ctx) },
     ];
   }
-
 
   async reply(interaction, data) {
     return this.client.interactions._callback(interaction, { type: 4, data });
@@ -247,7 +245,6 @@ class TicketSystem {
     return { ok: true, plan };
   }
 
-
   async open(interaction) {
     const user    = interaction.member?.user?.id || interaction.user?.id;
     const guildId = interaction.guild_id;
@@ -323,7 +320,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false }));
   }
 
-
   async criar(interaction, user) {
     const ctx = this._tctx(interaction);
     const modal = this.client.interactions.createModal({
@@ -356,7 +352,6 @@ class TicketSystem {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async painelMenu(interaction, user, panelId, { successMsg } = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -511,7 +506,6 @@ class TicketSystem {
     return this.painelMenu(interaction, user, panelId, { successMsg: this.t('publish_success', { ...ctx, channelId: panel.canalId }) });
   }
 
-
   async destinoMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
@@ -559,7 +553,6 @@ class TicketSystem {
 
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
-
 
   async staffNomeMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -616,7 +609,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-
   async tipoCriacaoMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
@@ -647,7 +639,6 @@ class TicketSystem {
 
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
-
 
   async modalMenu(interaction, user, panelId, opts = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -745,7 +736,6 @@ class TicketSystem {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async seqFormMenu(interaction, user, panelId, opts = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -958,7 +948,6 @@ class TicketSystem {
     return this.client.interactions.showModal(interaction, modal);
   }
 
-
   async _autoRoleAskTipo(interaction, user, panelId, roleId) {
     const ctx = this._tctx(interaction);
     const sel = this.select(user, [
@@ -1067,7 +1056,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-
   async transcriptMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
     const panel = this._findPanel(doc, panelId);
@@ -1126,7 +1114,6 @@ class TicketSystem {
 
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
-
 
   async mensagensMenu(interaction, user, panelId) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1218,7 +1205,6 @@ class TicketSystem {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async selectHubMenu(interaction, user, panelId, opts = {}) {
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1452,7 +1438,6 @@ class TicketSystem {
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
   }
 
-
   async selectOptionModalMenu(interaction, user, panelId, optionId, opts = {}) {
     const doc    = await this._getGuildDoc(interaction.guild_id);
     const panel  = this._findPanel(doc, panelId);
@@ -1554,7 +1539,6 @@ class TicketSystem {
 
     return this.client.interactions.showModal(interaction, modal);
   }
-
 
   async selectOptionSeqFormMenu(interaction, user, panelId, optionId, opts = {}) {
     const doc    = await this._getGuildDoc(interaction.guild_id);
@@ -1684,7 +1668,6 @@ class TicketSystem {
     });
   }
 
-
   async createFromButton(interaction) {
     const data  = JSON.parse(interaction.data.custom_id);
     const doc   = await this._getGuildDoc(interaction.guild_id);
@@ -1761,9 +1744,9 @@ class TicketSystem {
     const staffRoles = fo?.cargosStaff?.length ? fo.cargosStaff : (fp.cargosStaff || []);
 
     const permissionOverwrites = [
-      { id: guildId, type: 0, deny: '1024' },              // @everyone (cargo): VIEW_CHANNEL deny
-      { id: userId,  type: 1, allow: '3072' },              // criador (membro): VIEW_CHANNEL + SEND_MESSAGES
-      ...staffRoles.map(roleId => ({ id: roleId, type: 0, allow: '3072' })), // staff (cargo)
+      { id: guildId, type: 0, deny: '1024' },
+      { id: userId,  type: 1, allow: '3072' },
+      ...staffRoles.map(roleId => ({ id: roleId, type: 0, allow: '3072' })),
     ];
 
     const channel = await DiscordRequest(`/guilds/${guildId}/channels`, {
@@ -1818,7 +1801,7 @@ class TicketSystem {
     if (seqCfg) {
       const seqManager = new SeqQuestionsManager(this.client);
       seqManager.run({
-        panel:     { seqQuestionsConfig: seqCfg }, // run() espera panel.seqQuestionsConfig
+        panel:     { seqQuestionsConfig: seqCfg },
         channelId: channel.id,
         userId,
         ctx,
@@ -1856,11 +1839,10 @@ class TicketSystem {
     return this.followUpEphemeral(interaction, { content: successMsg,flags:64});
   }
 
-
   async closeTicket(interaction) {
     const data      = JSON.parse(interaction.data.custom_id);
-    const closedBy  = interaction.member?.user?.id || interaction.user?.id; 
-    const ownerId   = data.u || closedBy; 
+    const closedBy  = interaction.member?.user?.id || interaction.user?.id;
+    const ownerId   = data.u || closedBy;
 
     let panelId = null;
     try {
@@ -1885,7 +1867,7 @@ class TicketSystem {
       console.log('[DIAG-TRANSCRIPT] transcriptConfig.enabled=true, channelId:', panel.transcriptConfig.channelId, '— chamando generate()...');
       const transcriptManager = new TranscriptManager(this.client);
       await transcriptManager.generate({
-        interaction, // interaction.channel_id == canal do ticket sendo fechado
+        interaction,
         panel,
         closedBy,
         messages: {
@@ -1923,7 +1905,6 @@ class TicketSystem {
     }, 10_000);
   }
 
-
   async createTicketFromScript(guildId, panelId, { userId } = {}) {
     if (!userId) throw new Error('abrirTicket(): usuário não informado.');
 
@@ -1942,8 +1923,8 @@ class TicketSystem {
     const staffRoles   = panel.cargosStaff || [];
 
     const permissionOverwrites = [
-      { id: guildId, type: 0, deny: '1024' },              // @everyone: VIEW_CHANNEL deny
-      { id: userId,  type: 1, allow: '3072' },              // dono: VIEW_CHANNEL + SEND_MESSAGES
+      { id: guildId, type: 0, deny: '1024' },
+      { id: userId,  type: 1, allow: '3072' },
       ...staffRoles.map(roleId => ({ id: roleId, type: 0, allow: '3072' })),
     ];
 

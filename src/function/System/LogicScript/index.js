@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { Lexer, LexerError }              = require('./Lexer.js');
 const { Parser, ParseError }              = require('./Parser.js');
 const { Interpreter, RuntimeError }       = require('./Interpreter.js');

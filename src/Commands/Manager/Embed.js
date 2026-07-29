@@ -7,7 +7,7 @@ const { SavedMessageModel } = require("../../Mongodb/savedMessage.js");
 
 const MAX_EMBEDS       = 10;
 const IS_COMPONENTS_V2 = 1 << 15;
-const FLOWS_PER_PAGE   = 24; 
+const FLOWS_PER_PAGE   = 24;
 
 const SITE_URL = "https://ayami-hoshiori.cpufael.com";
 
@@ -363,7 +363,7 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
   const state = {
     content       : existingDoc?.content ?? "",
     embeds        : existingDoc?.embeds?.length ? existingDoc.embeds : [createBlankEmbed(0)],
-    actionRows    : existingDoc?.actionRows ?? [],   // ← botões/selects na embed
+    actionRows    : existingDoc?.actionRows ?? [],
     current       : 0,
     savedId       : existingDoc?._id?.toString() ?? null,
     channelId     : existingDoc?.channelId ?? null,
@@ -878,9 +878,6 @@ async function runEmbedEditor(interaction, client, existingDoc = null) {
       const content = parseString(state.content) || null;
       const embeds  = buildEmbeds(true);
 
-      // Discord recusa mensagens totalmente vazias (sem content/embeds/components) —
-      // isso é o que fazia o botão de Preview dar "interação inválida" quando o
-      // editor ainda não tinha nenhum texto nem embed preenchida.
       const body = (!content && !embeds.length)
         ? { content: "❌ Nada para pré-visualizar ainda — escreva um texto ou preencha uma embed primeiro.", flags: 64 }
         : { content, embeds, flags: 64 };

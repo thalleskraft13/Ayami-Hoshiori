@@ -5,7 +5,7 @@ const { Schema } = mongoose;
 
 const activityDailyStatSchema = new Schema({
   guildId: { type: String, required: true, index: true },
-  date:    { type: String, required: true }, // 'YYYY-MM-DD' (UTC)
+  date:    { type: String, required: true },
 
   messageCount: { type: Number, default: 0 },
 
@@ -14,8 +14,8 @@ const activityDailyStatSchema = new Schema({
     default: () => Array(24).fill(0)
   },
 
-  newMembers:  { type: Number, default: 0 }, // entradas no servidor nesse dia
-  leftMembers: { type: Number, default: 0 }, // saídas do servidor nesse dia
+  newMembers:  { type: Number, default: 0 },
+  leftMembers: { type: Number, default: 0 },
 
   memberCountEnd: { type: Number, default: null },
 

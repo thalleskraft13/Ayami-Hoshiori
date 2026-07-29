@@ -49,7 +49,7 @@ module.exports = {
         4: {
             nome:       'Cura do Vento',
             bonusStats: {},
-            // C4: Supremo cura o time inteiro (implementado no supremo diretamente)
+
         },
         5: {
             nome:       'Espírito do Cavaleiro',

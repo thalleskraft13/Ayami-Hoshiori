@@ -32,7 +32,7 @@ module.exports = {
     },
 
     async execute(interaction, client) {
-      
+
       await DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`,{
         method: "POST",
         body: {
@@ -74,12 +74,11 @@ module.exports = {
         if (!delay) {
             return await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
                 method: "POST",
-                body: { 
+                body: {
                    content: client.t("lembrete.invalid_time", ctx),
                   }
                });
-            
-            
+
         }
 
         await client.taskManager.create({
@@ -92,10 +91,10 @@ module.exports = {
                 locale: interaction.locale
             }
         });
-        
+
         return await DiscordRequest(`/webhooks/${interaction.application_id}/${interaction.token}`, {
                 method: "POST",
-                body: { 
+                body: {
                    content: client.t("lembrete.created", { ...ctx, tempo: tempoInput })
                   }
                });

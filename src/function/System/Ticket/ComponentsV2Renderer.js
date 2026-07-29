@@ -1,6 +1,5 @@
 'use strict';
 
-
 function serializeBlock(block) {
   if (!block || typeof block !== 'object') return null;
 
@@ -68,7 +67,7 @@ function buildPanelBody(panel, actionRows) {
     return {
       usedComponentsV2: true,
       body: {
-        flags: 1 << 15, // IS_COMPONENTS_V2 — não pode coexistir com `embeds`
+        flags: 1 << 15,
         components: [container]
       }
     };

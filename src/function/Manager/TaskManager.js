@@ -9,11 +9,11 @@ const LogChannelManager = require("./LogChannelManager.js");
 const LOG_CHANNEL_TAREFAS = '1523640821629583441';
 
 const LOG_COLOR = {
-  criada:     0x5865F2, // azul
-  iniciada:   0xFEE75C, // amarelo
-  sucesso:    0x57F287, // verde
-  erro:       0xED4245, // vermelho
-  finalizada: 0x95A5A6, // cinza
+  criada:     0x5865F2,
+  iniciada:   0xFEE75C,
+  sucesso:    0x57F287,
+  erro:       0xED4245,
+  finalizada: 0x95A5A6,
 };
 
 class TaskManager {
@@ -23,7 +23,6 @@ class TaskManager {
     this.interval  = null;
     this.batchSize = 10;
   }
-
 
   _logTask(stage, task, extraFields = []) {
     const titles = {
@@ -48,7 +47,6 @@ class TaskManager {
     });
   }
 
-
   async start() {
     if (this.interval) return;
 
@@ -65,7 +63,6 @@ class TaskManager {
       this.interval = null;
     }
   }
-
 
   async _tick() {
     try {
@@ -91,7 +88,6 @@ class TaskManager {
       console.error('[TaskManager] Tick error:', err);
     }
   }
-
 
   async run(task) {
     this._logTask('iniciada', task);
@@ -130,8 +126,6 @@ class TaskManager {
         await task.save();
         return;
       }
-      
-      
 
       if (task.repeat && task.repeatDelay) {
         task.executeAt = new Date(Date.now() + task.repeatDelay);
@@ -156,7 +150,6 @@ class TaskManager {
       } catch {}
     }
   }
-
 
   async execute(task) {
     switch (task.tipo) {
@@ -296,7 +289,6 @@ class TaskManager {
     }
   }
 
-
   async handleScheduledTrigger(task) {
     const { guildId, flowId, hour, minute = 0 } = task.dados;
 
@@ -314,7 +306,6 @@ class TaskManager {
     task.executeAt = next;
     task.status    = 'pending';
   }
-
 
   async create({ tipo, delay, dados, repeat = false, repeatDelay = null }) {
     const task = await TaskModel.create({
@@ -478,7 +469,6 @@ class TaskManager {
     return task;
   }
 
-
   async handleLembrete(dados) {
     const { userId, channelId, mensagem, locale } = dados;
     const ctx = { system: { locale }, userId, mensagem };
@@ -488,7 +478,6 @@ class TaskManager {
     });
   }
 
-
   async cancel(taskId) {
     const task = await TaskModel.findOne({ taskId });
     if (!task) return false;
@@ -496,7 +485,6 @@ class TaskManager {
     await task.save();
     return true;
   }
-
 
   _msAteHorario(hour, minute = 0) {
     const now  = new Date();

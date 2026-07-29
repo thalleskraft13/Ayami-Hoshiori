@@ -1,10 +1,8 @@
 'use strict';
 
-
 const path         = require('path');
 const ImageManager = require('./ImageManager');
 const VideoProcessManager = require('../VideoManager/VideoProcessManager');
-
 
 let _image = null;
 
@@ -26,9 +24,7 @@ function _getVideoPool() {
     return _videoPool;
 }
 
-
 const MediaManager = {
-
 
     async init(options = {}) {
         if (options.root) {
@@ -37,10 +33,9 @@ const MediaManager = {
         }
         await Promise.all([
             _getImage().init(),
-            _getVideoPool().listTemplates(), // esquenta + valida os templates de vídeo no boot
+            _getVideoPool().listTemplates(),
         ]);
     },
-
 
     async Render(options) {
         return _getImage().render(options);
@@ -51,7 +46,6 @@ const MediaManager = {
             return _getImage().render(options);
         },
     },
-
 
     Video: {
         async Render(options) {
@@ -71,7 +65,6 @@ const MediaManager = {
         },
     },
 
-
     listTemplates() {
         return _getImage().listTemplates();
     },
@@ -86,7 +79,6 @@ const MediaManager = {
             video: _getVideoPool().stats(),
         };
     },
-
 
 };
 

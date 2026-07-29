@@ -8,8 +8,6 @@ const DEFAULT_TTL_MS       = parseInt(process.env.USER_CACHE_TTL_MS, 10)       |
 const DEFAULT_SWEEP_MS     = parseInt(process.env.USER_CACHE_SWEEP_MS, 10)     || 5  * 60 * 1000;
 const APPROX_BASE_BYTES    = 220;
 
-
-
 class User {
 
     constructor(client, data) {
@@ -61,8 +59,6 @@ class User {
     }
 }
 
-
-
 class UserManager {
 
     constructor(client, options = {}) {
@@ -76,7 +72,6 @@ class UserManager {
         this._sweeper = setInterval(() => this._sweep(), this.sweepInterval);
         if (this._sweeper.unref) this._sweeper.unref();
     }
-
 
     async getUser(userId, force = false) {
         if (!force) {
@@ -100,7 +95,6 @@ class UserManager {
     clear()          { this.cache.clear(); }
     values()         { return this.cache.values(); }
     keys()           { return this.cache.keys(); }
-
 
     _upsert(data) {
         if (!data?.id) return null;

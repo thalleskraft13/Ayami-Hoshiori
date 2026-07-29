@@ -20,11 +20,6 @@ class DecorationService {
       .replaceAll('{house}', vars.house ?? '');
   }
 
-  /**
-   * Valida se um texto enviado pelo membro é um emoji utilizável na decoração:
-   * um emoji customizado do Discord (<:nome:id> / <a:nome:id>) ou um emoji unicode
-   * "simples" (incluindo sequências com ZWJ/variation selectors, ex.: 👨‍👩‍👧).
-   */
   isValidEmoji(str) {
     if (!str) return false;
     const trimmed = String(str).trim();
@@ -36,10 +31,6 @@ class DecorationService {
     return /^\p{Extended_Pictographic}+$/u.test(stripped);
   }
 
-  /**
-   * Escolhe um formato entre as opções configuradas (até 25 — recurso de assinantes).
-   * Mantém compatibilidade com o campo legado `format` quando `formats` estiver vazio.
-   */
   pickFormat(decoration = {}) {
     const lista = (decoration.formats && decoration.formats.length)
       ? decoration.formats
@@ -49,11 +40,6 @@ class DecorationService {
     return validos[Math.floor(Math.random() * validos.length)];
   }
 
-  /**
-   * Corta a string respeitando clusters de grafemas (ou, no mínimo, pares substitutos),
-   * para não quebrar ao meio símbolos compostos por vários caracteres — muito comuns
-   * nas decorações de nome (ex.: emojis com ZWJ, variation selectors, acentos combinados).
-   */
   _safeTruncate(str, maxLen) {
     if (str.length <= maxLen) return str;
 
@@ -63,7 +49,7 @@ class DecorationService {
 
     const clusters = segmenter
       ? Array.from(segmenter.segment(str), (s) => s.segment)
-      : Array.from(str); // fallback: ao menos respeita pares substitutos (emojis simples)
+      : Array.from(str);
 
     let result = '';
     for (const cluster of clusters) {

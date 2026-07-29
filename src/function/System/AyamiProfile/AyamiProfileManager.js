@@ -131,7 +131,6 @@ class AyamiProfileManager {
             }
         }
 
-
         return applied;
     }
 

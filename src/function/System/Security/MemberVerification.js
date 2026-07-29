@@ -2,7 +2,6 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-
 const RULE_LABEL = Object.freeze({
   minAccountAge:       'Idade mínima da conta',
   requireCustomAvatar: 'Avatar personalizado obrigatório',

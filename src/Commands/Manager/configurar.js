@@ -10,7 +10,6 @@ const COLOR = {
   main: 0x7C8FFF,
 };
 
-
 function cv2Text(content) {
   return { type: 10, content };
 }

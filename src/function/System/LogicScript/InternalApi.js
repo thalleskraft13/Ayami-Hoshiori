@@ -1,6 +1,5 @@
 'use strict';
 
-
 const http = require('http');
 
 const INTERNAL_PORT   = process.env.BOT_INTERNAL_PORT   ?? 3001;

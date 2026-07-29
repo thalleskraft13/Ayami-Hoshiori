@@ -166,18 +166,18 @@ const raidHistorySchema = new Schema({
 
 const raidFactorJoinRateSchema = new Schema({
   enabled:  { type: Boolean, default: true },
-  joinLimit:{ type: Number,  default: 10 }   
+  joinLimit:{ type: Number,  default: 10 }
 }, { _id: false });
 
 const raidFactorNewAccountsSchema = new Schema({
   enabled:      { type: Boolean, default: true },
   maxAgeHours:  { type: Number,  default: 24 },
-  ratioPercent: { type: Number,  default: 50 }   
+  ratioPercent: { type: Number,  default: 50 }
 }, { _id: false });
 
 const raidFactorDuplicateMessagesSchema = new Schema({
   enabled:  { type: Boolean, default: true },
-  minCount: { type: Number,  default: 5 }  
+  minCount: { type: Number,  default: 5 }
 }, { _id: false });
 
 const raidFactorCoordinatedSpamSchema = new Schema({
@@ -188,12 +188,12 @@ const raidFactorCoordinatedSpamSchema = new Schema({
 
 const raidFactorMassMentionsSchema = new Schema({
   enabled:  { type: Boolean, default: true },
-  minCount: { type: Number,  default: 15 }  
+  minCount: { type: Number,  default: 15 }
 }, { _id: false });
 
 const raidFactorMassInvitesSchema = new Schema({
   enabled:  { type: Boolean, default: true },
-  minCount: { type: Number,  default: 4 }   
+  minCount: { type: Number,  default: 4 }
 }, { _id: false });
 
 const raidFactorsSchema = new Schema({
@@ -219,7 +219,7 @@ const raidSchema = new Schema({
   state: {
     emergencyActive: { type: Boolean, default: false },
     lastHighRiskAt:  { type: Number,  default: null },
-    flaggedUserIds:  { type: [String], default: [] } 
+    flaggedUserIds:  { type: [String], default: [] }
   }
 }, { _id: false });
 
@@ -281,7 +281,7 @@ const activityAnalyticsSchema = new Schema({
 
 const verificationViolationSchema = new Schema({
   key:   { type: String, required: true },
-  label: { type: String, required: true }   
+  label: { type: String, required: true }
 }, { _id: false });
 
 const verificationHistorySchema = new Schema({
@@ -289,7 +289,7 @@ const verificationHistorySchema = new Schema({
   userId:     { type: String, required: true },
   username:   { type: String, default: "" },
   violations: { type: [verificationViolationSchema], default: [] },
-  action:     { type: String, required: true } 
+  action:     { type: String, required: true }
 }, { _id: false });
 
 const verificationRuleMinAgeSchema = new Schema({
@@ -319,7 +319,7 @@ const trapChannelHistorySchema = new Schema({
   userId:           { type: String, required: true },
   username:         { type: String, default: "" },
   action:           { type: String, required: true },
-  deletedElsewhere: { type: Number, default: 0 }       
+  deletedElsewhere: { type: Number, default: 0 }
 }, { _id: false });
 
 const trapChannelSchema = new Schema({

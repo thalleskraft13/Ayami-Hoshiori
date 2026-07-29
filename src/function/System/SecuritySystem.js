@@ -16,7 +16,7 @@ class SecuritySystem {
 
   constructor(client) {
     this.client = client;
-    this._spamTracker   = {}; 
+    this._spamTracker   = {};
     this._botPermCache  = new TTLCache({ ttlMs: 60_000, sweepIntervalMs: 5 * 60_000 });
     this.nativeAutoMod  = new NativeAutoMod(client);
     this.raidIntelligence = new RaidIntelligence(this);
@@ -69,7 +69,6 @@ class SecuritySystem {
       });
     }
   }
-
 
   _toV2(data) {
     if (!data || !data.embeds) return data;
@@ -141,7 +140,6 @@ class SecuritySystem {
     return this.followUp(interaction, { ...data, flags: 64 });
   }
 
-
   async getGuild(guildId) {
     let g = await GuildDb.findOne({ guildId });
     if (!g) g = await GuildDb.create({ guildId });
@@ -209,7 +207,6 @@ class SecuritySystem {
     return !!(p.status && p.plan?.advancedSystems);
   }
 
-
   _permLabel(perm) {
     const labels = {
       ADMINISTRATOR:        "Administrador",
@@ -244,7 +241,7 @@ class SecuritySystem {
         bot:     true,
         client:  this.client
       });
-      this._botPermCache.set(key, perms); 
+      this._botPermCache.set(key, perms);
       return perms;
     } catch (err) {
       console.error("[Security] _getBotPermissions:", err);
@@ -324,7 +321,6 @@ class SecuritySystem {
     });
   }
 
-
   async startSetup(interaction) {
     const guild   = await this.getGuild(interaction.guild_id);
     const user    = interaction.member.user.id;
@@ -379,7 +375,6 @@ class SecuritySystem {
     });
   }
 
-
   async automodSimpleMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const s   = sec.automod.simple;
@@ -430,7 +425,6 @@ class SecuritySystem {
       ]
     });
   }
-
 
   _defaultEscalation() {
     return [
@@ -628,7 +622,6 @@ class SecuritySystem {
     });
   }
 
-
   async multiActionMenu(interaction, guild, user, module, backFn, availableActions = null) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, module);
@@ -685,7 +678,6 @@ class SecuritySystem {
       ]
     });
   }
-
 
   async badwordsMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -800,7 +792,7 @@ class SecuritySystem {
         const cfg2 = this.getSimpleCfg(sec2, "badwords");
         if (!cfg2.list) cfg2.list = [];
 
-        const MAX_WORDS = 100; 
+        const MAX_WORDS = 100;
         const novas = candidates.filter(w => !cfg2.list.includes(w));
         const espacoDisponivel = Math.max(0, MAX_WORDS - cfg2.list.length);
         const aceitas    = novas.slice(0, espacoDisponivel);
@@ -860,7 +852,6 @@ class SecuritySystem {
       components: [this.row(select)]
     });
   }
-
 
   async antispamMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -944,7 +935,6 @@ class SecuritySystem {
     return this.antispamMenu(interaction, guild, user);
   }
 
-
   async anticapsMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, "anticaps");
@@ -1027,7 +1017,6 @@ class SecuritySystem {
     return this.anticapsMenu(interaction, guild, user);
   }
 
-
   async antiemojiMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, "antiemoji");
@@ -1103,7 +1092,6 @@ class SecuritySystem {
     await this.followUpEphemeral(interaction, { content: `✅ Limite: ${limit} emojis.` });
     return this.antiemojiMenu(interaction, guild, user);
   }
-
 
   async antifilesMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1216,7 +1204,6 @@ class SecuritySystem {
       components: [this.row(select)]
     });
   }
-
 
   async antilinksMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1388,7 +1375,6 @@ class SecuritySystem {
     });
   }
 
-
   async antimentionMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const cfg = this.getSimpleCfg(sec, "antimention");
@@ -1466,7 +1452,6 @@ class SecuritySystem {
     await this.followUpEphemeral(interaction, { content: `✅ Limite: ${limit} menções.` });
     return this.antimentionMenu(interaction, guild, user);
   }
-
 
   async manageIgnoredList(interaction, guild, user, module, listKey, type) {
     const sec   = this.getSecurity(guild);
@@ -1566,7 +1551,6 @@ class SecuritySystem {
       components: [this.row(this.backBtn(user, (i) => this.automodSimpleMenu(i, guild, user)))]
     });
   }
-
 
   async automodAdvancedMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
@@ -1972,7 +1956,6 @@ class SecuritySystem {
     });
   }
 
-
   async rolesPermissionsMenu(interaction, guild, user) {
     const sec = this.getSecurity(guild);
 
@@ -2070,7 +2053,6 @@ class SecuritySystem {
       content: `✅ Alertas de permissão ${sec.roles.permAlertsEnabled ? "ativados" : "desativados"}.`
     });
   }
-
 
   async logsMenu(interaction, guild, user) {
     const sec    = this.getSecurity(guild);
@@ -2246,7 +2228,7 @@ class SecuritySystem {
       async (i) => {
         await this.deferUpdate(i);
         if (!sec.logs.types) sec.logs.types = {};
-        sec.logs.types[i.data.values[0]] = types[i.data.values[0]] === false; 
+        sec.logs.types[i.data.values[0]] = types[i.data.values[0]] === false;
         guild.markModified("security");
         await this.save(guild);
         return this.logTypesMenu(i, guild, user);
@@ -2316,7 +2298,6 @@ class SecuritySystem {
     });
   }
 
-
   async permissionCheck(interaction, guild, user) {
     const guildId    = interaction.guild_id;
     const sec        = this.getSecurity(guild);
@@ -2333,7 +2314,7 @@ class SecuritySystem {
     const VIEW          = 1n << 10n;
     const MENTION_ALL   = 1n << 17n;
     const MANAGE_CH     = 1n << 4n;
-    const MANAGE_ROLES  = 1n << 28n; 
+    const MANAGE_ROLES  = 1n << 28n;
     const ADMIN         = 1n << 3n;
     const MANAGE_GUILD  = 1n << 5n;
     const BAN           = 1n << 2n;
@@ -2391,13 +2372,13 @@ class SecuritySystem {
       if (![0, 2, 4, 5, 13, 15].includes(ch.type)) continue;
 
       for (const ow of (ch.permission_overwrites || [])) {
-        if (ow.type !== 0) continue;          
-        if (ow.id === guildId) continue;      
+        if (ow.type !== 0) continue;
+        if (ow.id === guildId) continue;
         if (staffRoles.includes(ow.id))  continue;
         if (immuneRoles.includes(ow.id)) continue;
 
         const role = roles.find(r => r.id === ow.id);
-        if (role?.managed) continue;          
+        if (role?.managed) continue;
 
         const allow = BigInt(ow.allow || 0);
         const found = CHANNEL_DANGEROUS.filter(d => (allow & d.flag) === d.flag).map(d => d.label);
@@ -2421,7 +2402,6 @@ class SecuritySystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
 
   _verificationActionLabels() {
     return {
@@ -2671,7 +2651,6 @@ class SecuritySystem {
       components: [this.row(this.backBtn(user, (i) => this.verificationMenu(i, guild, user)))]
     });
   }
-
 
   _trapPunishmentLabels() {
     return {
@@ -2963,7 +2942,6 @@ class SecuritySystem {
       components: [this.row(this.backBtn(user, (i) => this.trapChannelMenu(i, guild, user)))]
     });
   }
-
 
   _raidActionLabels() {
     return {
@@ -3276,7 +3254,6 @@ class SecuritySystem {
     return this.raidDetection(interaction, guild, user);
   }
 
-
   async emergencyMode(interaction, guild, user) {
     const sec    = this.getSecurity(guild);
     const active = sec.emergency?.active || false;
@@ -3503,7 +3480,6 @@ class SecuritySystem {
     if (sec.emergency.logs.length > 50) sec.emergency.logs = sec.emergency.logs.slice(-50);
   }
 
-
   async monitoringSystem(interaction, guild, user) {
     const sec = this.getSecurity(guild);
     const cfg = sec.monitoring;
@@ -3624,7 +3600,6 @@ class SecuritySystem {
     } catch (err) { console.error("[Security] _logMonitoringEvent:", err); }
   }
 
-
   async botAnalysis(interaction, guild, user) {
     const guildId          = interaction.guild_id;
     const [members, roles] = await Promise.all([
@@ -3662,8 +3637,6 @@ class SecuritySystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
-
 
   async backupMenu(interaction, guild, user) {
     const sec     = this.getSecurity(guild);
@@ -3740,7 +3713,7 @@ class SecuritySystem {
         : null;
 
       for (const role of roles) {
-        if (role.managed) continue; 
+        if (role.managed) continue;
 
         const roleData = {
           id:          role.id,
@@ -3780,7 +3753,7 @@ class SecuritySystem {
       }
 
       for (const ch of channels) {
-        if (ch.type === 4) continue; 
+        if (ch.type === 4) continue;
 
         const chData = {
           id:        ch.id,
@@ -3933,9 +3906,9 @@ class SecuritySystem {
       let created  = 0;
       let errors   = 0;
 
-      const roleIdMap = { [guildId]: guildId }; 
+      const roleIdMap = { [guildId]: guildId };
       for (const role of backup.roles) {
-        if (role.id === guildId) continue; 
+        if (role.id === guildId) continue;
 
         const existing = currentRoles.find(r => r.id === role.id)
           || currentRoles.find(r => !r.managed && r.name === role.name);
@@ -3984,7 +3957,7 @@ class SecuritySystem {
       const sortedCats = [...(backup.categories || [])].sort((a, b) => a.position - b.position);
       for (const cat of sortedCats) {
         const existing = currentChannels.find(c => c.id === cat.id && c.type === 4)
-          || currentChannels.find(c => c.type === 4 && c.name === cat.name); 
+          || currentChannels.find(c => c.type === 4 && c.name === cat.name);
         const overwrites = remapOverwrites(cat.permission_overwrites);
 
         if (existing) {
@@ -4143,7 +4116,6 @@ class SecuritySystem {
     });
   }
 
-
   async fullSecurityCheck(interaction, guild, user) {
     const guildId = interaction.guild_id;
     await this.editOriginal(interaction, {
@@ -4204,7 +4176,6 @@ class SecuritySystem {
       components: [this.row(this.backBtn(user, (i) => this.startSetup(i)))]
     });
   }
-
 
   async handleMemberJoin(data) {
     try {
@@ -4267,7 +4238,6 @@ class SecuritySystem {
       await this.sendSecurityAlert(data.guild_id, `🔗 **Webhook criado/alterado** em <#${data.channel_id}>`, "security");
     } catch (err) { console.error("[Security] handleWebhookCreate:", err); }
   }
-
 
   async handleMessage(data) {
     try {
@@ -4365,7 +4335,6 @@ class SecuritySystem {
         );
       };
 
-
       const capsCfg = s.anticaps;
       if (capsCfg?.enabled && !isIgnored(capsCfg)) {
         const min     = capsCfg.minLength || 10;
@@ -4425,7 +4394,7 @@ class SecuritySystem {
         { key: "antilinks",   cfg: s.antilinks,   label: s.antilinks?.invitesRuleId === ruleId ? "Convites" : "Links" },
       ];
       const match = moduleMap.find(m => m.cfg?.nativeRuleId === ruleId || m.cfg?.invitesRuleId === ruleId);
-      if (!match) return; 
+      if (!match) return;
 
       const cfg = match.cfg;
       const acts = cfg.actions || [];

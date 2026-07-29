@@ -1,5 +1,5 @@
 const DiscordRequest = require("../DiscordRequest.js");
-const GuildConfig = require("../../Mongodb/guild.js"); 
+const GuildConfig = require("../../Mongodb/guild.js");
 const GuildUser = require("../../Mongodb/guilduser.js")
 class StarBoard {
 
@@ -7,7 +7,6 @@ class StarBoard {
     this.client = client;
     this.minStars = 1;
   }
-
 
   async getConfig(guildId) {
 
@@ -37,7 +36,6 @@ class StarBoard {
     );
 
   }
-
 
   async startSetup(interaction) {
 
@@ -143,7 +141,6 @@ class StarBoard {
 
   }
 
-
   async onReactionAdd(data) {
 
   const { guild_id, channel_id, message_id, user_id, emoji } = data;
@@ -185,7 +182,6 @@ class StarBoard {
     );
 
   }
-
 
   if (!config.channelId) return;
 

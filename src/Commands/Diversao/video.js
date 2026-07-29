@@ -161,7 +161,6 @@ module.exports = {
     }
 };
 
-
 async function _homer(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
 
@@ -224,7 +223,6 @@ async function _homer(interaction, client) {
         }
     });
 }
-
 
 async function _what(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -289,7 +287,6 @@ async function _what(interaction, client) {
     });
 }
 
-
 async function _henrydanger(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
 
@@ -352,7 +349,6 @@ async function _henrydanger(interaction, client) {
         }
     });
 }
-
 
 async function _cartadajujuba(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
@@ -417,7 +413,6 @@ async function _cartadajujuba(interaction, client) {
     });
 }
 
-
 async function _homelander(interaction, client) {
     const opts = interaction.data.options[0].options ?? [];
 
@@ -480,8 +475,6 @@ async function _homelander(interaction, client) {
         }
     });
 }
-
-
 
 function _getAvatarURL(user) {
     if (!user?.avatar)

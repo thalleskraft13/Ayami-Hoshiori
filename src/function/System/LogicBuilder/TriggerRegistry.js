@@ -12,7 +12,6 @@ class TriggerRegistry extends EventEmitter {
     this._boostCache = new Map();
   }
 
-
  async handle(payload) {
     const { t: event, d: data } = payload;
     if (!event || !data) return;
@@ -45,9 +44,8 @@ class TriggerRegistry extends EventEmitter {
     }
   }
 
-
   _onMessageCreate(data) {
-    if (!data.guild_id) return; 
+    if (!data.guild_id) return;
     if (data.author?.bot) return;
 
     const ctx = this._msgCtx(data);
@@ -98,7 +96,6 @@ class TriggerRegistry extends EventEmitter {
     });
   }
 
-
   _onReactionAdd(data) {
     if (!data.guild_id) return;
     this._emit('reaction', 'reaction_added', {
@@ -120,7 +117,6 @@ class TriggerRegistry extends EventEmitter {
       customData: { emoji: data.emoji }
     });
   }
-
 
   _onMemberJoin(data) {
     this._emit('member', 'member_joined', {
@@ -188,7 +184,6 @@ class TriggerRegistry extends EventEmitter {
     });
   }
 
-
   _onChannelCreate(data) {
     if (!data.guild_id) return;
     this._emit('channel', 'channel_created', this._channelCtx(data));
@@ -203,7 +198,6 @@ class TriggerRegistry extends EventEmitter {
     if (!data.guild_id) return;
     this._emit('channel', 'channel_updated', this._channelCtx(data));
   }
-
 
   _onThreadCreate(data) {
     if (!data.guild_id) return;
@@ -243,7 +237,6 @@ class TriggerRegistry extends EventEmitter {
     }
   }
 
-
   _onVoiceStateUpdate(data) {
     if (!data.guild_id) return;
 
@@ -254,7 +247,7 @@ class TriggerRegistry extends EventEmitter {
       voiceState: data
     };
 
-    const hadChannel = !!data._previousChannelId;  
+    const hadChannel = !!data._previousChannelId;
     const hasChannel = !!data.channel_id;
 
     if (!hadChannel && hasChannel) {
@@ -271,7 +264,6 @@ class TriggerRegistry extends EventEmitter {
     if (!data.self_stream)  this._emit('voice', 'screen_share_stop',  ctx);
   }
 
-
   async _onInteraction(data) {
   if (!data.guild_id) return;
 
@@ -282,8 +274,6 @@ class TriggerRegistry extends EventEmitter {
     member:      data.member,
     interaction: data
   };
-  
-  
 
   if (data.type === 3) {
     const componentType = data.data?.component_type;
@@ -303,10 +293,9 @@ class TriggerRegistry extends EventEmitter {
         customData: { customId: cid }
       });
     }
-    
 
     if (componentType === 3 && !isInternal && !isSystemJson) {
-      
+
   const customId = interaction.data?.custom_id;
   console.log('[handleComponent] customId:', customId);
   console.log('[handleComponent] parsed:', this._tryParseJson(customId));
@@ -335,7 +324,6 @@ _tryParseJson(str) {
   try { return JSON.parse(str); } catch { return null; }
 }
 
-
   emit(category, ctx) {
     if (category === 'internal') {
       super.emit('trigger', {
@@ -357,7 +345,6 @@ _tryParseJson(str) {
   emitExternal(triggerCategory, triggerType, discordCtx) {
     this._emit(triggerCategory, triggerType, discordCtx);
   }
-
 
   _emit(triggerCategory, triggerType, discordCtx) {
     super.emit('trigger', {

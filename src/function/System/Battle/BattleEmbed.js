@@ -43,7 +43,7 @@ class BattleEmbed {
         );
 
         if (logTurno.length > 0) {
-            const logTexto = logTurno.slice(-10).join('\n'); 
+            const logTexto = logTurno.slice(-10).join('\n');
             embed.addField('📜 Turno', logTexto.slice(0, 1024));
         }
 
@@ -137,7 +137,6 @@ class BattleEmbed {
         embed.setDescription(linhas.join('\n'));
         return embed;
     }
-
 
     static _renderTime(timeSnapshot) {
         return timeSnapshot.personagens.map((p, i) => {

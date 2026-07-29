@@ -43,15 +43,12 @@ const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessag
 const { LanguageManager } = require('./Manager/LanguageManager');
 const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
 const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
+const EndpointManager     = require('./Manager/EndpointManager.js');
 const MediaManager = require('./Manager/MediaManager');
 const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.js');
 const Economy = require('./Estrelas/Economy.js');
 
 const EventEmitter = require('events');
-
-
-
-
 
 const MAX_ADVENTURE_LEVEL  = 60;
 const XP_PER_INTERACTION   = 10;
@@ -70,10 +67,7 @@ const RECONNECT_BASE_DELAY_MS = 5_000;
 const RECONNECT_MAX_DELAY_MS  = 30_000;
 const RECONNECT_MAX_ATTEMPTS  = 10;
 
-
 class DiscordGatewayClient extends EventEmitter {
-
-
 
     constructor(options = {}) {
       super()
@@ -87,7 +81,6 @@ class DiscordGatewayClient extends EventEmitter {
 
         this.commands = new Map();
 
-
         this.rest = new REST({ version: '10' }).setToken(this.token);
 
         this.manager = new WebSocketManager({
@@ -98,7 +91,6 @@ class DiscordGatewayClient extends EventEmitter {
             shardIds:    options.shards      ?? undefined,
             shardCount:  options.totalShards ?? undefined,
         });
-
 
         this.interactions      = new InteractionManager(this);
         this.NextMessageCollector = new NextMessageCollector(this);
@@ -121,23 +113,21 @@ class DiscordGatewayClient extends EventEmitter {
         this.gScheduler = new GiveawayScheduler(this);
         this.giveaway.messageTracker = new GiveawayMessageTracker();
         this.logicScriptRunner = new ScriptRunner(this);
+        this.endpointManager   = new EndpointManager(this);
         this.ayamiProfile = new AyamiProfileManager(this);
-        
+
         this.languageManager = new LanguageManager({
             systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
             fallbackLocale: 'pt-BR',
             shardId:        process.env.CLUSTER_ID ?? '0',
         });
 
-        
         this.t        = (key, ctx) => this.languageManager.translate(key, ctx);
         this.language = this.t;
 
-
-        
         this.guilds = new GuildManager(this);
         this.users  = new UserManager(this);
-        this.blacklist = new BlacklistManager(this); 
+        this.blacklist = new BlacklistManager(this);
         this.emoji = require("../public/emojis.js")
         this.MediaManager = MediaManager;
 
@@ -146,12 +136,11 @@ class DiscordGatewayClient extends EventEmitter {
         this._reconnectTimer    = null;
         this._mongoConnected  = false;
         this._mongoConnecting = false;
-        
+
         this._registerGatewayEvents();
         this._registerAntiCrash();
-        
-    }
 
+    }
 
     async connect() {
       console.log("\n\n|————————————————————————|\n")
@@ -178,6 +167,7 @@ class DiscordGatewayClient extends EventEmitter {
                 return;
             }
             await this.logicScriptRunner.start();
+            await this.endpointManager.start();
             startInternalApi(this);
         });
     }
@@ -191,8 +181,6 @@ class DiscordGatewayClient extends EventEmitter {
         const localMap = new Map(localCommands.map(c => [c.name, c]));
 
         const stats = { created: 0, updated: 0, deleted: 0, skipped: 0 };
-        
-
 
         for (const apiCmd of apiCommands) {
             if (!localMap.has(apiCmd.name)) {
@@ -200,7 +188,6 @@ class DiscordGatewayClient extends EventEmitter {
                 stats.deleted++;
             }
         }
-
 
         for (const localCmd of localCommands) {
             const existing = apiMap.get(localCmd.name);
@@ -222,7 +209,6 @@ class DiscordGatewayClient extends EventEmitter {
             }
         }
 
-
         return stats;
     }
 
@@ -242,7 +228,7 @@ class DiscordGatewayClient extends EventEmitter {
             afk:    opts.afk    ?? false,
         },
     };
-    
+
    if (shardId === "all"){
    const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
 
@@ -268,7 +254,6 @@ class DiscordGatewayClient extends EventEmitter {
             afk:      false,
         };
     }
-
 
     _loadCommands() {
         const basePath = path.join(process.cwd(), 'src', 'Commands');
@@ -296,7 +281,6 @@ class DiscordGatewayClient extends EventEmitter {
         console.log(`[Commands] Loaded ${loaded} commands.`);
     }
 
-
     _registerGatewayEvents() {
         this.manager.on(WebSocketShardEvents.Dispatch, (payload) =>
             this._handleDispatch(payload)
@@ -312,8 +296,6 @@ class DiscordGatewayClient extends EventEmitter {
             this._scheduleReconnect();
         });
     }
-
-
 
     _registerAntiCrash() {
         process.on('unhandledRejection',        (r)   => console.error('[AntiCrash] Unhandled Rejection:', r));
@@ -331,7 +313,6 @@ class DiscordGatewayClient extends EventEmitter {
     console.warn('[AntiCrash] Warning:', w);
 });
     }
-
 
     _resetReconnect() {
         this._reconnectAttempts = 0;
@@ -378,36 +359,25 @@ class DiscordGatewayClient extends EventEmitter {
         }
     }
 
-
     async _handleDispatch(payload) {
         try {
             this.NextMessageCollector.handle(payload);
             this.guilds.handleDispatch(payload);
 
-            // Botões/selects/modais reais (tickets, sorteios, Logic Builder
-            // flow_trigger, etc.) precisam ser respondidos ANTES de
-            // logicEngine/logicScriptRunner verem o mesmo evento. Os dois
-            // também escutam INTERACTION_CREATE pra extrair seus próprios
-            // triggers (on(buttonClick) do Logic Script, "button_clicked" do
-            // Logic Builder) e, mesmo filtrando pelos custom_ids reservados,
-            // isso é uma segunda camada de proteção contra os dois sistemas
-            // tentarem responder a MESMA interação (o primeiro a responder
-            // "vence"; o outro cai em erro "Unknown interaction"/10062,
-            // porque o token já foi consumido ou expirou enquanto esperava).
             if (payload.t === 'INTERACTION_CREATE') {
                 await this._onInteraction(payload.d);
             }
 
             await this.logicEngine.handleGateway(payload);
-            
+
             await this.logicScriptRunner.handleGateway(payload).catch(() => {});
-            
+
             if (payload.t === 'MESSAGE_CREATE') return await this._onMessage(payload.d);
 
             if (payload.t === 'READY')             return await this._onReady(payload.d);
-            
-            if (payload.t === 'VOICE_STATE_UPDATE')   return await this._onVoiceStateUpdate(payload.d);   
-        if (payload.t === 'MESSAGE_REACTION_ADD') return await this._onReactionAdd(payload.d);        
+
+            if (payload.t === 'VOICE_STATE_UPDATE')   return await this._onVoiceStateUpdate(payload.d);
+        if (payload.t === 'MESSAGE_REACTION_ADD') return await this._onReactionAdd(payload.d);
         if (payload.t === 'GUILD_MEMBER_ADD')    return await this._onMemberAdd(payload.d);
         if (payload.t === 'GUILD_MEMBER_REMOVE') return await this._onMemberRemove(payload.d);
 if (payload.t === 'GUILD_ROLE_CREATE')   return await this._onRoleCreate(payload.d);
@@ -423,7 +393,7 @@ if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onSchedul
             console.error('[Dispatch] Unhandled error:', err);
         }
     }
-    
+
     async _onMessage(data) {
   if (data.author?.id) this.users.set(data.author);
   if (data.guild_id && data.member) this.guilds.setMember(data.guild_id, { ...data.member, user: data.author });
@@ -437,7 +407,7 @@ if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onSchedul
     Missions.progress(data.author.id, { client: this, guildId: data.guild_id, actor: data.author }, 'enviar_mensagens', 1);
   }
 }
-    
+
     async _onMemberAdd(data) {
   await this.security.handleMemberJoin(data);
   await this.activityAnalytics.handleMemberAdd(data);
@@ -472,8 +442,7 @@ async _onWebhooksUpdate(data) {
 async _onAutoModExecution(data) {
   await this.security.handleAutoModExecution(data);
 }
-    
-    
+
     _onVoiceStateUpdate(d) {
     if (!d.user_id || d.user_id === this.clientId) return;
 
@@ -542,8 +511,6 @@ async _onScheduledEventUserAdd(data) {
     Missions.progress(userId, { client: this, guildId }, 'participar_evento', 1);
 }
 
-
-
     async _onReady(d) {
     console.log(`\n----------> SHARD: ${d.shard[0]}`)
 
@@ -561,7 +528,6 @@ async _onScheduledEventUserAdd(data) {
 
     const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
 
-
     if (LISTASHARDS.includes(d.shard[0])) {
         await this._connectMongo()
         await this._startTaskManager();
@@ -572,21 +538,19 @@ async _onScheduledEventUserAdd(data) {
         console.log("\n|————————————————————————|")
         await this.emit('ready')
     }
-   
 
     let customPresence = null;
     try {
         const BotConfig = require('../Mongodb/botConfig.js');
         const cfg = await BotConfig.findOne({ key: 'global' }).lean();
         if (cfg?.presence?.name) customPresence = cfg.presence;
-    } catch { /* Mongo pode não estar pronto ainda nesse ponto — usa o default */ }
+    } catch {  }
 
     await require('./Utils/MaintenanceMode.js').loadFromDb();
 
     this.setPresence(d.shard[0], customPresence ?? {
       name: `🌙 Assinatura "Constellation" por R$7,99 | Cluster ${this.CLUSTERS_NAME[process.env.CLUSTER_ID ?? 0]}, Shard: ${d.shard[0]}/4`
     });
-    
 
 }
 
@@ -617,8 +581,6 @@ async _onScheduledEventUserAdd(data) {
             console.error('[Ready] TaskManager failed to start:', err);
         }
     }
-
-
 
     async _onInteraction(interaction) {
         const userId = interaction.member?.user?.id ?? interaction.user?.id;
@@ -679,7 +641,7 @@ async _onScheduledEventUserAdd(data) {
         DiscordRequest(
             `/webhooks/${this.clientId}/${interaction.token}`,
             { method: 'POST', body: { content: MaintenanceMode.getMessage(), flags: 64 } }
-        ).catch(() => { /* token pode já ter expirado/sido consumido — ignora */ });
+        ).catch(() => {  });
     }
 
     async _replyBlacklisted(interaction, userId) {
@@ -693,7 +655,7 @@ async _onScheduledEventUserAdd(data) {
                     body: {
                         type: 4,
                         data: {
-                            flags: 64, // efêmera — só o usuário banido vê
+                            flags: 64,
                             embeds: [{
                                 title: this.t('blacklist.banned_title', ctx),
                                 description: this.t('blacklist.banned_description', ctx),
@@ -763,8 +725,6 @@ async _onScheduledEventUserAdd(data) {
             console.error('[CommandLog] Falha ao preparar log de comando:', err);
         }
     }
-
-
 
     async _processAdventureRankXp(interaction) {
         const userId = interaction.member?.user?.id;
@@ -852,8 +812,6 @@ async _onScheduledEventUserAdd(data) {
         user.rankaventureiro.xpRestante = ((nivelAtual + 1) * 1000) - xpTotal;
     }
 
-
-
     async _sendLevelUpDm(userId, user, levelBefore, levelAfter) {
         try {
             const levelsGained = levelAfter - levelBefore;
@@ -906,8 +864,6 @@ Torço muito por você! ${this.emoji.feliz}`
 )
     }
 
-
-
     _commandHasChanged(local, api) {
         const normalize = (cmd) => JSON.stringify({
             name:                       cmd.name,
@@ -920,7 +876,7 @@ Torço muito por você! ${this.emoji.feliz}`
 
         return normalize(local) !== normalize(api);
     }
-    
+
 getShardId(guildId) {
     const totalShards = parseInt(process.env.TOTAL_SHARDS ?? '1');
     return Number(BigInt(guildId) >> 22n) % totalShards;
@@ -1034,7 +990,7 @@ async getAllGuilds() {
     const seen = new Map();
     for (const cluster of allStats) {
         for (const g of cluster.guilds ?? []) {
-            seen.set(g.id, g); 
+            seen.set(g.id, g);
         }
     }
     return Array.from(seen.values());

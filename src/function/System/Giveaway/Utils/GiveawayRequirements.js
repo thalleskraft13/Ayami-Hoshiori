@@ -22,7 +22,6 @@ class GiveawayRequirements {
     return { ok: true, reason: null };
   }
 
-
   static async _check(req, participant, doc, client) {
 
     try {
@@ -83,7 +82,6 @@ class GiveawayRequirements {
       return { ok: true, reason: null };
     }
   }
-
 
   static async _checkRequiredRole(req, participant, guildId, client) {
 
@@ -158,7 +156,6 @@ class GiveawayRequirements {
     };
   }
 
-
   static async _checkInServer(req, participant, client) {
 
     const member = await this._getMember(req.guildId, participant.userId, client);
@@ -167,7 +164,6 @@ class GiveawayRequirements {
       reason: member ? null : this._t(client, 'req_not_in_partner_server', { guildId: req.guildId }),
     };
   }
-
 
   static async _checkRequiredRoleInServer(req, participant, client) {
 
@@ -307,7 +303,6 @@ class GiveawayRequirements {
       return { ok: true, reason: null };
     }
   }
-
 
   static async _getMember(guildId, userId, client) {
     try {

@@ -20,11 +20,11 @@ class BattleCharacter {
         this.vivo         = true;
         this.ativo        = false;
 
-        this.buffs    = []; 
-        this.debuffs  = []; 
-        this.escudos  = []; 
-        this.marcas   = []; 
-        this.auras    = new Set(); 
+        this.buffs    = [];
+        this.debuffs  = [];
+        this.escudos  = [];
+        this.marcas   = [];
+        this.auras    = new Set();
 
         this.cooldowns = {
             ataqueNormal:      0,
@@ -38,7 +38,6 @@ class BattleCharacter {
             abatesFeitos: 0,
         };
     }
-
 
     _calcularStats() {
         const base = { ...this.dados.stats };
@@ -69,7 +68,6 @@ class BattleCharacter {
 
         return Math.max(0, valor);
     }
-
 
     receberDano(valor, fonte = 'desconhecido') {
         if (!this.vivo) return 0;
@@ -113,7 +111,6 @@ class BattleCharacter {
         this.hpAtual = Math.min(this.stats.hp, Math.max(1, hp));
     }
 
-
     adicionarEnergia(valor) {
         this.energiaAtual = Math.min(this.stats.energiaMax, this.energiaAtual + valor);
     }
@@ -125,7 +122,6 @@ class BattleCharacter {
     temEnergiaSuficiente() {
         return this.energiaAtual >= (this.dados.supremo?.energiaNecessaria ?? 100);
     }
-
 
     aplicarBuff(buff) {
         this.buffs = this.buffs.filter(b => !(b.stat === buff.stat && b.fonte === buff.fonte));
@@ -146,7 +142,6 @@ class BattleCharacter {
         this.marcas.push({ id: Date.now() + Math.random(), ...marca });
     }
 
-
     setCooldown(acao, turnos) {
         this.cooldowns[acao] = turnos;
     }
@@ -165,14 +160,12 @@ class BattleCharacter {
         }
     }
 
-
     reduzirDuracoes() {
         this.buffs    = this.buffs.filter(b => { b.duracao--; return b.duracao > 0; });
         this.debuffs  = this.debuffs.filter(d => { d.duracao--; return d.duracao > 0; });
         this.escudos  = this.escudos.filter(e => { e.duracao--; return e.duracao > 0; });
         this.marcas   = this.marcas.filter(m => { m.duracao--; return m.duracao > 0; });
     }
-
 
     aplicarAura(elemento) {
         this.auras.add(elemento);
@@ -186,11 +179,9 @@ class BattleCharacter {
         return this.auras.has(elemento);
     }
 
-
     podeAtorOffField() {
         return this.vivo && this.modoCombate.offField === true;
     }
-
 
     getAcoesDisponiveis() {
         const acoes = [];
@@ -210,7 +201,6 @@ class BattleCharacter {
         return acoes;
     }
 
-
     temConstelacao(nivel) {
         return this.constelacao >= nivel;
     }
@@ -218,7 +208,6 @@ class BattleCharacter {
     getConstelacao(nivel) {
         return this.dados.constelacoes?.[nivel] ?? null;
     }
-
 
     toSnapshot() {
         return {

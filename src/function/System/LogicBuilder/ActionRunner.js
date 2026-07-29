@@ -17,7 +17,6 @@ class ActionRunner {
     return this.client.t(`logicbuilder.${key}`, { ...this._ctxFrom(execCtx), ...extra });
   }
 
-
   async run(actions, ctx, mode = 'sequential') {
     const sorted = [...actions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
@@ -31,7 +30,6 @@ class ActionRunner {
       await this._runOne(action, ctx);
     }
   }
-
 
   async _runOne(action, ctx) {
     try {
@@ -61,7 +59,6 @@ class ActionRunner {
         console.warn(`[ActionRunner] Categoria desconhecida: ${category}`);
     }
   }
-
 
   async _message(type, p, ctx) {
     const channelId = p.channelId || ctx.discord.channelId;
@@ -171,7 +168,7 @@ class ActionRunner {
           break;
         }
 
-        const removeComponents = p.removeComponents !== 'false'; 
+        const removeComponents = p.removeComponents !== 'false';
 
         const body = {};
 
@@ -242,11 +239,11 @@ class ActionRunner {
 
   async _buildInteractionComponent(io, ctx) {
     if (io.kind === 'button') {
-      const isPermanent = io.permanent !== false; 
+      const isPermanent = io.permanent !== false;
 
       if (!isPermanent && ctx?.client?.interactions?.createButton) {
         return ctx.client.interactions.createButton({
-          user: undefined, // qualquer pessoa pode clicar (não é dono-específico)
+          user: undefined,
           data: {
             label: io.label || this._t('ar_click_here', ctx),
             style: Number(io.style) || 1,
@@ -349,14 +346,12 @@ class ActionRunner {
     return embed;
   }
 
-
   async _embed(type, p, ctx) {
     switch (type) {
       case 'send_embed': return this._message('send_message', p, ctx);
       case 'edit_embed': return this._message('edit_message', p, ctx);
     }
   }
-
 
   async _user(type, p, ctx) {
     const guildId = ctx.discord.guildId;
@@ -433,7 +428,6 @@ class ActionRunner {
     }
   }
 
-
   async _economy(type, p, ctx) {
     const eco = this.client.economyManager;
     if (!eco) return;
@@ -448,7 +442,6 @@ class ActionRunner {
       case 'set_balance':  await eco.setBalance(guildId, userId, amount); break;
     }
   }
-
 
   async _banco(type, p, ctx) {
     const guildId = ctx.discord.guildId;
@@ -487,7 +480,6 @@ class ActionRunner {
       }
     }
   }
-
 
   async _variable(type, p, ctx) {
     const target = p.targetUserId;
@@ -562,7 +554,7 @@ class ActionRunner {
           if (Array.isArray(cur) && cur.length) {
             picked = cur[Math.floor(Math.random() * cur.length)];
           }
-          return cur; 
+          return cur;
         });
         ctx.setVar(p.saveAs || p.name + '_random', picked);
         break;
@@ -587,7 +579,6 @@ class ActionRunner {
     }
   }
 
-
   async _inventory(type, p, ctx) {
     const inv = this.client.inventoryManager;
     if (!inv) return;
@@ -601,7 +592,6 @@ class ActionRunner {
       case 'consume_item': await inv.consumeItem(guildId, userId, p.itemId); break;
     }
   }
-
 
   async _channel(type, p, ctx) {
     const guildId = ctx.discord.guildId;
@@ -663,7 +653,6 @@ class ActionRunner {
     }
   }
 
-
   async _thread(type, p, ctx) {
     switch (type) {
 
@@ -674,7 +663,7 @@ class ActionRunner {
           method: 'POST',
           body: {
             name: p.name || this._t('ar_new_thread_default', ctx),
-            type: 11, // PUBLIC_THREAD
+            type: 11,
             auto_archive_duration: 1440
           }
         }).catch(() => null);
@@ -689,7 +678,7 @@ class ActionRunner {
           method: 'POST',
           body: {
             name: p.name || this._t('ar_new_private_thread_default', ctx),
-            type: 12, // PRIVATE_THREAD
+            type: 12,
             invitable: true,
             auto_archive_duration: 1440
           }
@@ -730,7 +719,6 @@ class ActionRunner {
     }
   }
 
-
   async _voice(type, p, ctx) {
     const guildId = ctx.discord.guildId;
     const userId  = p.userId || ctx.discord.userId;
@@ -767,7 +755,6 @@ class ActionRunner {
     }
   }
 
-
   async _time(type, p, ctx) {
     switch (type) {
 
@@ -790,7 +777,6 @@ class ActionRunner {
       }
     }
   }
-
 
   async _system(type, p, ctx) {
     switch (type) {
@@ -828,14 +814,13 @@ class ActionRunner {
       case 'stop_execution':
         ctx.stop();
         break;
-        
+
         case 'ask_confirm': {
           await this._askConfirm(p, ctx);
           break;
         }
     }
   }
-
 
   async _discord(type, p, ctx) {
     const channelId = p.channelId || ctx.discord.channelId;
@@ -870,8 +855,6 @@ class ActionRunner {
         break;
     }
   }
-
-
 
   _sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -982,7 +965,7 @@ class ActionRunner {
       }
     }
   }
-  
+
   async _askConfirm(p, ctx) {
   const channelId = ctx.discord.channelId;
   if (!channelId) return;

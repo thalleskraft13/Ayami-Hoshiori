@@ -2,7 +2,6 @@
 
 const DiscordRequest = require('../../DiscordRequest.js');
 
-
 const TRIGGER = Object.freeze({
   KEYWORD:      1,
   SPAM:         3,
@@ -27,7 +26,7 @@ const RULE_NAME = Object.freeze({
   antimention: 'Ayami · Anti-Mention',
 });
 
-const MAX_KEYWORDS   = 100; 
+const MAX_KEYWORDS   = 100;
 const MAX_ALLOWLIST  = 100;
 const MAX_EXEMPT_ROLES    = 20;
 const MAX_EXEMPT_CHANNELS = 50;
@@ -36,7 +35,6 @@ class NativeAutoMod {
   constructor(client) {
     this.client = client;
   }
-
 
   async listRules(guildId, { fresh = false } = {}) {
     const now = Date.now();
@@ -148,11 +146,10 @@ class NativeAutoMod {
       await DiscordRequest(`/guilds/${guildId}/auto-moderation/rules/${ruleId}`, { method: 'DELETE' });
       this._invalidateRulesCache(guildId);
     } catch (err) {
-      // Já pode não existir mais — ignora.
+
     }
     return null;
   }
-
 
   async syncBadwords(guildId, cfg) {
     if (!cfg.enabled || !cfg.list?.length) {
@@ -201,7 +198,7 @@ class NativeAutoMod {
   }
 
   async syncAntilinks(guildId, cfg) {
-    const hasContent = cfg.enabled; 
+    const hasContent = cfg.enabled;
     if (!hasContent) {
       cfg.nativeRuleId = await this._delete(guildId, cfg.nativeRuleId);
       return { ok: true, ruleId: null };

@@ -4,7 +4,6 @@ const DiscordRequest = require('../../function/DiscordRequest.js');
 const getPerm        = require('../../function/Utils/GetPerm.js');
 const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 
-
 const CATEGORIES = [
   'Moderação','Economia','Automação','Logs','Tickets',
   'Recompensas','Eventos','RPG','Utilidade','Comunidade',
@@ -42,10 +41,10 @@ const CATEGORY_EMOJI = {
 };
 
 const COLOR = {
-  main:    0x7C8FFF,   // azul principal
-  gold:    0xFFD966,   // dourado
-  dark:    0x243B7A,   // azul escuro
-  hair:    0xA9D6FF,   // azul cabelo
+  main:    0x7C8FFF,
+  gold:    0xFFD966,
+  dark:    0x243B7A,
+  hair:    0xA9D6FF,
   pink:    0xFFB6C8,
   danger:  0xED4245,
   success: 0x57F287,
@@ -54,7 +53,6 @@ const COLOR = {
 
 const SUPPORT_ANNOUNCE_CHANNEL = '1508910999753850910';
 const GUIDE_URL = 'https://ayami-hoshiori.cpufael.com/logic-builder';
-
 
 const INSTALL_REQUIRED_FIELDS = {
   'message:send_message':        [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_send_message_channel' }],
@@ -82,7 +80,6 @@ const INSTALL_REQUIRED_FIELDS = {
   'trigger:component':           [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_generic' }],
 };
 
-
 function _actionLabel(client, ctx, category, type) {
   const map = {
     'message:send_message':       'action_send_message',
@@ -106,7 +103,6 @@ function _actionLabel(client, ctx, category, type) {
   const key = map[`${category}:${type}`];
   return key ? client.t(`biblioteca.${key}`, ctx) : `${category}/${type}`;
 }
-
 
 function _buildInstallQuestions(entry, client, ctx) {
   const questions = [];
@@ -188,7 +184,6 @@ function _buildInstallQuestions(entry, client, ctx) {
   return questions;
 }
 
-
 function _applyCollectedValues(flows, questions, collected) {
   const cloned = JSON.parse(JSON.stringify(flows));
 
@@ -224,7 +219,6 @@ function _applyCollectedValues(flows, questions, collected) {
 
   return cloned;
 }
-
 
 async function _defer(interaction) {
   return DiscordRequest(
@@ -282,7 +276,6 @@ async function _deleteFollowUp(interaction, client, messageId) {
     { method: 'DELETE' }
   );
 }
-
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -355,7 +348,6 @@ function _clampPage(page, total, perPage = 8) {
   const safePage = Math.min(Math.max(0, page), maxPage);
   return { page: safePage, maxPage };
 }
-
 
 async function _startInstallWizard(interaction, client, lib, entry, userId, guildId, e) {
   guildId = guildId || interaction.guild_id;
@@ -461,7 +453,6 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
   return _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId, e);
 }
 
-
 async function _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId = null, e) {
   try {
     const preparedFlows = _applyCollectedValues(entry.flows || [], questions, collected);
@@ -507,7 +498,6 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
     return _edit(interaction, client, payload);
   }
 }
-
 
 module.exports = {
   data: {
@@ -694,7 +684,6 @@ module.exports = {
   }
 };
 
-
 async function _resolveAuthorName(lib, authorId, client, ctx, fallback = null) {
   if (fallback && fallback !== authorId) return fallback;
 
@@ -735,7 +724,6 @@ function _triggerLabel(client, ctx, trigger) {
   const key = labels[`${trigger.category}:${trigger.type}`];
   return key ? client.t(`biblioteca.${key}`, ctx) : `${trigger.category}/${trigger.type}`;
 }
-
 
 async function _pesquisar(interaction, client, lib, opts, userId, e) {
   const { results } = await lib.search({

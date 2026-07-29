@@ -82,10 +82,10 @@ function _getSlot(frameIndex) {
 
     
     if (frameIndex > 46 && frameIndex < 107) return {
-        x: 360, y: 7,   // posição do canto sup esquerdo
-        w: 210, h: 215,  // largura e altura
-        skewX: -0.15,    // inclinação horizontal
-        skewY:  0.02,    // inclinação vertical
+        x: 360, y: 7,
+        w: 210, h: 215,
+        skewX: -0.15,
+        skewY:  0.02,
     };
     if (frameIndex > 106 && frameIndex < 140) return {
         x: 300, y: 10,  
@@ -114,10 +114,10 @@ function _calcCoords({ x, y, w, h, skewX, skewY }) {
         },
         topDir: {
             x: x + w,
-            y: y + w * skewX,       // skewX inclina o topo
+            y: y + w * skewX,
         },
         baixEsq: {
-            x: x + h * skewY,       // skewY inclina o lado esquerdo
+            x: x + h * skewY,
             y: y + h,
         },
     };

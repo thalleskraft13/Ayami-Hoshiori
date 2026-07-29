@@ -20,10 +20,10 @@ async function ensureWebhook(channelId, cachedWebhook) {
       await DiscordRequest(`/webhooks/${cachedWebhook.id}/${cachedWebhook.token}`, {
         method: "GET"
       });
-      return cachedWebhook; 
+      return cachedWebhook;
     } catch (err) {
-      if (!isWebhookDead(err)) throw err; 
-      // fall through → recreate
+      if (!isWebhookDead(err)) throw err;
+
     }
   }
 
@@ -86,8 +86,7 @@ async function editViaBot(channelId, messageId, payload) {
 }
 
 async function sendMessage({ channelId, payload, isCV2, cachedWebhook, profile = null, useWebhook = false }) {
-  // Webhook agora é opt-in: por padrão a própria Ayami envia a mensagem.
-  // Só tenta webhook se o usuário pediu explicitamente (useWebhook === true).
+
   if (!useWebhook) {
     try {
       const result = await sendViaBot(channelId, payload);
@@ -118,7 +117,7 @@ async function sendMessage({ channelId, payload, isCV2, cachedWebhook, profile =
 
       if (isWebhookDead(err)) {
         try {
-          webhook = await ensureWebhook(channelId, null); 
+          webhook = await ensureWebhook(channelId, null);
           const retry = await sendViaWebhook(webhook, payload, isCV2, profile);
           messageId = retry.messageId;
           return { webhook, messageId, usedFallback: false, sendError: null };
@@ -147,7 +146,7 @@ async function editMessage({ channelId, messageId, payload, isCV2, cachedWebhook
       return { ok: true, usedFallback: false, sendError: null };
     } catch (err) {
       if (!isWebhookDead(err)) {
-        // Non-dead error → fall through to bot
+
       }
     }
   }

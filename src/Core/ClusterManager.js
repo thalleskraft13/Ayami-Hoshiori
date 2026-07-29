@@ -6,7 +6,7 @@ const path = require('path');
 const DEFAULT_SHARDS_PER_CLUSTER = 2;
 const RESTART_DELAY_MS           = 5_000;
 const IPC_TIMEOUT_MS             = 5_000;
-const CLUSTER_READY_TIMEOUT_MS   = 60_000; 
+const CLUSTER_READY_TIMEOUT_MS   = 60_000;
 
 class ClusterManager {
 
@@ -88,7 +88,6 @@ class ClusterManager {
             worker.postMessage({ type: 'SET_MAINTENANCE', state });
         }
     }
-
 
     _requestStats(clusterId, worker) {
         return new Promise((resolve, reject) => {

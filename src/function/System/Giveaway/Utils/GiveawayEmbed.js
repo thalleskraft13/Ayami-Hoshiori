@@ -11,9 +11,8 @@ class GiveawayEmbed {
 
   static _t(client, key, extra = {}) {
     if (client?.t) return client.t(`sorteio.${key}`, extra);
-    return key; 
+    return key;
   }
-
 
   static buildActive(doc, client) {
 
@@ -93,7 +92,6 @@ class GiveawayEmbed {
     };
   }
 
-
   static buildEnded(doc, result, client) {
 
     const t = (key, extra) => this._t(client, key, extra);
@@ -110,7 +108,6 @@ class GiveawayEmbed {
       timestamp:   doc.endedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
-
 
   static buildEndReport(doc, result, client) {
 
@@ -161,7 +158,7 @@ class GiveawayEmbed {
             : '❌';
           return `\`#${h.position}\` ${icon} <@${h.userId}>${h.reason ? ` — ${h.reason}` : ''}`;
         })
-        .slice(0, 10) 
+        .slice(0, 10)
         .join('\n');
 
       fields.push({
@@ -191,7 +188,6 @@ class GiveawayEmbed {
       timestamp: doc.endedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
-
 
   static _reqLabel(req, client) {
     const t = (key, extra) => this._t(client, key, extra);

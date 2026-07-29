@@ -13,7 +13,6 @@ class LanguageSyncManager {
     }
   }
 
-
   async getUserLocale(userId) {
     if (!this.adapter) return null;
 
@@ -35,7 +34,6 @@ class LanguageSyncManager {
       return null;
     }
   }
-
 
   async broadcastReload(systemId, version) {
     if (!this.adapter) {
@@ -62,7 +60,6 @@ class LanguageSyncManager {
       onReload(systemId, payload.version);
     });
   }
-
 
   async registerVersion(systemId, version) {
     if (!this.adapter) {

@@ -17,7 +17,6 @@ class VideoProcessManager {
         this._meta = null;
     }
 
-
     async render(options) {
         const { Template, ...data } = options;
         if (!Template) throw new Error('[VideoProcessManager] options.Template is required.');
@@ -61,7 +60,6 @@ class VideoProcessManager {
         return { queue: this._queue.stats() };
     }
 
-
     async _getMeta() {
         if (!this._meta) {
             this._meta = new VideoManager({ root: this._root });
@@ -74,7 +72,7 @@ class VideoProcessManager {
         return new Promise((resolve, reject) => {
             const child = fork(this._workerPath, [], {
                 cwd:           this._root,
-                serialization: 'advanced', // permite Buffer nativo (e arrays deles) ida e volta pelo IPC
+                serialization: 'advanced',
             });
 
             let settled = false;

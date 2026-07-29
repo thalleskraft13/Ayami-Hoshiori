@@ -80,10 +80,10 @@ class CartaDaJujubaTemplate extends BaseVideo {
 function _getSlot(frameIndex) {
 
     if (frameIndex > 113 && frameIndex < 142) return {
-        x: 220, y: 15,   // posição do canto sup esquerdo
-        w: 400, h: 320,  // largura e altura
-        skewX: 0.10,    // inclinação horizontal
-        skewY:  -0.15,    // inclinação vertical
+        x: 220, y: 15,
+        w: 400, h: 320,
+        skewX: 0.10,
+        skewY:  -0.15,
     };
 
     return null;
@@ -98,10 +98,10 @@ function _calcCoords({ x, y, w, h, skewX, skewY }) {
         },
         topDir: {
             x: x + w,
-            y: y + w * skewX,       // skewX inclina o topo
+            y: y + w * skewX,
         },
         baixEsq: {
-            x: x + h * skewY,       // skewY inclina o lado esquerdo
+            x: x + h * skewY,
             y: y + h,
         },
     };

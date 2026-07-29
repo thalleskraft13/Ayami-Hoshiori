@@ -1,8 +1,5 @@
 'use strict';
 
-// Catálogo estático de companheiros. Nunca obtidos por gacha — apenas por
-// descoberta (primeira expedição concluída na região correspondente) ou,
-// futuramente, por conquistas/eventos/Mercado.
 module.exports = {
 
   raposa_celestial: {

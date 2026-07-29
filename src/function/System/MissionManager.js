@@ -7,8 +7,6 @@ const GuildMissionModel    = require('../../Mongodb/GuildMission.js');
 const DiscordRequest       = require('../DiscordRequest.js');
 const Economy              = require('../Estrelas/Economy.js');
 
-
-
 const DAILY_POOL = [
   { id: 'send_10',       label: 'Envie 10 mensagens',          type: 'send_message',  goal: 10,  reward: 60  },
   { id: 'send_20',       label: 'Envie 20 mensagens',          type: 'send_message',  goal: 20,  reward: 100 },
@@ -35,7 +33,6 @@ const WEEKLY_POOL = [
   { id: 'w_voice_5',     label: 'Entre em call 5 vezes',        type: 'join_voice',    goal: 5,   reward: 480 },
 ];
 
-
 const GROUP_DAILY_POOL = [
   { id: 'g_send',     label: 'Enviem {goal} mensagens juntos',   type: 'send_message',  baseGoal: 40,  baseReward: 80  },
   { id: 'g_xp',       label: 'Ganhem {goal} XP juntos',          type: 'earn_xp',       baseGoal: 150, baseReward: 100 },
@@ -52,7 +49,6 @@ const GROUP_WEEKLY_POOL = [
   { id: 'gw_daily',   label: 'Façam o /daily {goal} vezes juntos',type: 'do_daily',       baseGoal: 5,   baseReward: 500  },
 ];
 
-
 const GUILD_WEEKLY_POOL = [
   { id: 'guild_msgs_500',    label: 'Membros enviem 500 mensagens no servidor',     type: 'send_message',  goal: 500,  reward: 1200 },
   { id: 'guild_msgs_1000',   label: 'Membros enviem 1000 mensagens no servidor',    type: 'send_message',  goal: 1000, reward: 2400 },
@@ -66,15 +62,13 @@ const GUILD_WEEKLY_POOL = [
   { id: 'guild_event_msgs',  label: 'Chuva de Mora — enviem 200 msgs em 24h',       type: 'send_message',  goal: 200,  reward: 3200, isEvent: true },
 ];
 
-const GUILD_WEEKLY_COUNT = 4; 
-
+const GUILD_WEEKLY_COUNT = 4;
 
 class MissionManager {
 
   constructor(client) {
     this.client = client;
   }
-
 
   async trackEvent(userId, eventType, amount = 1, guildId = null) {
     await Promise.all([
@@ -83,7 +77,6 @@ class MissionManager {
       guildId ? this._trackGuild(guildId, userId, eventType, amount) : Promise.resolve()
     ]);
   }
-
 
   async _trackPersonal(userId, eventType, amount, guildId = null) {
     try {
@@ -144,7 +137,6 @@ class MissionManager {
       await user.save();
     }
   }
-
 
   async _trackGroup(userId, eventType, amount) {
     try {
@@ -225,7 +217,6 @@ class MissionManager {
       } catch {}
     }
   }
-
 
   async _trackGuild(guildId, userId, eventType, amount) {
     try {
@@ -319,7 +310,6 @@ class MissionManager {
     }
   }
 
-
   async collectGuildRewards(guildId, userId) {
     const doc = await GuildMissionModel.findOne({ guildId });
     if (!doc) return 0;
@@ -338,7 +328,6 @@ class MissionManager {
 
     return total;
   }
-
 
   async createGroup(leaderId) {
     const existing = await AdventureGroupModel.findOne({ members: leaderId });
@@ -365,7 +354,7 @@ class MissionManager {
 
     group.pendingInvites.push({
       userId:    targetId,
-      expiresAt: Date.now() + 10 * 60 * 1000 
+      expiresAt: Date.now() + 10 * 60 * 1000
     });
 
     await group.save();
@@ -411,7 +400,6 @@ class MissionManager {
     return AdventureGroupModel.findOne({ members: userId });
   }
 
-
   async getPersonalMissions(userId) {
     const user = await this._getOrCreateUser(userId);
     await this._ensurePersonalMissions(user);
@@ -437,7 +425,6 @@ class MissionManager {
     await doc.save();
     return doc;
   }
-
 
   async _getOrCreateUser(userId) {
     let user = await UserGlobalDb.findOne({ userId });

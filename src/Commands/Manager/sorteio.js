@@ -18,7 +18,7 @@ module.exports = {
     },
     options: [
       {
-        type: 1, // SUB_COMMAND
+        type: 1,
         name: "criar",
         description: "Cria um novo sorteio",
         name_localizations: { 'en-US': 'create', 'en-GB': 'create', 'es-ES': 'crear' },
@@ -62,7 +62,7 @@ module.exports = {
         },
         options: [
           {
-            type: 3, // STRING
+            type: 3,
             name: "id",
             description: "ID do sorteio",
             required: true,
@@ -139,7 +139,6 @@ module.exports = {
     const guildId    = interaction.guild_id;
     const ctx        = localeCtx(interaction);
 
-
     const adminOnly = ['criar', 'gerenciar', 'encerrar', 'reroll'];
 
     if (adminOnly.includes(subcommand)) {
@@ -167,11 +166,9 @@ module.exports = {
       }
     }
 
-
     if (subcommand === "criar") {
       return client.giveaway.criar(interaction);
     }
-
 
     if (subcommand === "gerenciar") {
 
@@ -207,7 +204,6 @@ module.exports = {
 
       return client.giveaway.startMenu(interaction);
     }
-
 
     if (subcommand === "lista") {
 
@@ -271,7 +267,6 @@ module.exports = {
       );
     }
 
-
     if (subcommand === "encerrar") {
 
       const giveawayId = interaction.data.options[0].options?.find(o => o.name === "id")?.value?.trim();
@@ -308,7 +303,6 @@ module.exports = {
       return client.giveaway.endGiveaway(interaction, doc);
     }
 
-
     if (subcommand === "reroll") {
 
       const giveawayId = interaction.data.options[0].options?.find(o => o.name === "id")?.value?.trim();
@@ -344,7 +338,6 @@ module.exports = {
 
       return client.giveaway.reroll(interaction, doc, user);
     }
-
 
     if (subcommand === "info") {
 

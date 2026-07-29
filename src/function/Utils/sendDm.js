@@ -24,7 +24,6 @@ async function sendDM(userId, messageData) {
       dmCache.set(userId, channelId);
     }
 
-   
     await DiscordRequest(`/channels/${channelId}/messages`, {
       method: "POST",
       body: messageData
@@ -34,7 +33,6 @@ async function sendDM(userId, messageData) {
 
   } catch (error) {
 
-    
     dmCache.delete(userId);
 
     return {
@@ -43,6 +41,5 @@ async function sendDM(userId, messageData) {
     };
   }
 }
-
 
 module.exports = sendDM;

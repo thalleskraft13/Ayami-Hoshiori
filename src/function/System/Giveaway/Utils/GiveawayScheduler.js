@@ -9,9 +9,8 @@ class GiveawayScheduler {
 
   constructor(client) {
     this.client  = client;
-    this._timers = new Map(); 
+    this._timers = new Map();
   }
-
 
   async boot() {
 
@@ -30,10 +29,9 @@ class GiveawayScheduler {
     console.log(`[GiveawayScheduler] ${scheduled} sorteio(s) reagendado(s) no boot.`);
   }
 
-
   schedule(doc) {
 
-    this.cancel(doc.giveawayId); 
+    this.cancel(doc.giveawayId);
 
     const remaining = new Date(doc.endsAt).getTime() - Date.now();
 
@@ -70,7 +68,6 @@ class GiveawayScheduler {
       this._timers.delete(giveawayId);
     }
   }
-
 
   async _end(giveawayId) {
 

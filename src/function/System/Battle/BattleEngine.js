@@ -17,7 +17,7 @@ class BattleEngine {
         this.reactionManager  = reactionManager;
 
         this.turnoAtual   = 1;
-        this.vezAtual     = 'A'; 
+        this.vezAtual     = 'A';
         this.emAndamento  = true;
         this.vencedor     = null;
 
@@ -25,10 +25,8 @@ class BattleEngine {
         this._logTurno = [];
     }
 
-
     get timeAtacante() { return this.vezAtual === 'A' ? this.timeA : this.timeB; }
     get timeDefensor()  { return this.vezAtual === 'A' ? this.timeB : this.timeA; }
-
 
     processarInicioTurno() {
         this._logTurno = [];
@@ -60,7 +58,6 @@ class BattleEngine {
 
         return [...this._logTurno];
     }
-
 
     executarAcao(tipoAcao, opcoes = {}) {
         this._logTurno = [];
@@ -125,7 +122,6 @@ class BattleEngine {
         };
     }
 
-
     processarFimTurno() {
         const time  = this.timeAtacante;
         const ativo = time.ativo;
@@ -145,7 +141,6 @@ class BattleEngine {
 
         return passLog;
     }
-
 
     verificarFimDeBatalha() {
         if (!this.timeA.estaVivo()) {
@@ -172,7 +167,6 @@ class BattleEngine {
 
         return { fim: false };
     }
-
 
     _executarHabilidade(tipo, personagem, timeAliado, timeInimigo) {
         const habilidade = personagem.dados[tipo];
@@ -267,12 +261,10 @@ class BattleEngine {
         return 'troca_personagem';
     }
 
-
     _log(mensagem) {
         this._logTurno.push(mensagem);
         this.log.push(mensagem);
     }
-
 
     gerarSnapshot() {
         return {

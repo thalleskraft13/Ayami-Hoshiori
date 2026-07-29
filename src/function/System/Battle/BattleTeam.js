@@ -15,7 +15,6 @@ class BattleTeam {
         this._ativarPersonagem(0);
     }
 
-
     get ativo() {
         return this.personagens[this._indiceAtivo] ?? null;
     }
@@ -24,11 +23,9 @@ class BattleTeam {
         return this._indiceAtivo;
     }
 
-
     get offField() {
         return this.personagens.filter((p, i) => i !== this._indiceAtivo && p.vivo);
     }
-
 
     trocar(indice) {
         if (indice === this._indiceAtivo) {
@@ -67,7 +64,6 @@ class BattleTeam {
         }
     }
 
-
     estaVivo() {
         return this.personagens.some(p => p.vivo);
     }
@@ -90,14 +86,12 @@ class BattleTeam {
         return true;
     }
 
-
     processarFimDeTurno() {
         for (const p of this.vivos()) {
             p.reduzirCooldowns();
             p.reduzirDuracoes();
         }
     }
-
 
     toSnapshot() {
         return {

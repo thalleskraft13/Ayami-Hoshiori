@@ -1,20 +1,18 @@
 'use strict';
 
-
 const mongoose       = require('mongoose');
 const DiscordRequest = require('../../DiscordRequest.js');
 const { PendingTempRoleModel, ActiveLinkedRoleModel } = require('../../../Mongodb/guild.js');
 
-const SWEEP_INTERVAL_MS = 60_000; 
+const SWEEP_INTERVAL_MS = 60_000;
 
 class AutoRoleManager {
 
   constructor(client) {
     this.client = client;
-    this._botRolePosition = new Map(); 
+    this._botRolePosition = new Map();
     this._startTempRoleSweep();
   }
-
 
   async applyRoles({ guildId, userId, ticketId, panel }) {
     const cfg = panel.autoRoleConfig;
@@ -60,7 +58,6 @@ class AutoRoleManager {
     }
   }
 
-
   async handleTicketClose({ guildId, userId, ticketId }) {
     try {
       const records = await ActiveLinkedRoleModel.find({ guildId, userId, ticketId });
@@ -82,7 +79,6 @@ class AutoRoleManager {
       console.error('[AutoRole] Erro ao processar fechamento de ticket:', err);
     }
   }
-
 
   _startTempRoleSweep() {
     const startInterval = () => {
@@ -129,7 +125,6 @@ class AutoRoleManager {
     }
   }
 
-
   async _addRole(guildId, userId, roleId) {
     await DiscordRequest(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, {
       method: 'PUT'
@@ -146,7 +141,6 @@ class AutoRoleManager {
     }
   }
 
-
   async _getBotHighestRolePosition(guildId) {
     const cached = this._botRolePosition.get(guildId);
     if (cached && cached.expires > Date.now()) return cached.position;
@@ -162,7 +156,7 @@ class AutoRoleManager {
 
     this._botRolePosition.set(guildId, {
       position: maxPos,
-      expires:  Date.now() + 300_000 
+      expires:  Date.now() + 300_000
     });
 
     return maxPos;
@@ -178,7 +172,6 @@ class AutoRoleManager {
       return false;
     }
   }
-
 
   async getActiveLinkedRoles(guildId, userId) {
     return ActiveLinkedRoleModel.find({ guildId, userId });

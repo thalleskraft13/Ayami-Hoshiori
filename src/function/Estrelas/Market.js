@@ -16,10 +16,6 @@ class Market {
     this.context = context;
   }
 
-  // ================================
-  // Compra e venda direta
-  // ================================
-
   async vender(itemId, quantidade, precoUnitario) {
     if (!Number.isInteger(quantidade) || quantidade <= 0)
       throw new Error("Quantidade deve ser um número inteiro maior que 0.");
@@ -108,10 +104,6 @@ class Market {
         value: String(l._id)
       })));
   }
-
-  // ================================
-  // Leilão
-  // ================================
 
   async criarLeilao(itemId, quantidade, lanceMinimo, duracaoMinutos) {
     if (!Number.isInteger(quantidade) || quantidade <= 0)
@@ -221,10 +213,6 @@ class Market {
         value: String(l._id)
       })));
   }
-
-  // ================================
-  // Trocas diretas
-  // ================================
 
   async propor(alvoId, itensProponente = [], itensAlvo = [], estrelasProponente = 0, estrelasAlvo = 0) {
     if (alvoId === this.userId)

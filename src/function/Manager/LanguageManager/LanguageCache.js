@@ -6,11 +6,9 @@ class LanguageCache {
     this._meta = new Map();
   }
 
-
   _key(systemId, version, locale) {
     return `${systemId}@${version}:${locale}`;
   }
-
 
   has(systemId, version, locale) {
     return this._store.has(this._key(systemId, version, locale));
@@ -24,7 +22,6 @@ class LanguageCache {
     this._store.set(this._key(systemId, version, locale), pack);
     this._updateMeta(systemId, version, locale);
   }
-
 
   invalidateVersion(systemId, version) {
     const meta = this._meta.get(systemId);
@@ -50,7 +47,6 @@ class LanguageCache {
     this._store.clear();
     this._meta.clear();
   }
-
 
   _updateMeta(systemId, version, locale) {
     const existing = this._meta.get(systemId) ?? {

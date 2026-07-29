@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { TokenType, LexerError } = require('./Lexer.js');
 
 class ParseError extends Error {
@@ -73,7 +72,7 @@ class Parser {
   }
 
   _parseFunctionDecl(isExported = false) {
-    this._advance(); 
+    this._advance();
     const name   = this._expect(TokenType.IDENT, 'Nome da função esperado').value;
     const params = this._parseParamList();
     const body   = this._parseBlock([TokenType.END]);
@@ -151,7 +150,7 @@ class Parser {
   }
 
   _parseOnEvent() {
-    this._advance(); 
+    this._advance();
     const eventName = this._expect(TokenType.IDENT, 'Nome do evento esperado').value;
 
     this._expect(TokenType.LPAREN, "'(' esperado");
@@ -284,7 +283,7 @@ class Parser {
     if (this._check(TokenType.MINUS)) { this._advance(); return { type: 'UnaryOp', op: '-', operand: this._parseUnary() }; }
 
     if (this._check(TokenType.IDENT) && this._current().value === 'new') {
-      this._advance(); 
+      this._advance();
       const name = this._expect(TokenType.IDENT, 'Nome da classe esperado').value;
       const args = this._parseArgList();
       return { type: 'NewExpression', name, args };

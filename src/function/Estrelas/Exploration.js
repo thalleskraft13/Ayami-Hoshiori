@@ -11,7 +11,7 @@ const DURACOES     = require("./data/duracoes.js");
 const COMPANHEIROS = require("./data/companheiros.js");
 
 const ESTRELAS_BASE_POR_DIFICULDADE = 12;
-const BONUS_COMPANHEIRO_AFIM = 1.25; // +25% quando o companheiro ativo é da região
+const BONUS_COMPANHEIRO_AFIM = 1.25;
 
 class Exploration {
 
@@ -99,11 +99,9 @@ class Exploration {
 
     const economy = new Economy(this.userId, this.context);
 
-    // Estrelas
     const estrelas = Math.round(ESTRELAS_BASE_POR_DIFICULDADE * regiao.dificuldade * duracao.multiplicador * bonus);
     await economy.add(estrelas, { action: 'add', metadata: { motivo: `Expedição: ${regiao.nome}` } });
 
-    // Recursos (2 recursos aleatórios da região, ou todos se a região tiver só 1-2)
     const recursosGanhos = {};
     for (const recurso of regiao.recursos) {
       const quantidade = Math.max(1, Math.round(
@@ -130,7 +128,6 @@ class Exploration {
       await Missions.progress(this.userId, this.context, 'coletar_recurso', totalRecursos);
     }
 
-    // Descoberta de companheiro: primeira expedição concluída na região correta
     let companheiroDescoberto = null;
     if (regiao.companheiro) {
       const jaTem = await CompanionDb.findOne({ userId: this.userId, companheiroId: regiao.companheiro });

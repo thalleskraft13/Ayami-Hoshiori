@@ -5,7 +5,6 @@ const getPerm        = require('../../function/Utils/GetPerm.js');
 const { localeCtx } = require('../../function/Utils/ctxLocale.js');
 const { buildCV2Payload } = require('../../function/Utils/CV2Serializer.js');
 
-
 const CATEGORIES = [
   'Moderação','Economia','Automação','Logs','Tickets',
   'Recompensas','Eventos','RPG','Utilidade','Comunidade',
@@ -43,10 +42,10 @@ const CATEGORY_EMOJI = {
 };
 
 const COLOR = {
-  main:    0x7C8FFF,   // azul principal
-  gold:    0xFFD966,   // dourado
-  dark:    0x243B7A,   // azul escuro
-  hair:    0xA9D6FF,   // azul cabelo
+  main:    0x7C8FFF,
+  gold:    0xFFD966,
+  dark:    0x243B7A,
+  hair:    0xA9D6FF,
   pink:    0xFFB6C8,
   danger:  0xED4245,
   success: 0x57F287,
@@ -55,7 +54,6 @@ const COLOR = {
 
 const SUPPORT_ANNOUNCE_CHANNEL = '1508910999753850910';
 const GUIDE_URL = 'https://ayami-hoshiori.vercel.app/logic-builder';
-
 
 const INSTALL_REQUIRED_FIELDS = {
   'message:send_message':        [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_send_message_channel' }],
@@ -83,7 +81,6 @@ const INSTALL_REQUIRED_FIELDS = {
   'trigger:component':           [{ field: 'channelId', labelKey: 'field_channel', descKey: 'desc_trigger_generic' }],
 };
 
-
 function _actionLabel(client, ctx, category, type) {
   const map = {
     'message:send_message':       'action_send_message',
@@ -107,7 +104,6 @@ function _actionLabel(client, ctx, category, type) {
   const key = map[`${category}:${type}`];
   return key ? client.t(`biblioteca.${key}`, ctx) : `${category}/${type}`;
 }
-
 
 function _buildInstallQuestions(entry, client, ctx) {
   const questions = [];
@@ -189,7 +185,6 @@ function _buildInstallQuestions(entry, client, ctx) {
   return questions;
 }
 
-
 function _applyCollectedValues(flows, questions, collected) {
   const cloned = JSON.parse(JSON.stringify(flows));
 
@@ -225,7 +220,6 @@ function _applyCollectedValues(flows, questions, collected) {
 
   return cloned;
 }
-
 
 async function _defer(interaction) {
   return DiscordRequest(
@@ -284,12 +278,6 @@ async function _deleteFollowUp(interaction, client, messageId) {
   );
 }
 
-/**
- * Reconhece (ack) a interação de um botão antes de mandar um followup.
- * Sem isso, o Discord nunca recebe uma resposta inicial dentro dos 3s e
- * mostra "interação inválida" pro usuário — mesmo que o followup em si
- * tivesse dado certo depois.
- */
 async function _ackThenFollowUp(interaction, client, data) {
   await DiscordRequest(
     `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -297,7 +285,6 @@ async function _ackThenFollowUp(interaction, client, data) {
   );
   return _followUpEphemeral(interaction, client, data);
 }
-
 
 function cv2Text(content) {
   return { type: 10, content };
@@ -370,7 +357,6 @@ function _clampPage(page, total, perPage = 8) {
   const safePage = Math.min(Math.max(0, page), maxPage);
   return { page: safePage, maxPage };
 }
-
 
 async function _startInstallWizard(interaction, client, lib, entry, userId, guildId, e) {
   guildId = guildId || interaction.guild_id;
@@ -476,7 +462,6 @@ async function _startInstallWizard(interaction, client, lib, entry, userId, guil
   return _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId, e);
 }
 
-
 async function _executeInstall(interaction, client, lib, entry, userId, guildId, questions, collected, channelId = null, e) {
   try {
     const preparedFlows = _applyCollectedValues(entry.flows || [], questions, collected);
@@ -522,7 +507,6 @@ async function _executeInstall(interaction, client, lib, entry, userId, guildId,
     return _edit(interaction, client, payload);
   }
 }
-
 
 module.exports = {
   data: {
@@ -716,28 +700,18 @@ module.exports = {
   }
 };
 
-
-/* ════════════════════════════════════════════════════════════════════
-   CAMADA UNIFICADA — mescla Biblioteca de Fluxos + Biblioteca de
-   Embeds/Components V2 num único conjunto de comandos /biblioteca.
-   Cada função abaixo decide (por filtro explícito ou por autodetecção
-   do libId) se delega pra lógica de fluxos (_flowXxx / client.libraryManager)
-   ou de mensagens (_embedsXxx / client.messageLibraryManager).
-   ════════════════════════════════════════════════════════════════════ */
-
-/** Tenta achar uma entrada em qualquer uma das duas bibliotecas pelo libId. */
 async function _findAnyLibEntry(client, libId) {
   const flowEntry = await client.libraryManager.getById(libId);
   if (flowEntry) return { kind: 'fluxo', entry: flowEntry };
 
   const msgEntry = await client.messageLibraryManager.getById(libId);
-  if (msgEntry) return { kind: msgEntry.type, entry: msgEntry }; // 'embed' | 'components_v2'
+  if (msgEntry) return { kind: msgEntry.type, entry: msgEntry };
 
   return null;
 }
 
 async function _pesquisar(interaction, client, opts, userId, e) {
-  const tipo = opts.tipo; // 'fluxo' | 'embed' | 'components_v2' | undefined (= tudo)
+  const tipo = opts.tipo;
 
   const wantFlows  = !tipo || tipo === 'fluxo';
   const wantEmbeds = !tipo || tipo === 'embed' || tipo === 'components_v2';
@@ -869,7 +843,6 @@ async function _renderUnifiedSearchPage(interaction, client, combined, filters, 
   return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
 }
 
-/** Renderiza o detalhe de UMA entrada já sabendo seu tipo (delega pro render específico). */
 async function _renderUnifiedDetail(interaction, client, libId, userId, e, kind, entry = null) {
   if (kind === 'fluxo') {
     return _renderDetail(interaction, client, client.libraryManager, libId, userId, e, entry);
@@ -1065,8 +1038,6 @@ async function _destaques(interaction, client, e) {
   ], { accentColor: COLOR.library }));
 }
 
-
-
 async function _resolveAuthorName(lib, authorId, client, ctx, fallback = null) {
   if (fallback && fallback !== authorId) return fallback;
 
@@ -1107,7 +1078,6 @@ function _triggerLabel(client, ctx, trigger) {
   const key = labels[`${trigger.category}:${trigger.type}`];
   return key ? client.t(`biblioteca.${key}`, ctx) : `${trigger.category}/${trigger.type}`;
 }
-
 
 async function _flowPesquisar(interaction, client, lib, opts, userId, e) {
   const { results } = await lib.search({
@@ -1824,7 +1794,6 @@ async function _renderProfile(interaction, client, targetId, userId, e) {
   return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
 }
 
-
 async function _flowDestaques(interaction, client, lib, e) {
   const { trending, topInstalls, topRated, recent } = await lib.getHighlights();
   const ctx = localeCtx(interaction);
@@ -1895,11 +1864,6 @@ async function _openRateModal(interaction, client, lib, libId, userId, e) {
   return client.interactions.showModal(interaction, modal);
 }
 
-
-// ============================================================================
-// BIBLIOTECA DE EMBEDS & COMPONENTS V2  (/biblioteca embeds ...)
-// ============================================================================
-
 function _embedsTypeLabel(client, ctx, type) {
   return type === 'components_v2'
     ? client.t('biblioteca.embeds_type_cv2', ctx)
@@ -1927,9 +1891,7 @@ async function _announceEmbedsLibrary(client, entry, authorName, e) {
 
 function _embedsPreviewPayload(entry) {
   if (entry.type === 'components_v2') {
-    // entry.components está no formato "kind" (mesmo do Component Builder do site,
-    // e do state.blocks do editor /criar) — precisa ser serializado pro formato
-    // real da API do Discord antes de virar um payload de mensagem de verdade.
+
     return buildCV2Payload(entry.components, { ephemeral: true });
   }
   return {
@@ -2224,9 +2186,7 @@ async function _embedsPublicarModal(interaction, client, lib, userId, guildId, a
       { type: 1, components: [{ type: 4, custom_id: 'tags',      label: client.t('biblioteca.embeds_modal_field_tags', ctx),          style: 1, required: false, max_length: 200,  placeholder: client.t('biblioteca.embeds_modal_field_tags_ph', ctx) }] }
     ],
     funcao: async (modalInteraction, _client, fields) => {
-      // Categoria é só uma sugestão de organização — se o texto não bater com
-      // nenhuma conhecida (ou vier vazio), cai em "Outros" em vez de bloquear
-      // a publicação do embed.
+
       const category = CATEGORIES.find(c => c.toLowerCase() === fields.category?.trim().toLowerCase()) || 'Outros';
 
       await DiscordRequest(

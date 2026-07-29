@@ -1,9 +1,5 @@
 'use strict';
 
-// Catálogo estático de receitas da Oficina.
-// custoRecursos / custoEstrelas: o que é consumido para fabricar 1 unidade.
-// resultado: item produzido e guardado em inventario.itens.
-// Estrutura pensada para permitir novas receitas sem alterar o serviço (Workshop.js).
 module.exports = {
 
   tabua_madeira: {

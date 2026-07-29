@@ -2,13 +2,11 @@
 
 class Canvas {
 
-
     static create(canvasModule, width, height) {
         const canvas = canvasModule.createCanvas(width, height);
         const ctx    = canvas.getContext('2d');
         return { canvas, ctx };
     }
-
 
     static drawImage(ctx, image, dx, dy, dw, dh) {
         if (dw !== undefined && dh !== undefined) {
@@ -52,7 +50,6 @@ class Canvas {
         ctx.restore();
     }
 
-
     static linearGradient(ctx, x, y, w, h, stops, direction = 'vertical') {
         const [x0, y0, x1, y1] = direction === 'horizontal'
             ? [x, y, x + w, y]
@@ -68,7 +65,6 @@ class Canvas {
         ctx.fillRect(x, y, w, h);
         ctx.restore();
     }
-
 
     static coverCrop(imgW, imgH, destW, destH) {
         const scaleW = destW / imgW;
@@ -88,7 +84,6 @@ class Canvas {
         const { sx, sy, sw, sh } = Canvas.coverCrop(img.width, img.height, dw, dh);
         ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
-
 
     static toBuffer(canvas) {
         return canvas.toBuffer('image/png');

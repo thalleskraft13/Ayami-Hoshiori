@@ -39,9 +39,9 @@ class RezandoTemplate extends BaseImage {
 
             ctx.save();
             ctx.setTransform(
-                1,     skewX,  // a, b
-                skewY, 1,      // c, d
-                topoEsquerdo.x, // e (translate x)
+                1,     skewX,
+                skewY, 1,
+                topoEsquerdo.x,
                 topoEsquerdo.y  
             );
             ctx.drawImage(tmpCanvas, 0, 0, tW, tH);

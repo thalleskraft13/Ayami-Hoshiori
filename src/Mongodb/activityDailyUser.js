@@ -5,7 +5,7 @@ const { Schema } = mongoose;
 
 const activityDailyUserSchema = new Schema({
   guildId: { type: String, required: true },
-  date:    { type: String, required: true }, // 'YYYY-MM-DD' (UTC)
+  date:    { type: String, required: true },
   userId:  { type: String, required: true },
   createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 400 },
 }, {

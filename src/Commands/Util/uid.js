@@ -117,7 +117,7 @@ module.exports = {
           }
         }
       );
-      
+
       await client.UidManager.checkAndSendUid({
         guildId: interaction.guild_id,
         uid,

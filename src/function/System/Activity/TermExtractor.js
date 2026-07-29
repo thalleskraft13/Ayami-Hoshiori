@@ -1,6 +1,5 @@
 'use strict';
 
-
 const STOPWORDS = new Set([
   'de','a','o','que','e','do','da','em','um','uma','os','as','para','com','nao','não','uma',
   'por','mais','como','mas','ao','ele','das','tem','seu','sua','ou','ser','quando','muito',
@@ -24,7 +23,7 @@ const STOPWORDS = new Set([
 
 const CUSTOM_EMOJI_RE  = /<a?:(\w+):(\d+)>/g;
 const UNICODE_EMOJI_RE = /\p{Extended_Pictographic}/gu;
-const WORD_RE          = /[\p{L}\p{N}]{3,}/gu; 
+const WORD_RE          = /[\p{L}\p{N}]{3,}/gu;
 
 function extractTerms(content) {
   if (!content) return { words: [], emojis: [] };
@@ -41,7 +40,7 @@ function extractTerms(content) {
   const wordSet = new Set();
   for (const m of cleaned.matchAll(WORD_RE)) {
     const w = m[0].toLowerCase();
-    if (/^\d+$/.test(w)) continue;       
+    if (/^\d+$/.test(w)) continue;
     if (STOPWORDS.has(w)) continue;
     wordSet.add(w);
   }

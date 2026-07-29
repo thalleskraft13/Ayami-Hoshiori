@@ -11,7 +11,7 @@ const HistoryService             = require('./HistoryService.js');
 const PremiumService               = require('./PremiumService.js');
 
 const ACCENT = 0x7C8FFF;
-const INACTIVITY_CHECK_HOUR = 4; // horário interno fixo (madrugada) para a checagem diária de inatividade
+const INACTIVITY_CHECK_HOUR = 4;
 
 class CallScheduler {
 
@@ -28,10 +28,6 @@ class CallScheduler {
   get tasks() {
     return this.client.taskManager;
   }
-
-  // ---------------------------------------------------------------------
-  // Agendamento — chamada automática diária (exclusivo de assinantes)
-  // ---------------------------------------------------------------------
 
   async syncSchedule(guildId, cfg) {
     const schedule = cfg?.call?.schedule;
@@ -50,11 +46,11 @@ class CallScheduler {
   async runScheduledCall(guildId) {
     const cfg = await this.config.get(guildId);
     if (!cfg?.enabled || !cfg.call?.schedule?.enabled) return;
-    if (!(await this.premium.hasSubscription(guildId))) return; // assinatura expirou — pula o dia, mantém agendado
+    if (!(await this.premium.hasSubscription(guildId))) return;
     if (!cfg.call.channelId) return;
 
     const existing = await this.call.getOpen(guildId);
-    if (existing) return; // já existe uma chamada em aberto (provavelmente iniciada manualmente)
+    if (existing) return;
 
     const started = await this.call.start(guildId, this.client.clientId ?? 'system', cfg.call.channelId);
     if (!started.ok) return;
@@ -79,10 +75,6 @@ class CallScheduler {
       },
     }).catch(err => console.error('[House/CallScheduler] Falha ao enviar mensagem da chamada automática:', err?.message));
   }
-
-  // ---------------------------------------------------------------------
-  // Inatividade — expulsão/registro automático (grátis)
-  // ---------------------------------------------------------------------
 
   async syncInactivityTask(guildId, cfg) {
     const inactivity = cfg?.call?.inactivity;
@@ -123,7 +115,7 @@ class CallScheduler {
 
       const activity = await this.activity.get(guildId, userId);
       const lastSeen = activity.lastActivityAt ?? character.chosenAt ?? character.createdAt ?? new Date();
-      if (lastSeen.getTime() > threshold) continue; // ainda dentro do prazo
+      if (lastSeen.getTime() > threshold) continue;
 
       results.checked += 1;
 
@@ -171,10 +163,6 @@ class CallScheduler {
       },
     }).catch(err => console.warn('[House/CallScheduler] Falha ao enviar log de inatividade:', err?.message));
   }
-
-  // ---------------------------------------------------------------------
-  // Log de encerramento de chamada (presença/ausência em %) — assinantes
-  // ---------------------------------------------------------------------
 
   async logCallClosed(guildId, cfg, stats, closedBy) {
     const channelId = cfg?.call?.logChannelId;

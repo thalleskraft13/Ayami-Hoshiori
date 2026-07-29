@@ -4,6 +4,9 @@ const { Schema, model, models } = require('mongoose');
 
 const logicScriptSchema = new Schema({
   guildId:   { type: String, required: true, index: true },
+
+  fileId:    { type: String, required: true, unique: true, index: true },
+
   name:      { type: String, required: true },
   path:      { type: String, required: true },
   content:   { type: String, default: '' },

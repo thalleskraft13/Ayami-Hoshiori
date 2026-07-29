@@ -7,7 +7,6 @@ class LanguageLoader {
     this.basePath = systemsBasePath;
   }
 
-
   loadManifest(systemId) {
     const manifestPath = path.join(
       this._resolveSystemDir(systemId),
@@ -33,7 +32,6 @@ class LanguageLoader {
       return { id: systemId, version: "0.0.0", locales: [] };
     }
   }
-
 
   loadSystem(systemId) {
     const manifest  = this.loadManifest(systemId);
@@ -62,7 +60,6 @@ class LanguageLoader {
     return { manifest, localeMap };
   }
 
-
   reloadLocale(systemId, locale) {
     const filePath = path.join(
       this._resolveLangDir(systemId),
@@ -73,7 +70,6 @@ class LanguageLoader {
 
     return this._loadFile(filePath, `${locale}.js`);
   }
-
 
   _loadFile(filePath, label) {
     const entryMap = new Map();

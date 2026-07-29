@@ -1,6 +1,5 @@
 'use strict';
 
-
 const DiscordRequest = require('../../DiscordRequest.js');
 const msLib          = require('ms');
 const TaskModel       = require('../../../Mongodb/tarefas.js');
@@ -131,7 +130,6 @@ class EmbedBuilder {
   toJSON() { return this._data; }
 }
 
-
 function resolveEmbed(embed) {
   if (!embed) return null;
   if (embed instanceof EmbedBuilder) return embed.toJSON();
@@ -152,9 +150,9 @@ function resolveComponents(comps) {
     } else if (c._type === 'selectmenu') {
       rows.push({ type: 1, components: [c._data] });
     } else if (c._type === 'modal') {
-      // modal é tratado separadamente
+
     } else if (c.type === 1) {
-      rows.push(c); 
+      rows.push(c);
     }
   }
 
@@ -192,7 +190,7 @@ class Interpreter {
     this._steps     = 0;
     this._depth     = 0;
     this._totalWait = 0;
-    this._printLog  = [];   
+    this._printLog  = [];
 
     this._httpRequestCounter = { count: 0 };
 
@@ -202,7 +200,6 @@ class Interpreter {
     this._setupGlobals();
   }
 
-
   async _getGuildPlan() {
     if (this._planCache) return this._planCache;
     const guildId = this.discordCtx.guildId;
@@ -210,7 +207,7 @@ class Interpreter {
     try {
       const premium = await PremiumManager.getGuildPremium(guildId);
       if (premium.status) planId = premium.planId;
-    } catch { /* sem premium ativo — segue com FREE */ }
+    } catch {  }
     this._planCache = getPlan(planId);
     return this._planCache;
   }
@@ -237,7 +234,13 @@ class Interpreter {
     const ctx = this.discordCtx;
 
     G.define('print',    (...a) => {
-      const text = a.map(v => this._str(v)).join(' ');
+      let text;
+      try {
+        text = a.length ? a.map(v => this._printFormat(v)).join(' ') : '';
+      } catch (err) {
+
+        text = '[print: não foi possível exibir esse valor]';
+      }
       console.log('[LS]', text);
       this._printLog.push(text);
       if (this._printLog.length > 200) this._printLog.shift();
@@ -330,7 +333,7 @@ class Interpreter {
     });
 
     G.define('cooldown', async (chave, tempo) => {
-      if (!this.db) return true; 
+      if (!this.db) return true;
       const { delayMs } = this._parseTime(tempo);
       const key = `_cooldown_${chave}`;
       const expiraEm = await this.db.getUser(ctx.guildId, ctx.userId, key);
@@ -707,7 +710,7 @@ class Interpreter {
         }
         return null;
       }
-      case 'OnEvent': return null; 
+      case 'OnEvent': return null;
       case 'ExprStmt': { await this._eval(node.expr, env); return null; }
       default: throw new RuntimeError(`Statement desconhecido: ${node.type}`, node.line);
     }
@@ -821,6 +824,35 @@ class Interpreter {
     return String(v);
   }
 
+  _printFormat(v, indent = '', seen = new Set()) {
+    if (v === null || v === undefined) return 'nil';
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'function') return '[function]';
+    if (v instanceof EmbedBuilder) return '[EmbedBuilder]';
+    if (typeof v === 'string') return v;
+
+    if (typeof v === 'object') {
+      if (seen.has(v)) return '[referência circular]';
+      if (seen.size > 8) return '[...]';
+
+      const nextSeen  = new Set(seen).add(v);
+      const nextIndent = indent + '    ';
+
+      if (Array.isArray(v)) {
+        if (!v.length) return '{}';
+        const items = v.map(item => `${nextIndent}${this._printFormat(item, nextIndent, nextSeen)}`);
+        return `{\n${items.join(',\n')}\n${indent}}`;
+      }
+
+      const keys = Object.keys(v);
+      if (!keys.length) return '{}';
+      const items = keys.map(k => `${nextIndent}${k} = ${this._printFormat(v[k], nextIndent, nextSeen)}`);
+      return `{\n${items.join(',\n')}\n${indent}}`;
+    }
+
+    return String(v);
+  }
 
   _buildMessageObj(msg) {
     if (!msg) return null;
@@ -1110,7 +1142,7 @@ class Interpreter {
           },
         });
         data.custom_id = built.custom_id;
-        return obj; 
+        return obj;
       },
     };
     return obj;
