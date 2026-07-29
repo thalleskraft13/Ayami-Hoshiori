@@ -63,7 +63,6 @@ module.exports = [
   { id: "character_step_title", render: (ctx) => `# 🎭 Escolha de Personagem` },
   { id: "character_step_intro", render: (ctx) => `Etapa gratuita que deixa o membro escolher um personagem disponível durante a recepção.` },
   { id: "character_step_status", render: (ctx) => `Status: ${ctx.status}\nNome da etapa: ${ctx.stepName}` },
-  { id: "character_step_warning_empty", render: (ctx) => `⚠️ Ativada, mas nenhum personagem disponível está cadastrado — a etapa é ignorada até você cadastrar pelo menos um em **Houses → Personagens**.` },
   { id: "character_available", render: (ctx) => `🟢 Disponível` },
   { id: "character_occupied", render: (ctx) => `🔴 Ocupado` },
   { id: "character_slots", render: (ctx) => `${ctx.occupied}/${ctx.slots} vagas` },

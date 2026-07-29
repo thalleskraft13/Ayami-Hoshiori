@@ -63,7 +63,6 @@ module.exports = [
   { id: "character_step_title", render: (ctx) => `# 🎭 Character Selection` },
   { id: "character_step_intro", render: (ctx) => `Free step that lets the member choose an available character during reception.` },
   { id: "character_step_status", render: (ctx) => `Status: ${ctx.status}\nStep name: ${ctx.stepName}` },
-  { id: "character_step_warning_empty", render: (ctx) => `⚠️ Enabled, but no available character is registered — the step is skipped until you register at least one in **Houses → Characters**.` },
   { id: "character_available", render: (ctx) => `🟢 Available` },
   { id: "character_occupied", render: (ctx) => `🔴 Taken` },
   { id: "character_slots", render: (ctx) => `${ctx.occupied}/${ctx.slots} slots` },

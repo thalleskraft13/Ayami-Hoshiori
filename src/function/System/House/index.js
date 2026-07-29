@@ -526,8 +526,6 @@ class HouseSystem {
       },
     });
 
-    const availableCount = (await this.characters.listAvailable(guildId)).length;
-
     const blocks = [
       CV2.text(t('house.character_step_title')),
       CV2.text(t('house.character_step_intro')),
@@ -536,10 +534,6 @@ class HouseSystem {
         stepName: charSel.stepName,
       })),
     ];
-
-    if (charSel.enabled && availableCount === 0) {
-      blocks.push(CV2.text(t('house.character_step_warning_empty')));
-    }
 
     blocks.push(
       CV2.separator(),

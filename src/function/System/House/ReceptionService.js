@@ -483,29 +483,30 @@ class ReceptionService {
       addRoleId:    cfg?.reception?.registeredRoleId,
     });
 
-    // Decorações de nome são exclusivas de assinantes — checa a assinatura no momento
-    // de aplicar, e não só na tela de configuração, para respeitar planos que expiraram.
-    let characterName = '';
-    if (cfg?.decoration?.enabled && (await this.premium.hasSubscription(guildId))) {
-      const character = await this.characters.findByUser(guildId, userId);
-      const freeName    = state?.answers?.__character_select;
-      characterName    = character?.name || (typeof freeName === 'string' ? freeName : '');
+    // Nome do personagem escolhido (ou digitado livremente, se não houver personagens
+    // cadastrados) — vale independentemente de decoração estar ativa ou não.
+    const character      = await this.characters.findByUser(guildId, userId);
+    const freeName        = state?.answers?.__character_select;
+    const characterName  = character?.name || (typeof freeName === 'string' ? freeName : '');
 
-      // Formato escolhido pelo próprio membro na etapa de decoração. Se ele optou por não
-      // usar decoração (ou a etapa não chegou a rodar), aplica só o nome do personagem.
-      const chosenFormat = state?.answers?.__decoration_select;
-      const emoji         = state?.answers?.__emoji_select || '';
-      const nickname = chosenFormat
-        ? this.decoration.build(chosenFormat, { name: characterName, user: userId, character: characterName, emoji })
-        : characterName;
+    if (characterName) {
+      // Decorações de nome são exclusivas de assinantes — checa a assinatura no momento
+      // de aplicar, e não só na tela de configuração, para respeitar planos que expiraram.
+      if (cfg?.decoration?.enabled && (await this.premium.hasSubscription(guildId))) {
+        // Formato escolhido pelo próprio membro na etapa de decoração. Se ele optou por não
+        // usar decoração (ou a etapa não chegou a rodar), aplica só o nome do personagem.
+        const chosenFormat = state?.answers?.__decoration_select;
+        const emoji         = state?.answers?.__emoji_select || '';
+        const nickname = chosenFormat
+          ? this.decoration.build(chosenFormat, { name: characterName, user: userId, character: characterName, emoji })
+          : characterName;
 
-      await this.decoration.applyNickname(guildId, userId, nickname);
-    }
-
-    if (!characterName) {
-      const character = await this.characters.findByUser(guildId, userId);
-      const freeName    = state?.answers?.__character_select;
-      characterName    = character?.name || (typeof freeName === 'string' ? freeName : '');
+        await this.decoration.applyNickname(guildId, userId, nickname);
+      } else {
+        // Sem decoração (ou sem assinatura ativa): o apelido do membro passa a ser
+        // diretamente o nome do personagem escolhido.
+        await this.decoration.applyNickname(guildId, userId, characterName);
+      }
     }
 
     // Mensagem final — recurso grátis, opcional. Só envia se algo de fato foi configurado.

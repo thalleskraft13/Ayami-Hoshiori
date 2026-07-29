@@ -63,7 +63,6 @@ module.exports = [
   { id: "character_step_title", render: (ctx) => `# 🎭 Selección de Personaje` },
   { id: "character_step_intro", render: (ctx) => `Paso gratuito que permite al miembro elegir un personaje disponible durante la recepción.` },
   { id: "character_step_status", render: (ctx) => `Estado: ${ctx.status}\nNombre del paso: ${ctx.stepName}` },
-  { id: "character_step_warning_empty", render: (ctx) => `⚠️ Activado, pero no hay ningún personaje disponible registrado — el paso se omite hasta que registres al menos uno en **Houses → Personajes**.` },
   { id: "character_available", render: (ctx) => `🟢 Disponible` },
   { id: "character_occupied", render: (ctx) => `🔴 Ocupado` },
   { id: "character_slots", render: (ctx) => `${ctx.occupied}/${ctx.slots} cupos` },
