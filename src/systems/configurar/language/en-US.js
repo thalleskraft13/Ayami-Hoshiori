@@ -13,6 +13,10 @@ module.exports = [
   { id: "opt_logic_desc", render: () => "Create flows and automations" },
   { id: "opt_activity_label", render: () => "Activity Analytics" },
   { id: "opt_activity_desc", render: () => "Server activity statistics and insights" },
+  { id: "opt_economy_label", render: () => "Economy" },
+  { id: "opt_economy_desc", render: () => "Bank, currency, shop, rewards, salaries and taxes" },
+  { id: "opt_houses_label", render: () => "Houses" },
+  { id: "opt_houses_desc", render: () => "Reception, characters, decorations, roll call and permissions" },
 
   { id: "header", render: (ctx) =>
     `# ⚙️ Configuration Hub ${ctx.emoji ?? ''}\n` +

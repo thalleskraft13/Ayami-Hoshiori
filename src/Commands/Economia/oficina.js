@@ -1,8 +1,14 @@
 'use strict';
 
-const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const Workshop      = require("../../function/Estrelas/Workshop.js");
-const { economyContext, respond, respondError, getFocusedOption } = require("../../function/Estrelas/interactionHelpers.js");
+const UserGlobalDb   = require("../../Mongodb/userglobal.js");
+const RECURSOS       = require("../../function/Estrelas/data/recursos.js");
+const CV2            = require("../../function/Messages/CV2.js");
+const {
+  economyContext, respondErrorCV2, replyCV2, updateCV2, getFocusedOption
+} = require("../../function/Estrelas/interactionHelpers.js");
+
+const ACCENT = 0xB0BEC5;
 
 module.exports = {
   info: {
@@ -22,8 +28,14 @@ module.exports = {
     options: [
       {
         type: 1,
+        name: 'receitas',
+        description: 'Abre o painel interativo de receitas da Oficina',
+        name_localizations: { 'en-US': 'recipes', 'en-GB': 'recipes', 'es-ES': 'recetas' }
+      },
+      {
+        type: 1,
         name: 'fabricar',
-        description: 'Fabrica um item a partir de uma receita',
+        description: 'Fabrica um item diretamente por uma receita conhecida',
         name_localizations: { 'en-US': 'craft', 'en-GB': 'craft', 'es-ES': 'fabricar' },
         options: [
           {
@@ -42,12 +54,6 @@ module.exports = {
             max_value: 100
           }
         ]
-      },
-      {
-        type: 1,
-        name: 'receitas',
-        description: 'Mostra as receitas disponíveis na Oficina',
-        name_localizations: { 'en-US': 'recipes', 'en-GB': 'recipes', 'es-ES': 'recetas' }
       }
     ]
   },
@@ -62,16 +68,14 @@ module.exports = {
 
     try {
       switch (sub) {
-        case 'fabricar':
-          return await handleFabricar(interaction, workshop, getOpt('receita'), getOpt('quantidade') ?? 1);
-        case 'receitas':
-          return await handleReceitas(interaction, workshop);
+        case 'receitas': return await handleReceitas(interaction, client, workshop, userId);
+        case 'fabricar':  return await handleFabricar(interaction, client, workshop, userId, getOpt('receita'), getOpt('quantidade') ?? 1);
         default:
-          return await respondError(interaction, "Subcomando desconhecido.");
+          return await respondErrorCV2(interaction, "Subcomando desconhecido.", client);
       }
     } catch (err) {
       console.error('[/oficina]', err);
-      return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
+      return await respondErrorCV2(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.", client);
     }
   },
 
@@ -86,39 +90,121 @@ module.exports = {
   }
 };
 
-function formatarCustos(custoRecursos = {}, custoEstrelas = 0) {
-  const partes = Object.entries(custoRecursos).map(([nome, qtd]) => `${qtd} ${nome}`);
-  if (custoEstrelas) partes.push(`${custoEstrelas} Estrelas`);
-  return partes.length ? partes.join(', ') : "Nenhum";
+async function getRecursosUsuario(userId) {
+  const user = await UserGlobalDb.findOne({ userId });
+  const mapa = user?.recursos instanceof Map ? Object.fromEntries(user.recursos) : (user?.recursos ?? {});
+  return mapa;
 }
 
-async function handleFabricar(interaction, workshop, receitaId, quantidade) {
-  const { receita, quantidadeProduzida } = await workshop.fabricar(receitaId, quantidade);
-
-  const embed = new MessageEmbed()
-    .setTitle("Item fabricado")
-    .setColor("Gold")
-    .setDescription(`Você fabricou **${quantidadeProduzida}x ${receita.nome}**.`)
-    .addField("Custo utilizado", formatarCustos(
-      Object.fromEntries(Object.entries(receita.custoRecursos ?? {}).map(([n, q]) => [n, q * (quantidade ?? 1)])),
-      (receita.custoEstrelas ?? 0) * (quantidade ?? 1)
-    ), false);
-
-  return await respond(interaction, embed);
+function formatarCusto(recurso, necessario, disponivel) {
+  const nome = RECURSOS[recurso]?.nome ?? recurso;
+  const emoji = RECURSOS[recurso]?.emoji ?? '📦';
+  const ok = disponivel >= necessario;
+  return `${ok ? '✅' : '❌'} ${emoji} ${nome}: \`${disponivel}/${necessario}\``;
 }
 
-async function handleReceitas(interaction, workshop) {
+function buildPainelReceitas(client, userId, workshop) {
   const receitas = workshop.listarReceitas();
 
-  const linhas = receitas.map(r =>
-    `**${r.nome}** — custa ${formatarCustos(r.custoRecursos, r.custoEstrelas)} → produz ${r.resultado.quantidade}x ${r.resultado.itemId}`
-  );
+  const receitaSelect = client.interactions.createSelect({
+    user: userId,
+    data: {
+      placeholder: '🛠️ Selecione uma receita',
+      options: receitas.map(r => ({
+        label: r.nome,
+        value: r.id,
+        description: `Produz ${r.resultado.quantidade}x`
+      }))
+    },
+    funcao: async (si) => {
+      const recursos = await getRecursosUsuario(userId);
+      return updateCV2(si, buildDetalheReceita(client, userId, workshop, workshop.obterReceita(si.data.values[0]), recursos));
+    }
+  });
 
-  const embed = new MessageEmbed()
-    .setTitle("Receitas da Oficina")
-    .setColor("Gold")
-    .setDescription(linhas.join('\n'))
-    .setFooter("Use /oficina fabricar para produzir um item.");
+  return CV2.container([
+    CV2.text('🛠️ **Receitas da Oficina**'),
+    CV2.separator(),
+    CV2.text(receitas.map(r => `**${r.nome}** — produz ${r.resultado.quantidade}x`).join('\n')),
+    CV2.separator(),
+    CV2.row(receitaSelect)
+  ], { accentColor: ACCENT });
+}
 
-  return await respond(interaction, embed);
+function buildDetalheReceita(client, userId, workshop, receita, recursos) {
+  const custos = Object.entries(receita.custoRecursos ?? {})
+    .map(([r, qtd]) => formatarCusto(r, qtd, recursos[r] ?? 0))
+    .join('\n') || 'Nenhum recurso necessário';
+
+  const podeFabricar = Object.entries(receita.custoRecursos ?? {})
+    .every(([r, qtd]) => (recursos[r] ?? 0) >= qtd);
+
+  const blocos = [
+    CV2.text(`🛠️ **${receita.nome}**`),
+    CV2.separator(),
+    CV2.text(`**Materiais necessários:**\n${custos}`),
+    CV2.text(`**Custo em Estrelas:** ${receita.custoEstrelas || 'Nenhum'}`),
+    CV2.text(`**Resultado:** ${receita.resultado.quantidade}x ${receita.nome}`),
+    CV2.separator()
+  ];
+
+  const botoes = [];
+
+  if (podeFabricar) {
+    botoes.push(client.interactions.createButton({
+      user: userId,
+      data: { label: 'Fabricar 1x', style: 3, emoji: { name: '🛠️' } },
+      funcao: async (bi) => {
+        try {
+          const { quantidadeProduzida } = await workshop.fabricar(receita.id, 1);
+          const novosRecursos = await getRecursosUsuario(userId);
+
+          const voltarBtn = client.interactions.createButton({
+            user: userId,
+            data: { label: 'Voltar às receitas', style: 2, emoji: { name: '🔙' } },
+            funcao: async (bi2) => updateCV2(bi2, buildPainelReceitas(client, userId, workshop))
+          });
+
+          return updateCV2(bi, CV2.container([
+            CV2.text(`✅ **Fabricado!**`),
+            CV2.text(`Você fabricou **${quantidadeProduzida}x ${receita.nome}**.`),
+            CV2.row(voltarBtn)
+          ], { accentColor: 0x4CAF50 }));
+        } catch (err) {
+          return updateCV2(bi, CV2.container([
+            CV2.text('⚠️ **Não deu certo**'),
+            CV2.text(err.message)
+          ], { accentColor: 0xE74C3C }));
+        }
+      }
+    }));
+  }
+
+  botoes.push(client.interactions.createButton({
+    user: userId,
+    data: { label: 'Voltar', style: 2, emoji: { name: '🔙' } },
+    funcao: async (bi) => updateCV2(bi, buildPainelReceitas(client, userId, workshop))
+  }));
+
+  blocos.push(CV2.row(...botoes));
+
+  return CV2.container(blocos, { accentColor: podeFabricar ? ACCENT : 0xE0A45D });
+}
+
+async function handleReceitas(interaction, client, workshop, userId) {
+  return replyCV2(interaction, buildPainelReceitas(client, userId, workshop));
+}
+
+async function handleFabricar(interaction, client, workshop, userId, receitaId, quantidade) {
+  const { receita, quantidadeProduzida } = await workshop.fabricar(receitaId, quantidade);
+
+  const custoRecursosTotal = Object.entries(receita.custoRecursos ?? {})
+    .map(([r, qtd]) => `${qtd * quantidade} ${RECURSOS[r]?.nome ?? r}`)
+    .join(', ') || 'Nenhum';
+
+  return replyCV2(interaction, CV2.container([
+    CV2.text('🛠️ **Item fabricado**'),
+    CV2.text(`Você fabricou **${quantidadeProduzida}x ${receita.nome}**.`),
+    CV2.text(`**Custo utilizado:** ${custoRecursosTotal}${receita.custoEstrelas ? `, ${receita.custoEstrelas * quantidade} Estrelas` : ''}`)
+  ], { accentColor: 0x4CAF50 }));
 }

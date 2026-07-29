@@ -5,7 +5,7 @@ const { Schema } = mongoose;
 
 const blacklistSchema = new Schema({
   userId:    { type: String, required: true, unique: true, index: true },
-  staffId:   { type: String, required: true }, // quem aplicou o ban
+  staffId:   { type: String, required: true },
   motivo:    { type: String, default: "Não especificado" },
   appliedAt: { type: Number, default: () => Date.now() },
 }, {

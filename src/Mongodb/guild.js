@@ -2,16 +2,14 @@
 
 const { Schema, model } = require("mongoose");
 
-
 const escalationLevelSchema = new Schema({
   warns:  { type: Number, required: true },
   action: { type: String, required: true }
-  // actions: "warn_message" | "timeout_10m" | "timeout_1h" | "timeout_24h" | "kick" | "ban"
 }, { _id: false });
 
 const simpleModuleSchema = new Schema({
   enabled:         { type: Boolean, default: false },
-  actions:         { type: [String], default: ["delete"] },  // multiple actions
+  actions:         { type: [String], default: ["delete"] },
   escalation:      { type: [escalationLevelSchema], default: [] },
   ignoredChannels: { type: [String], default: [] },
   ignoredRoles:    { type: [String], default: [] }
@@ -159,10 +157,10 @@ const raidFactorHitSchema = new Schema({
 
 const raidHistorySchema = new Schema({
   timestamp: { type: Number, required: true },
-  score:     { type: Number, required: true },   // risk score final (0-100)
+  score:     { type: Number, required: true },
   factors:   { type: [raidFactorHitSchema], default: [] },
   action:    { type: String, required: true },
-  restored:  { type: Boolean, default: false },  // true quando o auto-restore já rodou para este evento
+  restored:  { type: Boolean, default: false },
   restoredAt:{ type: Number, default: null }
 }, { _id: false });
 
@@ -173,7 +171,7 @@ const raidFactorJoinRateSchema = new Schema({
 
 const raidFactorNewAccountsSchema = new Schema({
   enabled:      { type: Boolean, default: true },
-  maxAgeHours:  { type: Number,  default: 24 },  // conta é "recém-criada" se mais nova que isso
+  maxAgeHours:  { type: Number,  default: 24 },
   ratioPercent: { type: Number,  default: 50 }   
 }, { _id: false });
 
@@ -184,7 +182,7 @@ const raidFactorDuplicateMessagesSchema = new Schema({
 
 const raidFactorCoordinatedSpamSchema = new Schema({
   enabled:   { type: Boolean, default: true },
-  minUsers:  { type: Number,  default: 6 },   // usuários distintos mandando mensagens no mesmo burst
+  minUsers:  { type: Number,  default: 6 },
   windowSec: { type: Number,  default: 10 }
 }, { _id: false });
 
@@ -209,12 +207,12 @@ const raidFactorsSchema = new Schema({
 
 const raidSchema = new Schema({
   enabled:          { type: Boolean, default: false },
-  riskThreshold:    { type: Number,  default: 60 },     // score 0-100 para acionar a resposta
-  action:           { type: String,  default: "nothing" }, // nothing | timeout | kick | ban | lockdown | quarantine
+  riskThreshold:    { type: Number,  default: 60 },
+  action:           { type: String,  default: "nothing" },
   quarantineRoleId: { type: String,  default: null },
-  autoLockdown:     { type: Boolean, default: false },  // ativa Modo Emergência junto com a ação
-  autoRestore:      { type: Boolean, default: true },   // desativa a emergência sozinho quando o ataque acabar
-  restoreAfterMinutes: { type: Number, default: 10 },    // minutos de calmaria exigidos antes de restaurar
+  autoLockdown:     { type: Boolean, default: false },
+  autoRestore:      { type: Boolean, default: true },
+  restoreAfterMinutes: { type: Number, default: 10 },
   earlyAlerts:      { type: Boolean, default: false },
   factors:          { type: raidFactorsSchema, default: () => ({}) },
   history:          { type: [raidHistorySchema], default: [] },
@@ -224,7 +222,6 @@ const raidSchema = new Schema({
     flaggedUserIds:  { type: [String], default: [] } 
   }
 }, { _id: false });
-
 
 const backupRoleSchema = new Schema({
   id:          String,
@@ -283,7 +280,7 @@ const activityAnalyticsSchema = new Schema({
 }, { _id: false });
 
 const verificationViolationSchema = new Schema({
-  key:   { type: String, required: true },  // minAccountAge | requireCustomAvatar
+  key:   { type: String, required: true },
   label: { type: String, required: true }   
 }, { _id: false });
 
@@ -310,9 +307,9 @@ const verificationSchema = new Schema({
     minAccountAge:       { type: verificationRuleMinAgeSchema, default: () => ({}) },
     requireCustomAvatar: { type: verificationRuleAvatarSchema, default: () => ({}) }
   },
-  mode:             { type: String,  default: "log_only" }, // log_only | auto_punish
-  logSuspicious:    { type: Boolean, default: true },        // registra mesmo as violações no modo log_only
-  punishment:       { type: String,  default: "none" },      // none | log | timeout | kick | ban | quarantine
+  mode:             { type: String,  default: "log_only" },
+  logSuspicious:    { type: Boolean, default: true },
+  punishment:       { type: String,  default: "none" },
   quarantineRoleId: { type: String,  default: null },
   history:          { type: [verificationHistorySchema], default: [] }
 }, { _id: false });
@@ -321,21 +318,21 @@ const trapChannelHistorySchema = new Schema({
   timestamp:        { type: Number, required: true },
   userId:           { type: String, required: true },
   username:         { type: String, default: "" },
-  action:           { type: String, required: true }, // log | timeout | kick | ban
+  action:           { type: String, required: true },
   deletedElsewhere: { type: Number, default: 0 }       
 }, { _id: false });
 
 const trapChannelSchema = new Schema({
   enabled:                     { type: Boolean, default: false },
   channelId:                   { type: String,  default: null },
-  punishment:                  { type: String,  default: "log" }, // log | timeout | kick | ban
-  logChannelId:                { type: String,  default: null },  // opcional; sem isso cai no logs.channels.main
+  punishment:                  { type: String,  default: "log" },
+  logChannelId:                { type: String,  default: null },
   deleteRecentMessages:        { type: Boolean, default: false },
   recentMessagesWindowMinutes: { type: Number,  default: 5 },
   ignoredRoles:                { type: [String], default: [] },
   ignoredUsers:                { type: [String], default: [] },
   ignoredBots:                 { type: [String], default: [] },
-  warningMessageSent:          { type: Boolean, default: false }, // já postamos o aviso fixo neste canal
+  warningMessageSent:          { type: Boolean, default: false },
   history:                     { type: [trapChannelHistorySchema], default: [] }
 }, { _id: false });
 
@@ -361,7 +358,6 @@ const securitySchema = new Schema({
   monitoring: { type: monitoringSchema, default: () => ({}) },
   backups:    { type: [backupEntrySchema], default: [] }
 }, { _id: false });
-
 
 const birthdayConfigSchema = new Schema({
   ativado:        { type: Boolean, default: false },
@@ -434,7 +430,7 @@ const transcriptConfigSchema = new Schema({
 }, { _id: false });
 
 const selectMenuOptionSchema = new Schema({
-  optionId:       { type: String, required: true }, // id interno único da opção
+  optionId:       { type: String, required: true },
   label:          { type: String, required: true },
   description:    { type: String, default: ""   },
   emoji:          { type: String, default: null },
@@ -442,7 +438,7 @@ const selectMenuOptionSchema = new Schema({
   cargosStaff:    { type: [String], default: [] },
   ticketChatName: { type: String,  default: null },
 
-  embedBoasVindas: { type: Object, default: null }, // embed exibida dentro do ticket criado por esta opção
+  embedBoasVindas: { type: Object, default: null },
 
   modalConfig:        { type: modalConfigSchema,        default: () => ({}) },
   seqQuestionsConfig:  { type: seqQuestionsConfigSchema, default: () => ({}) }
@@ -455,22 +451,22 @@ const selectMenuConfigSchema = new Schema({
 }, { _id: false });
 
 const ticketMensagensConfigSchema = new Schema({
-  ticketCriadoTitulo:    { type: String, default: null }, // padrão: "🎫 Ticket Criado"
-  ticketCriadoDescricao: { type: String, default: null }, // padrão: mensagem atual
+  ticketCriadoTitulo:    { type: String, default: null },
+  ticketCriadoDescricao: { type: String, default: null },
 
-  fecharBotaoLabel:      { type: String, default: null }, // padrão: "Fechar Ticket"
-  fechandoMensagem:      { type: String, default: null }, // padrão: "⛔ Ticket será fechado em 10 segundos..."
+  fecharBotaoLabel:      { type: String, default: null },
+  fechandoMensagem:      { type: String, default: null },
 
-  modalRespostasTitulo:  { type: String, default: null }, // padrão: "📋 Respostas do Formulário"
+  modalRespostasTitulo:  { type: String, default: null },
 
-  seqInicioTitulo:       { type: String, default: null }, // padrão: "📋 Formulário de Atendimento"
-  seqInicioDescricao:    { type: String, default: null }, // padrão: mensagem atual (usa {user} e {timeout})
-  seqCanceladoMensagem:  { type: String, default: null }, // padrão: "⚠️ Formulário encerrado."
-  seqResumoTitulo:       { type: String, default: null }, // padrão: "✅ Respostas Recebidas"
+  seqInicioTitulo:       { type: String, default: null },
+  seqInicioDescricao:    { type: String, default: null },
+  seqCanceladoMensagem:  { type: String, default: null },
+  seqResumoTitulo:       { type: String, default: null },
 
-  transcriptTitulo:      { type: String, default: null }, // padrão: "📄 Transcript"
-  transcriptDmTitulo:    { type: String, default: null }, // padrão: "📄 Seu Transcript"
-  transcriptDmDescricao: { type: String, default: null }, // padrão: mensagem atual
+  transcriptTitulo:      { type: String, default: null },
+  transcriptDmTitulo:    { type: String, default: null },
+  transcriptDmDescricao: { type: String, default: null },
 }, { _id: false });
 
 const ticketSchema = new Schema({
@@ -494,7 +490,6 @@ const ticketSchema = new Schema({
   painelComponentsV2:  { type: [Schema.Types.Mixed], default: [] }
 }, { _id: false });
 
-
 const pendingTempRoleSchema = new Schema({
   guildId:  { type: String, required: true },
   userId:   { type: String, required: true },
@@ -513,13 +508,13 @@ const activeLinkedRoleSchema = new Schema({
   ticketId: { type: String, required: true }
 });
 
-
 const guildSchema = new Schema({
   guildId:     { type: String, required: true, unique: true },
   premiumUser: { type: String, default: "0" },
   premiumTime: { type: Number, default: 0   },
-  premiumPlan: { type: String, default: null }, // FREE | NOVA_ESTRELA | LUA_CRESCENTE | CONSTELLATION — veja function/Utils/PremiumPlans.js
+  premiumPlan: { type: String, default: null },
   ticket:      { type: [ticketSchema], default: [] },
+  prefixo:     { type: String, default: "!" },
 
   uidSend: {
     ativado: { type: Boolean, default: false },
@@ -562,7 +557,6 @@ const guildSchema = new Schema({
 
   activityAnalytics: { type: activityAnalyticsSchema, default: () => ({}) }
 });
-
 
 const GuildModel            = model("Guild",     guildSchema);
 const PendingTempRoleModel  = model("PendingTempRole",  pendingTempRoleSchema);

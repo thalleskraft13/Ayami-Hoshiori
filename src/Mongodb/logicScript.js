@@ -1,6 +1,5 @@
 'use strict';
 
-
 const { Schema, model, models } = require('mongoose');
 
 const logicScriptSchema = new Schema({
@@ -32,8 +31,8 @@ const logicRunLogSchema = new Schema({
   event:      { type: String, default: null },
   status:     { type: String, enum: ['ok', 'error', 'timeout', 'warning'], default: 'ok' },
   error:      { type: String, default: null },
-  errorLine:  { type: Number, default: null }, // linha do erro no .logic, quando disponível
-  logs:       { type: [String], default: [] },  // saidas de print() capturadas
+  errorLine:  { type: Number, default: null },
+  logs:       { type: [String], default: [] },
   steps:      { type: Number, default: 0 },
   durationMs: { type: Number, default: 0 },
   createdAt:  { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 },

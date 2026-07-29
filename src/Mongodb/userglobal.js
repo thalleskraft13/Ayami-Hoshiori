@@ -51,10 +51,6 @@ const userSchema = new Schema({
     default: []
   },
 
-  // ================================
-  // Economia da Ayami — Estrelas
-  // ================================
-
   estrelas: {
 
     atm: {
@@ -72,7 +68,6 @@ const userSchema = new Schema({
       default: 0
     },
 
-    // Impede que /estrelas migrar seja executado mais de uma vez por conta.
     migrado: {
       type: Boolean,
       default: false
@@ -80,8 +75,6 @@ const userSchema = new Schema({
 
   },
 
-  // Recursos são utilizados apenas para crafting/evolução (Oficina, Jardim, Exploração).
-  // Estrutura livre para permitir novos recursos sem migração de schema.
   recursos: {
     type: Map,
     of: Number,
@@ -98,7 +91,6 @@ const userSchema = new Schema({
     })
   },
 
-  // Reputação geral do usuário na comunidade da Ayami (Mercado, Biblioteca, Guildas...)
   reputacao: {
     type: Number,
     default: 0
@@ -149,7 +141,6 @@ const userSchema = new Schema({
 
   },
 
-  // Id do companheiro atualmente ativo (auxilia exploração/expedições/coleta)
   companheiroAtivo: {
     type: String,
     default: null
@@ -188,10 +179,6 @@ const userSchema = new Schema({
     }
 
   },
-
-  // ================================
-  // Sistemas independentes da economia
-  // ================================
 
   rankaventureiro: {
 

@@ -52,7 +52,7 @@ class NextMessageCollector {
         this._runPipeline(message);
     }
 
-    wait({ channelId, userId, time = COLLECTOR_DEFAULT_MS }) {
+    wait({ channelId, userId, time = COLLECTOR_DEFAULT_MS, keepMessage = false }) {
         return new Promise((resolve, reject) => {
             const key     = this._collectorKey(channelId, userId);
             const expires = Date.now() + time;
@@ -65,7 +65,7 @@ class NextMessageCollector {
                 reject(new Error('Tempo esgotado'));
             }, time);
 
-            this._waiting.set(key, { resolve, reject, expires, timeout });
+            this._waiting.set(key, { resolve, reject, expires, timeout, keepMessage });
         });
     }
 
@@ -574,7 +574,9 @@ Eu estarei observando.`
         clearTimeout(data.timeout);
         this._waiting.delete(key);
 
-        this._deleteMessage(message.channel_id, message.id);
+        if (!data.keepMessage) {
+            this._deleteMessage(message.channel_id, message.id);
+        }
 
         data.resolve(message);
     }

@@ -135,6 +135,18 @@ module.exports = {
             description: client.t("configurar.opt_activity_desc", ctx),
             value: "activity_analytics",
             emoji: { name: "📊" }
+          },
+          {
+            label: client.t("configurar.opt_economy_label", ctx),
+            description: client.t("configurar.opt_economy_desc", ctx),
+            value: "economy",
+            emoji: { name: "🏦" }
+          },
+          {
+            label: client.t("configurar.opt_houses_label", ctx),
+            description: client.t("configurar.opt_houses_desc", ctx),
+            value: "houses",
+            emoji: { name: "🏠" }
           }
         ]
       },
@@ -174,6 +186,14 @@ module.exports = {
           case "activity_analytics":
             await client.activityAnalytics.deferUpdate(i);
             return client.activityAnalytics.startSetup(i);
+
+          case "economy":
+            await client.economyPanel.deferUpdate(i);
+            return client.economyPanel.open(i);
+
+          case "houses":
+            await client.houseSystem.deferUpdate(i);
+            return client.houseSystem.open(i);
         }
       }
     });

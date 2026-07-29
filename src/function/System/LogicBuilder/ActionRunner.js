@@ -48,6 +48,7 @@ class ActionRunner {
       case 'embed':     return this._embed(type, params, ctx);
       case 'user':      return this._user(type, params, ctx);
       case 'economy':   return this._economy(type, params, ctx);
+      case 'banco':     return this._banco(type, params, ctx);
       case 'variable':  return this._variable(type, params, ctx);
       case 'inventory': return this._inventory(type, params, ctx);
       case 'channel':   return this._channel(type, params, ctx);
@@ -445,6 +446,45 @@ class ActionRunner {
       case 'add_coins':    await eco.addBalance(guildId, userId, amount); break;
       case 'remove_coins': await eco.removeBalance(guildId, userId, amount); break;
       case 'set_balance':  await eco.setBalance(guildId, userId, amount); break;
+    }
+  }
+
+
+  async _banco(type, p, ctx) {
+    const guildId = ctx.discord.guildId;
+    if (!guildId) return;
+
+    const BankService = require('../../Banco/BankService.js');
+    const bank = new BankService(guildId, { client: this.client });
+    const userId = p.userId || ctx.discord.userId;
+
+    switch (type) {
+      case 'depositar': {
+        const quantidade = Number(p.amount) || 0;
+        if (quantidade <= 0 || !userId) return;
+        await bank.depositar(userId, quantidade);
+        break;
+      }
+
+      case 'transferir_local': {
+        const paraUserId = p.targetUserId;
+        const quantidade  = Number(p.amount) || 0;
+        if (!userId || !paraUserId || quantidade <= 0) return;
+        await bank.transferirLocal(userId, paraUserId, quantidade);
+        break;
+      }
+
+      case 'saldo_banco': {
+        const saldo = await bank.saldoBanco().catch(() => 0);
+        ctx.setVar(p.saveAs || 'bancoSaldo', saldo);
+        break;
+      }
+
+      case 'saldo_local': {
+        const saldo = await bank.saldoLocal(userId).catch(() => 0);
+        ctx.setVar(p.saveAs || 'bancoSaldoLocal', saldo);
+        break;
+      }
     }
   }
 

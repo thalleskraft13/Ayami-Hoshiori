@@ -7,8 +7,8 @@ const ClusterManager   = require('./src/Core/ClusterManager.js');
 
 if (isMainThread) {
     const manager = new ClusterManager({
-        totalShards:   6,
-        shardsPerCluster: 3,
+        totalShards:   1,
+        shardsPerCluster: 1,
         clientOptions: { intents: 53608191 },
     });
 

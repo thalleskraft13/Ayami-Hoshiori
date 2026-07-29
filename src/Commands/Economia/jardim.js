@@ -1,10 +1,14 @@
 'use strict';
 
-const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
 const Garden        = require("../../function/Estrelas/Garden.js");
-const SEMENTES      = require("../../function/Estrelas/data/sementes.js");
+const SEMENTES       = require("../../function/Estrelas/data/sementes.js");
 const { construcoes: CONSTRUCOES, decoracoes: DECORACOES } = require("../../function/Estrelas/data/construcoes.js");
-const { economyContext, respond, respondError, formatarConquistas } = require("../../function/Estrelas/interactionHelpers.js");
+const CV2            = require("../../function/Messages/CV2.js");
+const {
+  economyContext, respondErrorCV2, replyCV2, updateCV2, formatarConquistas
+} = require("../../function/Estrelas/interactionHelpers.js");
+
+const ACCENT = 0x66BB6A;
 
 module.exports = {
   info: {
@@ -25,187 +29,260 @@ module.exports = {
       {
         type: 1,
         name: 'ver',
-        description: 'Mostra o estado do seu jardim',
+        description: 'Abre o painel interativo do seu jardim',
         name_localizations: { 'en-US': 'view', 'en-GB': 'view', 'es-ES': 'ver' }
-      },
-      {
-        type: 1,
-        name: 'plantar',
-        description: 'Planta uma semente em um canteiro',
-        name_localizations: { 'en-US': 'plant', 'en-GB': 'plant', 'es-ES': 'plantar' },
-        options: [
-          {
-            type: 4,
-            name: 'canteiro',
-            description: 'Número do canteiro (veja com /jardim ver)',
-            required: true,
-            min_value: 0
-          },
-          {
-            type: 3,
-            name: 'semente',
-            description: 'Semente a plantar',
-            required: true,
-            choices: [
-              { name: 'Flor Estelar', value: 'flor_estelar' },
-              { name: 'Cogumelo Lunar', value: 'cogumelo_lunar' },
-              { name: 'Arvorezinha', value: 'arvore_pequena' },
-              { name: 'Broto de Cristal', value: 'cristal_bruto' },
-            ]
-          }
-        ]
-      },
-      {
-        type: 1,
-        name: 'colher',
-        description: 'Colhe um canteiro pronto',
-        name_localizations: { 'en-US': 'harvest', 'en-GB': 'harvest', 'es-ES': 'cosechar' },
-        options: [
-          {
-            type: 4,
-            name: 'canteiro',
-            description: 'Número do canteiro a colher',
-            required: true,
-            min_value: 0
-          }
-        ]
-      },
-      {
-        type: 1,
-        name: 'construir',
-        description: 'Constrói uma melhoria no seu jardim',
-        name_localizations: { 'en-US': 'build', 'en-GB': 'build', 'es-ES': 'construir' },
-        options: [
-          {
-            type: 3,
-            name: 'construcao',
-            description: 'O que construir',
-            required: true,
-            choices: [
-              { name: 'Canteiro Extra', value: 'canteiro_extra' },
-              { name: 'Cerca Decorativa', value: 'cerca_decorativa' },
-            ]
-          }
-        ]
-      },
-      {
-        type: 1,
-        name: 'decorar',
-        description: 'Adiciona uma decoração ao seu jardim',
-        name_localizations: { 'en-US': 'decorate', 'en-GB': 'decorate', 'es-ES': 'decorar' },
-        options: [
-          {
-            type: 3,
-            name: 'decoracao',
-            description: 'O que adicionar',
-            required: true,
-            choices: [
-              { name: 'Lanterna Estelar', value: 'lanterna_estelar' },
-              { name: 'Banco de Pedra', value: 'banco_de_pedra' },
-            ]
-          }
-        ]
       }
     ]
   },
 
   async execute(interaction, client) {
     const sub    = interaction.data.options?.[0]?.name;
-    const opts   = interaction.data.options?.[0]?.options ?? [];
     const userId = interaction.member?.user?.id ?? interaction.user?.id;
-    const getOpt = (name) => opts.find(o => o.name === name)?.value;
 
     const garden = new Garden(userId, economyContext(interaction, client));
 
     try {
       switch (sub) {
-        case 'ver':       return await handleVer(interaction, garden);
-        case 'plantar':   return await handlePlantar(interaction, garden, getOpt('canteiro'), getOpt('semente'));
-        case 'colher':    return await handleColher(interaction, garden, getOpt('canteiro'));
-        case 'construir': return await handleConstruir(interaction, garden, getOpt('construcao'));
-        case 'decorar':   return await handleDecorar(interaction, garden, getOpt('decoracao'));
+        case 'ver': return await handleVer(interaction, client, garden, userId);
         default:
-          return await respondError(interaction, "Subcomando desconhecido.");
+          return await respondErrorCV2(interaction, "Subcomando desconhecido.", client);
       }
     } catch (err) {
       console.error('[/jardim]', err);
-      return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
+      return await respondErrorCV2(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.", client);
     }
   }
 };
 
-async function handleVer(interaction, garden) {
+async function handleVer(interaction, client, garden, userId) {
   const g = await garden.getOrCreate();
+  return replyCV2(interaction, buildPainelJardim(client, userId, garden, g));
+}
 
-  const linhasCanteiros = g.plots.map(p => {
-    if (!p.sementeId) return `\`#${p.index}\` — vazio`;
-    const semente = SEMENTES[p.sementeId];
-    const pronto = Date.now() >= p.prontoEm;
-    return `\`#${p.index}\` — ${semente.emoji} ${semente.nome} ${pronto ? "(pronto)" : `— pronto <t:${Math.floor(p.prontoEm / 1000)}:R>`}`;
+function plotLinha(plot) {
+  if (!plot.sementeId) return `\`#${plot.index}\` — vazio`;
+  const semente = SEMENTES[plot.sementeId];
+  const pronto = Date.now() >= plot.prontoEm;
+  return `\`#${plot.index}\` — ${semente.emoji} ${semente.nome} ${pronto ? '(pronto para colher)' : `— pronto <t:${Math.floor(plot.prontoEm / 1000)}:R>`}`;
+}
+
+function buildPainelJardim(client, userId, garden, g) {
+  const linhasCanteiros = g.plots.map(plotLinha).join('\n') || 'Nenhum canteiro ainda.';
+  const nomesConstrucoes = g.construcoes.map(id => CONSTRUCOES[id]?.nome ?? id).join(', ') || 'Nenhuma';
+  const nomesDecoracoes  = g.decoracoes.map(id => DECORACOES[id]?.nome ?? id).join(', ') || 'Nenhuma';
+
+  const plotSelect = client.interactions.createSelect({
+    user: userId,
+    data: {
+      placeholder: '🌱 Selecione um canteiro',
+      options: g.plots.map(p => ({
+        label: `Canteiro #${p.index}`,
+        value: String(p.index),
+        description: p.sementeId ? (SEMENTES[p.sementeId]?.nome ?? p.sementeId) : 'Vazio'
+      }))
+    },
+    funcao: async (si) => {
+      const gardenFresca = await garden.getOrCreate();
+      const plot = gardenFresca.plots.find(p => p.index === Number(si.data.values[0]));
+      return updateCV2(si, buildPainelCanteiro(client, userId, garden, plot));
+    }
   });
 
-  const nomesConstrucoes = g.construcoes.map(id => CONSTRUCOES[id]?.nome ?? id);
-  const nomesDecoracoes  = g.decoracoes.map(id => DECORACOES[id]?.nome ?? id);
+  const construirOptions = Object.values(CONSTRUCOES).filter(c => !g.construcoes.includes(c.id));
+  const decorarOptions   = Object.values(DECORACOES).filter(d => !g.decoracoes.includes(d.id));
 
-  const embed = new MessageEmbed()
-    .setTitle("Seu Jardim")
-    .setColor("Green")
-    .addField("Canteiros", linhasCanteiros.join('\n') || "Nenhum", false)
-    .addField("Construções", nomesConstrucoes.length ? nomesConstrucoes.join(', ') : "Nenhuma", true)
-    .addField("Decorações", nomesDecoracoes.length ? nomesDecoracoes.join(', ') : "Nenhuma", true)
-    .setFooter("Use /jardim plantar, colher, construir ou decorar.");
+  const blocos = [
+    CV2.text('🌷 **Seu Jardim**'),
+    CV2.separator(),
+    CV2.text(`**Canteiros:**\n${linhasCanteiros}`),
+    CV2.text(`**Construções:** ${nomesConstrucoes}`),
+    CV2.text(`**Decorações:** ${nomesDecoracoes}`),
+    CV2.separator(),
+    CV2.row(plotSelect)
+  ];
 
-  return await respond(interaction, embed);
-}
-
-async function handlePlantar(interaction, garden, canteiro, sementeId) {
-  const { semente } = await garden.plantar(canteiro, sementeId);
-
-  const embed = new MessageEmbed()
-    .setTitle(`${semente.emoji} Plantado`)
-    .setColor("Green")
-    .setDescription(`**${semente.nome}** plantada no canteiro \`#${canteiro}\`. Fica pronta em **${semente.tempoMinutos} minutos**.`);
-
-  return await respond(interaction, embed);
-}
-
-async function handleColher(interaction, garden, canteiro) {
-  const { semente, conquistas } = await garden.colher(canteiro);
-
-  const listaColheita = Object.entries(semente.colheita)
-    .map(([nome, qtd]) => `+${qtd} ${nome}`)
-    .join('\n');
-
-  const embed = new MessageEmbed()
-    .setTitle(`${semente.emoji} Colhido`)
-    .setColor("Green")
-    .addField("Você recebeu", listaColheita, false);
-
-  if (conquistas?.length) {
-    embed.addField("Conquistas desbloqueadas", formatarConquistas(conquistas).join('\n'), false);
+  if (construirOptions.length) {
+    const construirSelect = client.interactions.createSelect({
+      user: userId,
+      data: {
+        placeholder: '🏗️ Construir uma melhoria',
+        options: construirOptions.map(c => ({
+          label: c.nome,
+          value: c.id,
+          emoji: { name: c.emoji },
+          description: `${c.custoEstrelas ? c.custoEstrelas + ' Estrelas' : 'Grátis'}`
+        }))
+      },
+      funcao: async (si) => {
+        try {
+          const { construcao } = await garden.construir(si.data.values[0]);
+          const novaGarden = await garden.getOrCreate();
+          return updateCV2(si, buildConfirmacao(client, userId, garden, `${construcao.emoji} **${construcao.nome}** construído no seu jardim!`, novaGarden));
+        } catch (err) {
+          return updateCV2(si, CV2.container([
+            CV2.text('⚠️ **Não deu certo**'),
+            CV2.text(err.message)
+          ], { accentColor: 0xE74C3C }));
+        }
+      }
+    });
+    blocos.push(CV2.row(construirSelect));
   }
 
-  return await respond(interaction, embed);
+  if (decorarOptions.length) {
+    const decorarSelect = client.interactions.createSelect({
+      user: userId,
+      data: {
+        placeholder: '🎀 Adicionar decoração',
+        options: decorarOptions.map(d => ({
+          label: d.nome,
+          value: d.id,
+          emoji: { name: d.emoji },
+          description: `${d.custoEstrelas ? d.custoEstrelas + ' Estrelas' : 'Grátis'}`
+        }))
+      },
+      funcao: async (si) => {
+        try {
+          const { decoracao } = await garden.decorar(si.data.values[0]);
+          const novaGarden = await garden.getOrCreate();
+          return updateCV2(si, buildConfirmacao(client, userId, garden, `${decoracao.emoji} **${decoracao.nome}** adicionado ao seu jardim! (+5 reputação)`, novaGarden));
+        } catch (err) {
+          return updateCV2(si, CV2.container([
+            CV2.text('⚠️ **Não deu certo**'),
+            CV2.text(err.message)
+          ], { accentColor: 0xE74C3C }));
+        }
+      }
+    });
+    blocos.push(CV2.row(decorarSelect));
+  }
+
+  const fecharBtn = client.interactions.createButton({
+    user: userId,
+    data: { label: 'Fechar', style: 4, emoji: { name: '✖️' } },
+    funcao: async (bi) => updateCV2(bi, CV2.container([CV2.text('🌷 Jardim fechado.')], { accentColor: ACCENT }))
+  });
+
+  blocos.push(CV2.row(fecharBtn));
+
+  return CV2.container(blocos, { accentColor: ACCENT });
 }
 
-async function handleConstruir(interaction, garden, construcaoId) {
-  const { construcao } = await garden.construir(construcaoId);
+function buildConfirmacao(client, userId, garden, mensagem, g) {
+  const voltarBtn = client.interactions.createButton({
+    user: userId,
+    data: { label: 'Voltar ao jardim', style: 2, emoji: { name: '🔙' } },
+    funcao: async (bi) => updateCV2(bi, buildPainelJardim(client, userId, garden, g))
+  });
 
-  const embed = new MessageEmbed()
-    .setTitle(`${construcao.emoji} Construído`)
-    .setColor("Green")
-    .setDescription(`**${construcao.nome}** adicionado ao seu jardim.`);
-
-  return await respond(interaction, embed);
+  return CV2.container([
+    CV2.text(mensagem),
+    CV2.row(voltarBtn)
+  ], { accentColor: ACCENT });
 }
 
-async function handleDecorar(interaction, garden, decoracaoId) {
-  const { decoracao } = await garden.decorar(decoracaoId);
+function buildPainelCanteiro(client, userId, garden, plot) {
+  if (!plot.sementeId) {
+    const sementeSelect = client.interactions.createSelect({
+      user: userId,
+      data: {
+        placeholder: '🌱 Selecione uma semente para plantar',
+        options: Object.values(SEMENTES).map(s => ({
+          label: s.nome,
+          value: s.id,
+          emoji: { name: s.emoji },
+          description: `Pronta em ${s.tempoMinutos} min`
+        }))
+      },
+      funcao: async (si) => {
+        try {
+          const { semente } = await garden.plantar(plot.index, si.data.values[0]);
+          const g = await garden.getOrCreate();
+          return updateCV2(si, buildConfirmacao(client, userId, garden, `${semente.emoji} **${semente.nome}** plantada no canteiro \`#${plot.index}\`. Fica pronta em **${semente.tempoMinutos} minutos**.`, g));
+        } catch (err) {
+          return updateCV2(si, CV2.container([
+            CV2.text('⚠️ **Não deu certo**'),
+            CV2.text(err.message)
+          ], { accentColor: 0xE74C3C }));
+        }
+      }
+    });
 
-  const embed = new MessageEmbed()
-    .setTitle(`${decoracao.emoji} Decorado`)
-    .setColor("Green")
-    .setDescription(`**${decoracao.nome}** adicionado ao seu jardim. (+5 reputação)`);
+    const voltarBtn = client.interactions.createButton({
+      user: userId,
+      data: { label: 'Voltar', style: 2, emoji: { name: '🔙' } },
+      funcao: async (bi) => {
+        const g = await garden.getOrCreate();
+        return updateCV2(bi, buildPainelJardim(client, userId, garden, g));
+      }
+    });
 
-  return await respond(interaction, embed);
+    return CV2.container([
+      CV2.text(`🌱 **Canteiro #${plot.index}** — vazio`),
+      CV2.row(sementeSelect),
+      CV2.row(voltarBtn)
+    ], { accentColor: ACCENT });
+  }
+
+  const semente = SEMENTES[plot.sementeId];
+  const pronto = Date.now() >= plot.prontoEm;
+
+  const botoes = [];
+
+  if (pronto) {
+    botoes.push(client.interactions.createButton({
+      user: userId,
+      data: { label: 'Colher', style: 3, emoji: { name: '🌾' } },
+      funcao: async (bi) => {
+        const { semente: sementeColhida, conquistas } = await garden.colher(plot.index);
+        const listaColheita = Object.entries(sementeColhida.colheita)
+          .map(([nome, qtd]) => `+${qtd} ${nome}`)
+          .join('\n');
+
+        const blocos = [
+          CV2.text(`${sementeColhida.emoji} **Colhido!**`),
+          CV2.text(`**Você recebeu:**\n${listaColheita}`)
+        ];
+
+        if (conquistas?.length) {
+          blocos.push(CV2.text(`**🏅 Conquistas desbloqueadas:**\n${formatarConquistas(conquistas).join('\n')}`));
+        }
+
+        const g = await garden.getOrCreate();
+        const voltarBtn = client.interactions.createButton({
+          user: userId,
+          data: { label: 'Voltar ao jardim', style: 2, emoji: { name: '🔙' } },
+          funcao: async (bi2) => updateCV2(bi2, buildPainelJardim(client, userId, garden, g))
+        });
+        blocos.push(CV2.row(voltarBtn));
+
+        return updateCV2(bi, CV2.container(blocos, { accentColor: ACCENT }));
+      }
+    }));
+  } else {
+    botoes.push(client.interactions.createButton({
+      user: userId,
+      data: { label: 'Atualizar', style: 2, emoji: { name: '🔄' } },
+      funcao: async (bi) => {
+        const g = await garden.getOrCreate();
+        const plotFresco = g.plots.find(p => p.index === plot.index);
+        return updateCV2(bi, buildPainelCanteiro(client, userId, garden, plotFresco));
+      }
+    }));
+  }
+
+  botoes.push(client.interactions.createButton({
+    user: userId,
+    data: { label: 'Voltar', style: 2, emoji: { name: '🔙' } },
+    funcao: async (bi) => {
+      const g = await garden.getOrCreate();
+      return updateCV2(bi, buildPainelJardim(client, userId, garden, g));
+    }
+  }));
+
+  return CV2.container([
+    CV2.text(`${semente.emoji} **Canteiro #${plot.index}** — ${semente.nome}`),
+    CV2.text(pronto ? '✅ Pronto para colher!' : `⏳ Pronto <t:${Math.floor(plot.prontoEm / 1000)}:R>.`),
+    CV2.row(...botoes)
+  ], { accentColor: pronto ? ACCENT : 0xF5C542 });
 }

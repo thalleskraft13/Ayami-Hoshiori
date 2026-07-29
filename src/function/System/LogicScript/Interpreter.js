@@ -483,6 +483,72 @@ class Interpreter {
       return { id: result.channelId, channelId: result.channelId, panelId: result.panelId };
     });
 
+    G.define('banco', {
+      depositar: async (quantidade) => {
+        if (!ctx.guildId) throw new RuntimeError('banco.depositar() só funciona dentro de um servidor.');
+
+        const valor = Number(quantidade);
+        if (!Number.isFinite(valor) || valor <= 0)
+          throw new RuntimeError('banco.depositar() precisa de uma quantidade maior que 0.');
+
+        if (!ctx.userId)
+          throw new RuntimeError('banco.depositar() precisa de um usuário no contexto.');
+
+        this._logAction('BANCO_DEPOSITAR', `user=${ctx.userId} valor=${valor}`);
+
+        const BankService = require('../../Banco/BankService.js');
+        const bank = new BankService(ctx.guildId, { client: this.client });
+
+        await bank.depositar(ctx.userId, valor)
+          .catch(err => { throw new RuntimeError(`banco.depositar(): ${err.message}`); });
+
+        return { ok: true };
+      },
+
+      transferirLocal: async (paraUserId, quantidade) => {
+        if (!ctx.guildId) throw new RuntimeError('banco.transferirLocal() só funciona dentro de um servidor.');
+
+        const alvo = extractId(paraUserId);
+        const valor = Number(quantidade);
+        if (!alvo) throw new RuntimeError('banco.transferirLocal() precisa do usuário de destino.');
+        if (!Number.isFinite(valor) || valor <= 0)
+          throw new RuntimeError('banco.transferirLocal() precisa de uma quantidade maior que 0.');
+
+        this._logAction('BANCO_TRANSFERIR_LOCAL', `de=${ctx.userId} para=${alvo} valor=${valor}`);
+
+        const BankService = require('../../Banco/BankService.js');
+        const bank = new BankService(ctx.guildId, { client: this.client });
+
+        await bank.transferirLocal(ctx.userId, alvo, valor)
+          .catch(err => { throw new RuntimeError(`banco.transferirLocal(): ${err.message}`); });
+
+        return { ok: true };
+      },
+
+      saldoBanco: async () => {
+        if (!ctx.guildId) throw new RuntimeError('banco.saldoBanco() só funciona dentro de um servidor.');
+
+        const BankService = require('../../Banco/BankService.js');
+        const bank = new BankService(ctx.guildId, { client: this.client });
+
+        return bank.saldoBanco()
+          .catch(err => { throw new RuntimeError(`banco.saldoBanco(): ${err.message}`); });
+      },
+
+      saldoLocal: async (userId) => {
+        if (!ctx.guildId) throw new RuntimeError('banco.saldoLocal() só funciona dentro de um servidor.');
+
+        const alvo = extractId(userId) ?? ctx.userId;
+        if (!alvo) throw new RuntimeError('banco.saldoLocal() precisa de um usuário.');
+
+        const BankService = require('../../Banco/BankService.js');
+        const bank = new BankService(ctx.guildId, { client: this.client });
+
+        return bank.saldoLocal(alvo)
+          .catch(err => { throw new RuntimeError(`banco.saldoLocal(): ${err.message}`); });
+      }
+    });
+
     G.define('db', this._buildDbObj());
   }
 

@@ -34,6 +34,9 @@ const MessageLibraryManager = require("./System/MessageLibrary/LibraryManager.js
 const MissionManager = require('./System/MissionManager.js');
 const SecuritySystem = require("./System/SecuritySystem.js")
 const ActivityAnalyticsSystem = require("./System/Activity/ActivityAnalyticsSystem.js")
+const EconomyPanelSystem = require("./System/Economia/EconomyPanelSystem.js")
+const PrefixEconomyManager = require("./System/Economia/PrefixEconomyManager.js")
+const HouseSystem = require("./System/House/index.js")
 const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
 const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js');
 const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
@@ -111,6 +114,9 @@ class DiscordGatewayClient extends EventEmitter {
         this.missionManager = new MissionManager(this);
         this.security = new SecuritySystem(this);
         this.activityAnalytics = new ActivityAnalyticsSystem(this);
+        this.economyPanel = new EconomyPanelSystem(this);
+        this.prefixEconomy = new PrefixEconomyManager(this);
+        this.houseSystem = new HouseSystem(this);
         this.giveaway   = new GiveawaySystem(this);
         this.gScheduler = new GiveawayScheduler(this);
         this.giveaway.messageTracker = new GiveawayMessageTracker();
@@ -425,6 +431,7 @@ if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onSchedul
   await this.security.handleMessage(data);
   await this.activityAnalytics.handleMessage(data);
   await this.giveaway.messageTracker.onMessage(data)
+  await this.prefixEconomy.handleMessage(data).catch(err => console.error('[PrefixEconomyManager]', err));
 
   if (data.guild_id && data.author?.id && !data.author?.bot) {
     Missions.progress(data.author.id, { client: this, guildId: data.guild_id, actor: data.author }, 'enviar_mensagens', 1);
@@ -434,10 +441,12 @@ if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onSchedul
     async _onMemberAdd(data) {
   await this.security.handleMemberJoin(data);
   await this.activityAnalytics.handleMemberAdd(data);
+  await this.houseSystem.handleMemberJoin(data);
 }
 
 async _onMemberRemove(data) {
   await this.activityAnalytics.handleMemberRemove(data);
+  await this.houseSystem.handleMemberRemove(data);
 }
 
 async _onRoleCreate(data) {
@@ -539,7 +548,7 @@ async _onScheduledEventUserAdd(data) {
     console.log(`\n----------> SHARD: ${d.shard[0]}`)
 
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
-    await this.MediaManager.init()
+     await this.MediaManager.init()
     if (!this._commandsLoaded) {
         this._commandsLoaded = true;
         await this._loadCommands();

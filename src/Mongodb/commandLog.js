@@ -6,12 +6,12 @@ const { Schema } = mongoose;
 const commandLogSchema = new Schema({
   commandName:    { type: String, required: true, index: true },
   subcommandName: { type: String, default: null },
-  options:        { type: Schema.Types.Mixed, default: {} }, // interaction.data.options já estruturado pelo Discord
+  options:        { type: Schema.Types.Mixed, default: {} },
   guildId:        { type: String, default: null, index: true },
   guildName:      { type: String, default: null },
   userId:         { type: String, required: true, index: true },
   username:       { type: String, default: null },
-  createdAt:      { type: Date, default: Date.now, expires: 60 * 60 * 24 * 30 }, // TTL: 30 dias
+  createdAt:      { type: Date, default: Date.now, expires: 60 * 60 * 24 * 30 },
 }, {
   collection: 'command_logs',
 });

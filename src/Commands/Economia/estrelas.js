@@ -6,7 +6,7 @@ const Economy         = require("../../function/Estrelas/Economy.js");
 const DiscordRequest   = require("../../function/DiscordRequest.js");
 const PremiumManager  = require("../../function/Utils/PremiumManager.js");
 const { getPlan }     = require("../../function/Utils/PremiumPlans.js");
-const { economyContext, respond, respondError } = require("../../function/Estrelas/interactionHelpers.js");
+const { economyContext, respond, respondError, replyCV2, updateCV2 } = require("../../function/Estrelas/interactionHelpers.js");
 const CV2             = require("../../function/Messages/CV2.js");
 const Inventory       = require("../../function/Estrelas/Inventory.js");
 const { CATEGORIAS }  = require("../../function/Estrelas/data/itemCatalog.js");
@@ -404,30 +404,17 @@ async function handleRanking(interaction, client, escopo = 'global') {
 async function handleInventario(interaction, client, userId) {
   const categorias = await Inventory.getInventario(userId);
   const containers = buildInventarioMain(client, userId, categorias);
-
-  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
-    method: "POST",
-    body: { type: 4, data: CV2.payload(containers) }
-  });
+  return replyCV2(interaction, containers);
 }
 
 function invUpdate(interaction, containers) {
-  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
-    method: "POST",
-    body: { type: 7, data: CV2.payload(containers) }
-  });
+  return updateCV2(interaction, containers);
 }
 
 function invFechar(interaction) {
-  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
-    method: "POST",
-    body: {
-      type: 7,
-      data: CV2.payload(CV2.container([
-        CV2.text("🎒 Inventário fechado.")
-      ], { accentColor: INV_ACCENT_COLOR }))
-    }
-  });
+  return updateCV2(interaction, CV2.container([
+    CV2.text("🎒 Inventário fechado.")
+  ], { accentColor: INV_ACCENT_COLOR }));
 }
 
 function buildInventarioMain(client, userId, categorias) {

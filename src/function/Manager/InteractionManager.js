@@ -226,6 +226,11 @@ if (interaction.data?.custom_id === "birthday_register_btn") {
   return this.client.birthdayManager.handleButtonRegister(interaction);
 }
 
+if (interaction.data?.custom_id === "house_call_confirm") {
+  return this.client.houseSystem.handleCallConfirmButton(interaction)
+    .catch((err) => this._replyError(interaction, err, 'House Call Confirm'));
+}
+
 
             // Só é "nosso" se foi registrado via createButton/createSelect
             // (prefixo temp_). Qualquer outro formato que chegou até aqui
@@ -418,6 +423,7 @@ async _replyError(interaction, err, context = 'Erro interno') {
 
         if (customId === 'close_ticket') return true;
         if (customId === 'birthday_register_btn') return true;
+        if (customId === 'house_call_confirm') return true;
 
         const parsed = this._tryParseJson(customId);
         if (parsed?.t) {

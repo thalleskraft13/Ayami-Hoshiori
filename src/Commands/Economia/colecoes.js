@@ -1,17 +1,19 @@
 'use strict';
 
-const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
-const Collections   = require("../../function/Estrelas/Collections.js");
-const { respond, respondError } = require("../../function/Estrelas/interactionHelpers.js");
+const Collections    = require("../../function/Estrelas/Collections.js");
+const CV2            = require("../../function/Messages/CV2.js");
+const { respondErrorCV2, replyCV2, updateCV2 } = require("../../function/Estrelas/interactionHelpers.js");
 
-const CHOICES = [
-  { name: 'Todas', value: 'todas' },
-  { name: 'Recursos coletados', value: 'recursos' },
-  { name: 'Itens fabricados', value: 'itens' },
-  { name: 'Receitas aprendidas', value: 'receitas' },
-  { name: 'Regiões descobertas', value: 'regioes' },
-  { name: 'Companheiros obtidos', value: 'companheiros' },
-  { name: 'Criações publicadas', value: 'criacoes' }
+const ACCENT = 0x26C6DA;
+
+const CATEGORIAS = [
+  { label: 'Todas', value: 'todas', emoji: '📚' },
+  { label: 'Recursos coletados', value: 'recursos', emoji: '🪵' },
+  { label: 'Itens fabricados', value: 'itens', emoji: '🛠️' },
+  { label: 'Receitas aprendidas', value: 'receitas', emoji: '📜' },
+  { label: 'Regiões descobertas', value: 'regioes', emoji: '🗺️' },
+  { label: 'Companheiros obtidos', value: 'companheiros', emoji: '🐾' },
+  { label: 'Criações publicadas', value: 'criacoes', emoji: '🎨' }
 ];
 
 module.exports = {
@@ -29,42 +31,47 @@ module.exports = {
       'en-GB': 'View your collections: resources, items, recipes, regions, companions and creations',
       'es-ES': 'Consulta tus colecciones: recursos, objetos, recetas, regiones, compañeros y creaciones',
     },
-    options: [
-      {
-        type: 3,
-        name: 'categoria',
-        description: 'Filtrar por categoria (padrão: todas)',
-        required: false,
-        choices: CHOICES
-      }
-    ]
+    options: []
   },
 
   async execute(interaction, client) {
     const userId = interaction.member?.user?.id ?? interaction.user?.id;
-    const categoria = interaction.data.options?.find(o => o.name === 'categoria')?.value ?? 'todas';
 
     try {
-      const grupos = await Collections.obter(userId, categoria);
-
-      const embed = new MessageEmbed()
-        .setTitle("Suas Coleções")
-        .setColor("Aqua");
-
-      for (const grupo of grupos) {
-        const progresso = grupo.total ? ` (${grupo.obtidos.length}/${grupo.total})` : ` (${grupo.obtidos.length})`;
-
-        const texto = grupo.obtidos.length
-          ? grupo.obtidos.map(o => `• ${o.nome}`).join('\n')
-          : 'Nada descoberto ainda.';
-
-        embed.addField(`${grupo.nome}${progresso}`, texto);
-      }
-
-      return await respond(interaction, embed);
+      return await replyCV2(interaction, await buildPainelColecoes(client, userId, 'todas'));
     } catch (err) {
       console.error('[/colecoes]', err);
-      return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
+      return await respondErrorCV2(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.", client);
     }
   }
 };
+
+async function buildPainelColecoes(client, userId, categoriaFiltro) {
+  const grupos = await Collections.obter(userId, categoriaFiltro);
+
+  const blocos = [CV2.text('📚 **Suas Coleções**'), CV2.separator()];
+
+  for (const grupo of grupos) {
+    const progresso = grupo.total ? ` (${grupo.obtidos.length}/${grupo.total})` : ` (${grupo.obtidos.length})`;
+    const texto = grupo.obtidos.length
+      ? grupo.obtidos.map(o => `• ${o.nome}`).join('\n')
+      : 'Nada descoberto ainda.';
+
+    blocos.push(CV2.text(`**${grupo.nome}${progresso}**\n${texto}`));
+  }
+
+  blocos.push(CV2.separator());
+
+  const select = client.interactions.createSelect({
+    user: userId,
+    data: {
+      placeholder: '📂 Filtrar por categoria',
+      options: CATEGORIAS.map(c => ({ label: c.label, value: c.value, emoji: { name: c.emoji } }))
+    },
+    funcao: async (si) => updateCV2(si, await buildPainelColecoes(client, userId, si.data.values[0]))
+  });
+
+  blocos.push(CV2.row(select));
+
+  return CV2.container(blocos, { accentColor: ACCENT });
+}

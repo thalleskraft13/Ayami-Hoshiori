@@ -120,6 +120,16 @@ class TaskManager {
         await task.save();
         return;
       }
+
+      if (task.tipo === 'house_call_scheduled') {
+        await task.save();
+        return;
+      }
+
+      if (task.tipo === 'house_call_inactivity_check') {
+        await task.save();
+        return;
+      }
       
       
 
@@ -241,6 +251,36 @@ class TaskManager {
         break;
       }
 
+      case 'house_call_scheduled': {
+        const { guildId, hour, minute = 0 } = task.dados;
+        if (this.client.houseSystem?.callScheduler) {
+          await this.client.houseSystem.callScheduler
+            .runScheduledCall(guildId)
+            .catch(err => console.error('[TaskManager] house_call_scheduled error:', err));
+        }
+        const next = new Date();
+        next.setDate(next.getDate() + 1);
+        next.setHours(hour, minute, 0, 0);
+        task.executeAt = next;
+        task.status    = 'pending';
+        break;
+      }
+
+      case 'house_call_inactivity_check': {
+        const { guildId, hour, minute = 0 } = task.dados;
+        if (this.client.houseSystem?.callScheduler) {
+          await this.client.houseSystem.callScheduler
+            .runInactivityCheck(guildId)
+            .catch(err => console.error('[TaskManager] house_call_inactivity_check error:', err));
+        }
+        const next = new Date();
+        next.setDate(next.getDate() + 1);
+        next.setHours(hour, minute, 0, 0);
+        task.executeAt = next;
+        task.status    = 'pending';
+        break;
+      }
+
       case 'guild_mission_reset': {
         const { guildId } = task.dados;
         if (this.client.missionManager) {
@@ -344,6 +384,78 @@ class TaskManager {
 
   return task;
 }
+  async createHouseCallScheduled({ guildId, hour, minute = 0 }) {
+    await TaskModel.updateMany(
+      { tipo: 'house_call_scheduled', 'dados.guildId': guildId, status: 'pending' },
+      { $set: { status: 'cancelled' } }
+    );
+
+    const executeAt = new Date();
+    executeAt.setHours(hour, minute, 0, 0);
+    if (executeAt.getTime() < Date.now() - 60_000) {
+      executeAt.setDate(executeAt.getDate() + 1);
+    }
+
+    const task = await TaskModel.create({
+      taskId:      randomUUID(),
+      tipo:        'house_call_scheduled',
+      executeAt,
+      dados:       { guildId, hour, minute },
+      repeat:      false,
+      repeatDelay: null
+    });
+
+    this._logTask('criada', task, [
+      { name: 'Guild',      value: `\`${guildId}\``, inline: true },
+      { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+    ]);
+
+    return task;
+  }
+
+  async cancelHouseCallScheduled(guildId) {
+    await TaskModel.updateMany(
+      { tipo: 'house_call_scheduled', 'dados.guildId': guildId, status: 'pending' },
+      { $set: { status: 'cancelled' } }
+    );
+  }
+
+  async createHouseInactivityCheck({ guildId, hour, minute = 0 }) {
+    await TaskModel.updateMany(
+      { tipo: 'house_call_inactivity_check', 'dados.guildId': guildId, status: 'pending' },
+      { $set: { status: 'cancelled' } }
+    );
+
+    const executeAt = new Date();
+    executeAt.setHours(hour, minute, 0, 0);
+    if (executeAt.getTime() < Date.now() - 60_000) {
+      executeAt.setDate(executeAt.getDate() + 1);
+    }
+
+    const task = await TaskModel.create({
+      taskId:      randomUUID(),
+      tipo:        'house_call_inactivity_check',
+      executeAt,
+      dados:       { guildId, hour, minute },
+      repeat:      false,
+      repeatDelay: null
+    });
+
+    this._logTask('criada', task, [
+      { name: 'Guild',      value: `\`${guildId}\``, inline: true },
+      { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+    ]);
+
+    return task;
+  }
+
+  async cancelHouseInactivityCheck(guildId) {
+    await TaskModel.updateMany(
+      { tipo: 'house_call_inactivity_check', 'dados.guildId': guildId, status: 'pending' },
+      { $set: { status: 'cancelled' } }
+    );
+  }
+
   async scheduleGuildMissionReset(guildId) {
     await TaskModel.updateMany(
       { tipo: 'guild_mission_reset', 'dados.guildId': guildId, status: 'pending' },

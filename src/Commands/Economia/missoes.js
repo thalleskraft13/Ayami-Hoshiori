@@ -1,9 +1,12 @@
 'use strict';
 
-const MessageEmbed = require("../../function/Messages/EmbedBuild.js");
-const Missions      = require("../../function/Estrelas/Missions.js");
-const emojis        = require("../../public/emojis.js");
-const { economyContext, respond, respondError, getFocusedOption } = require("../../function/Estrelas/interactionHelpers.js");
+const Missions       = require("../../function/Estrelas/Missions.js");
+const CV2            = require("../../function/Messages/CV2.js");
+const {
+  economyContext, respondErrorCV2, replyCV2, updateCV2
+} = require("../../function/Estrelas/interactionHelpers.js");
+
+const ACCENT = 0xFF9800;
 
 const NOME_GRUPO = { diaria: 'Diárias', semanal: 'Semanais', mensal: 'Mensais' };
 const NOME_DIFICULDADE = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil', epico: 'Épico' };
@@ -27,65 +30,30 @@ module.exports = {
       {
         type: 1,
         name: 'ver',
-        description: 'Mostra suas missões ativas',
-        name_localizations: { 'en-US': 'view', 'en-GB': 'view', 'es-ES': 'ver' },
-        options: [
-          {
-            type: 3,
-            name: 'grupo',
-            description: 'Filtrar por grupo (padrão: todas)',
-            required: false,
-            choices: [
-              { name: 'Todas', value: 'todas' },
-              { name: 'Diárias', value: 'diaria' },
-              { name: 'Semanais', value: 'semanal' },
-              { name: 'Mensais', value: 'mensal' }
-            ]
-          }
-        ]
-      },
-      {
-        type: 1,
-        name: 'resgatar',
-        description: 'Resgata a recompensa de uma missão concluída',
-        name_localizations: { 'en-US': 'claim', 'en-GB': 'claim', 'es-ES': 'reclamar' },
-        options: [
-          { type: 3, name: 'missao', description: 'Missão concluída para resgatar', required: true, autocomplete: true }
-        ]
+        description: 'Abre o painel interativo das suas missões',
+        name_localizations: { 'en-US': 'view', 'en-GB': 'view', 'es-ES': 'ver' }
       }
     ]
   },
 
   async execute(interaction, client) {
     const sub    = interaction.data.options?.[0]?.name;
-    const opts   = interaction.data.options?.[0]?.options ?? [];
     const userId = interaction.member?.user?.id ?? interaction.user?.id;
-    const getOpt = (name) => opts.find(o => o.name === name)?.value;
 
     if (!interaction.guild_id)
-      return await respondError(interaction, "Missões só funcionam dentro de um servidor.");
+      return await respondErrorCV2(interaction, "Missões só funcionam dentro de um servidor.", client);
 
     const missions = new Missions(userId, economyContext(interaction, client));
 
     try {
       switch (sub) {
-        case 'ver':       return await handleVer(interaction, missions, getOpt('grupo') ?? 'todas');
-        case 'resgatar':  return await handleResgatar(interaction, missions, getOpt('missao'));
-        default:          return await respondError(interaction, "Subcomando desconhecido.");
+        case 'ver': return await handleVer(interaction, client, missions, userId);
+        default:    return await respondErrorCV2(interaction, "Subcomando desconhecido.", client);
       }
     } catch (err) {
       console.error('[/missoes]', err);
-      return await respondError(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.");
+      return await respondErrorCV2(interaction, err.message || "Ocorreu um erro inesperado, tenta de novo em alguns instantes.", client);
     }
-  },
-
-  async autocomplete(interaction, client) {
-    const focused = getFocusedOption(interaction);
-    if (!focused || focused.name !== 'missao') return [];
-
-    const userId = interaction.member?.user?.id ?? interaction.user?.id;
-    const missions = new Missions(userId, economyContext(interaction, client));
-    return await missions.autocompleteResgatar(focused.value);
   }
 };
 
@@ -102,32 +70,81 @@ function formatarMissao(missao) {
   return `${linha1}\n${linha2}\n${linha3}`;
 }
 
-async function handleVer(interaction, missions, grupoFiltro) {
+async function buildPainelMissoes(client, userId, missions, grupoFiltro = 'todas') {
   const grupos = await missions.getMissoes();
   const chaves = grupoFiltro === 'todas' ? ['diaria', 'semanal', 'mensal'] : [grupoFiltro];
 
-  const embed = new MessageEmbed()
-    .setTitle(`${emojis.pensando} Suas Missões`)
-    .setColor("Gold");
+  const blocos = [CV2.text('🎯 **Suas Missões**'), CV2.separator()];
+
+  const claimaveis = [];
 
   for (const chave of chaves) {
     const grupo = grupos[chave];
     const texto = grupo.list.map(formatarMissao).join('\n\n') || 'Nenhuma missão ativa.';
-    embed.addField(`${NOME_GRUPO[chave]} • renova <t:${Math.floor(grupo.expiresAt / 1000)}:R>`, texto);
+    blocos.push(CV2.text(`**${NOME_GRUPO[chave]}** • renova <t:${Math.floor(grupo.expiresAt / 1000)}:R>\n${texto}`));
+    blocos.push(CV2.separator());
+
+    for (const missao of grupo.list) {
+      if (missao.concluida && !missao.resgatada) {
+        claimaveis.push({ ...missao, grupo: chave });
+      }
+    }
   }
 
-  embed.setFooter("Use /missoes resgatar para receber suas recompensas.");
+  const grupoSelect = client.interactions.createSelect({
+    user: userId,
+    data: {
+      placeholder: '📂 Filtrar por grupo',
+      options: [
+        { label: 'Todas', value: 'todas', emoji: { name: '🎯' } },
+        { label: 'Diárias', value: 'diaria', emoji: { name: '☀️' } },
+        { label: 'Semanais', value: 'semanal', emoji: { name: '📅' } },
+        { label: 'Mensais', value: 'mensal', emoji: { name: '🗓️' } }
+      ]
+    },
+    funcao: async (si) => updateCV2(si, await buildPainelMissoes(client, userId, missions, si.data.values[0]))
+  });
 
-  return await respond(interaction, embed);
+  blocos.push(CV2.row(grupoSelect));
+
+  if (claimaveis.length) {
+    const resgatarSelect = client.interactions.createSelect({
+      user: userId,
+      data: {
+        placeholder: '🎁 Resgatar recompensa',
+        options: claimaveis.map(m => ({
+          label: m.titulo.slice(0, 100),
+          value: m.id,
+          description: `${m.recompensas.estrelas} Estrelas — ${NOME_GRUPO[m.grupo]}`
+        }))
+      },
+      funcao: async (si) => {
+        try {
+          const { missao } = await missions.resgatar(si.data.values[0]);
+          const confirmarBtn = client.interactions.createButton({
+            user: userId,
+            data: { label: 'Voltar às missões', style: 2, emoji: { name: '🔙' } },
+            funcao: async (bi) => updateCV2(bi, await buildPainelMissoes(client, userId, missions, grupoFiltro))
+          });
+          return updateCV2(si, CV2.container([
+            CV2.text('🎁 **Recompensa resgatada**'),
+            CV2.text(`Você recebeu **${missao.recompensas.estrelas}** Estrelas pela missão **${missao.titulo}**.`),
+            CV2.row(confirmarBtn)
+          ], { accentColor: 0x4CAF50 }));
+        } catch (err) {
+          return updateCV2(si, CV2.container([
+            CV2.text('⚠️ **Não deu certo**'),
+            CV2.text(err.message)
+          ], { accentColor: 0xE74C3C }));
+        }
+      }
+    });
+    blocos.push(CV2.row(resgatarSelect));
+  }
+
+  return CV2.container(blocos, { accentColor: ACCENT });
 }
 
-async function handleResgatar(interaction, missions, missionId) {
-  const { missao } = await missions.resgatar(missionId);
-
-  const embed = new MessageEmbed()
-    .setTitle("Recompensa resgatada")
-    .setColor("Gold")
-    .setDescription(`Você recebeu **${missao.recompensas.estrelas}** Estrelas pela missão **${missao.titulo}**.`);
-
-  return await respond(interaction, embed);
+async function handleVer(interaction, client, missions, userId) {
+  return replyCV2(interaction, await buildPainelMissoes(client, userId, missions));
 }

@@ -1,0 +1,19 @@
+'use strict';
+
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
+const houseCallSchema = new Schema({
+  guildId:      { type: String, required: true, index: true },
+  startedBy:    { type: String, required: true },
+  channelId:    { type: String, default: null },
+  presentUserIds: { type: [String], default: [] },
+  absentUserIds:  { type: [String], default: [] },
+  status:       { type: String, enum: ['aberta', 'encerrada'], default: 'aberta' },
+  startedAt:    { type: Date, default: Date.now },
+  endedAt:      { type: Date, default: null },
+}, {
+  collection: 'house_calls',
+});
+
+module.exports = mongoose.models.HouseCall || mongoose.model('HouseCall', houseCallSchema);

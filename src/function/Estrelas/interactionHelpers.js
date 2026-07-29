@@ -2,6 +2,7 @@
 
 const DiscordRequest = require("../DiscordRequest.js");
 const MessageEmbed   = require("../Messages/EmbedBuild.js");
+const CV2            = require("../Messages/CV2.js");
 
 function economyContext(interaction, client) {
   return {
@@ -43,6 +44,41 @@ function respondError(interaction, mensagem, client) {
   return respond(interaction, embed, client);
 }
 
+function replyCV2(interaction, containers, opts = {}) {
+  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    body: { type: 4, data: CV2.payload(containers, opts) }
+  });
+}
+
+function updateCV2(interaction, containers, opts = {}) {
+  return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+    method: "POST",
+    body: { type: 7, data: CV2.payload(containers, opts) }
+  });
+}
+
+function editCV2(interaction, client, containers, opts = {}) {
+  return DiscordRequest(`/webhooks/${client.clientId}/${interaction.token}/messages/@original`, {
+    method: "PATCH",
+    body: CV2.payload(containers, opts)
+  });
+}
+
+function errorContainer(mensagem, accentColor = 0xE74C3C) {
+  return CV2.container([
+    CV2.text(`⚠️ **Não deu certo**`),
+    CV2.text(mensagem)
+  ], { accentColor });
+}
+
+function respondErrorCV2(interaction, mensagem, client) {
+  if (interaction.__deferred && client) {
+    return editCV2(interaction, client, errorContainer(mensagem));
+  }
+  return replyCV2(interaction, errorContainer(mensagem));
+}
+
 const NOMES_CONQUISTAS = {
   primeira_expedicao: '🧭 Primeira Expedição',
   '100_exploracoes':  '🗺️ 100 Explorações',
@@ -79,4 +115,8 @@ function filtrarCatalogo(catalogo, textoDigitado = '') {
     }));
 }
 
-module.exports = { economyContext, defer, respond, respondError, formatarConquistas, getFocusedOption, filtrarCatalogo };
+module.exports = {
+  economyContext, defer, respond, respondError,
+  replyCV2, updateCV2, editCV2, errorContainer, respondErrorCV2,
+  formatarConquistas, getFocusedOption, filtrarCatalogo
+};
