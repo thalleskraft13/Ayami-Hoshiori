@@ -285,6 +285,46 @@ module.exports = {
       return respond({ flags: 32768 | 64, components: [cv2Container(blocks, {})] }, true);
     }
 
+    if (action === 'toggle') {
+      const fileId = actionFileId;
+
+      const guild   = client.guilds?.get(guildId);
+      const isOwner = !!guild && guild.ownerId === interaction.member?.user?.id;
+      if (!isOwner) {
+        return respond({ content: '🔒 Só o(a) dono(a) do servidor pode ativar ou desativar o Endpoint.', flags: 64 });
+      }
+
+      const script = await LogicScriptModel.findOne({ guildId, fileId, isFolder: false }).lean();
+      if (!script) {
+        return respond({ content: '⚠️ Arquivo não encontrado — ele pode ter sido excluído.', flags: 64 });
+      }
+
+      const cfg = await LogicEndpointModel.findOne({ guildId, logicScriptId: fileId }).lean();
+      const wantEnabled = !cfg?.enabled;
+
+      if (wantEnabled) {
+        if (!cfg?.secretHash) {
+          return respond({ content: '⚠️ Crie um Secret antes de ativar o Endpoint.', flags: 64 });
+        }
+        const plan = await module.exports._getGuildPlan(guildId);
+        if (!plan.endpoints?.enabled) {
+          return respond({ content: '🔒 O plano deste servidor não inclui Endpoints. Veja `/premium`.', flags: 64 });
+        }
+        const activeCount = await LogicEndpointModel.countDocuments({ guildId, enabled: true, logicScriptId: { $ne: fileId } });
+        if (activeCount >= (plan.endpoints.maxEndpoints ?? 0)) {
+          return respond({ content: `🔒 Seu plano permite no máximo ${plan.endpoints.maxEndpoints} Endpoint(s) ativo(s).`, flags: 64 });
+        }
+      }
+
+      await LogicEndpointModel.updateOne(
+        { guildId, logicScriptId: fileId },
+        { $set: { enabled: wantEnabled, updatedAt: new Date() } }
+      );
+
+      const blocks = await module.exports._buildEndpointFilePanel(guildId, fileId, interaction, client);
+      return respond({ flags: 32768 | 64, components: [cv2Container(blocks, {})] }, true);
+    }
+
     if (action !== 'create' && action !== 'regen') return;
     const fileId = actionFileId;
 
@@ -359,6 +399,26 @@ module.exports = {
         )
       : row(actionButton('Somente o(a) dono(a) pode gerenciar', 'ls_secret:noop', { style: 2, disabled: true }));
 
-    return [cv2Text(lines.join('\n')), cv2Divider(), buttons];
+    const toggleRow = isOwner
+      ? row(
+          actionButton(
+            cfg?.enabled ? '🔴 Desativar Endpoint' : '🟢 Ativar Endpoint',
+            `ls_secret:toggle:${fileId}`,
+            { style: cfg?.enabled ? 4 : 3, disabled: !cfg?.secretHash }
+          ),
+        )
+      : null;
+
+    return [cv2Text(lines.join('\n')), cv2Divider(), buttons, ...(toggleRow ? [toggleRow] : [])];
+  },
+
+  async _getGuildPlan(guildId) {
+    const { getPlan } = require('../../function/Utils/PremiumPlans.js');
+    try {
+      const premium = await PremiumManager.getGuildPremium(guildId);
+      return premium.status ? premium.plan : getPlan(null);
+    } catch {
+      return getPlan(null);
+    }
   },
 };

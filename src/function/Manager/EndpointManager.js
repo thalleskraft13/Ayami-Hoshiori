@@ -140,7 +140,10 @@ class EndpointManager {
     }
 
     const historyLimit = plan.endpoints?.historyLimit ?? 20;
-    const keepLogs      = !!plan.endpoints?.errorLogs;
+    // Os prints de print() sempre são gravados — são o console do Logic
+    // Script, não um recurso premium. `errorLogs` (plano) só limitava isso
+    // antes; o que o plano realmente controla é `historyLimit` (quantas
+    // requisições ficam guardadas) e os demais limites do endpoint.
 
     try {
       await LogicEndpointLogModel.create({
@@ -150,7 +153,7 @@ class EndpointManager {
         ip:         reqDoc.ip,
         durationMs,
         error:      error ?? null,
-        logs:       keepLogs ? logs.slice(0, MAX_PRINTLOG_LINES_STORED) : [],
+        logs:       logs.slice(0, MAX_PRINTLOG_LINES_STORED),
       });
 
       const total = await LogicEndpointLogModel.countDocuments({ guildId, logicScriptId });
