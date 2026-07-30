@@ -42,12 +42,12 @@ const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js'
 const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
 const { LanguageManager } = require('./Manager/LanguageManager');
 const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
-const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
 const EndpointManager     = require('./Manager/EndpointManager.js');
 const MediaManager = require('./Manager/MediaManager');
 const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.js');
 const { FeatureManager }  = require('./System/FeatureFlags/FeatureManager.js');
 const TwitchConfigSystem  = require('./System/Twitch/TwitchConfigSystem.js');
+const TwitchMonitorService = require('./System/Twitch/TwitchMonitorService.js');
 const Economy = require('./Estrelas/Economy.js');
 
 const EventEmitter = require('events');
@@ -119,6 +119,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.ayamiProfile = new AyamiProfileManager(this);
         this.featureManager = new FeatureManager(this);
         this.twitchConfig = new TwitchConfigSystem(this);
+        this.twitchMonitor = new TwitchMonitorService(this);
 
         this.languageManager = new LanguageManager({
             systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
@@ -167,12 +168,11 @@ class DiscordGatewayClient extends EventEmitter {
 
         waitMongo().then(async (ok) => {
             if (!ok) {
-                console.warn('[LogicScript] MongoDB nao conectou a tempo. Internal API nao iniciada.');
+                console.warn('[LogicScript] MongoDB nao conectou a tempo.');
                 return;
             }
             await this.logicScriptRunner.start();
             await this.endpointManager.start();
-            startInternalApi(this);
         });
     }
 
@@ -536,6 +536,7 @@ async _onScheduledEventUserAdd(data) {
         await this._connectMongo()
         await this._startTaskManager();
         await this.gScheduler.boot();
+        await this.twitchMonitor.boot();
         await this.logicEngine.start();
         await this.libraryManager.start()
         await this.messageLibraryManager.start()

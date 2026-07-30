@@ -1,0 +1,42 @@
+'use strict';
+
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
+const announceSchema = new Schema({
+  channelId:      { type: String,  default: null },
+  roleId:         { type: String,  default: null },
+  enabled:        { type: Boolean, default: true },
+  offlineEnabled: { type: Boolean, default: true },
+  liveMessage:    { type: String,  default: null },
+  offlineMessage: { type: String,  default: null },
+}, { _id: false });
+
+const stateSchema = new Schema({
+  isLive:           { type: Boolean, default: false },
+  streamId:         { type: String,  default: null },
+  startedAt:        { type: Date,    default: null },
+  title:            { type: String,  default: '' },
+  category:         { type: String,  default: '' },
+  lastCheckedAt:    { type: Date,    default: null },
+  currentHistoryId: { type: Schema.Types.ObjectId, default: null },
+}, { _id: false });
+
+const twitchChannelSchema = new Schema({
+  guildId:      { type: String, required: true, unique: true },
+
+  twitchId:     { type: String, default: null },
+  twitchLogin:  { type: String, default: null },
+  displayName:  { type: String, default: null },
+  profileImage: { type: String, default: null },
+
+  connectedBy:  { type: String, default: null },
+  connectedAt:  { type: Date,   default: null },
+
+  moduleEnabled: { type: Boolean, default: true },
+
+  announce: { type: announceSchema, default: () => ({}) },
+  state:    { type: stateSchema,    default: () => ({}) },
+}, { timestamps: true, collection: 'twitch_channels' });
+
+module.exports = mongoose.models.TwitchChannel || mongoose.model('TwitchChannel', twitchChannelSchema);

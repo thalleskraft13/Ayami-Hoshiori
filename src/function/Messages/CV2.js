@@ -33,6 +33,25 @@ function row(...components) {
   return { type: CTYPE.ACTION_ROW, components };
 }
 
+function thumbnail(url, opts = {}) {
+  const comp = { type: CTYPE.THUMBNAIL, media: { url } };
+  if (opts.description) comp.description = opts.description;
+  if (opts.spoiler) comp.spoiler = true;
+  return comp;
+}
+
+function mediaGallery(items = []) {
+  return {
+    type: CTYPE.MEDIA_GALLERY,
+    items: items.map((item) => {
+      const entry = { media: { url: item.url } };
+      if (item.description) entry.description = item.description;
+      if (item.spoiler) entry.spoiler = true;
+      return entry;
+    }),
+  };
+}
+
 function container(children, opts = {}) {
   const comp = { type: CTYPE.CONTAINER, components: children };
   if (opts.accentColor != null) comp.accent_color = opts.accentColor;
@@ -48,4 +67,4 @@ function payload(containers, opts = {}) {
   };
 }
 
-module.exports = { CTYPE, IS_COMPONENTS_V2, EPHEMERAL, text, separator, section, row, container, payload };
+module.exports = { CTYPE, IS_COMPONENTS_V2, EPHEMERAL, text, separator, section, row, container, payload, thumbnail, mediaGallery };

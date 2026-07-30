@@ -1,9 +1,11 @@
 'use strict';
 
-const DiscordRequest = require('../../DiscordRequest.js');
-const CV2            = require('../../Messages/CV2.js');
-const getPerm        = require('../../Utils/GetPerm.js');
-const { localeCtx }  = require('../../Utils/ctxLocale.js');
+const DiscordRequest   = require('../../DiscordRequest.js');
+const CV2              = require('../../Messages/CV2.js');
+const getPerm          = require('../../Utils/GetPerm.js');
+const { localeCtx }    = require('../../Utils/ctxLocale.js');
+const TwitchChannelDb  = require('../../../Mongodb/twitchChannel.js');
+const TwitchApi        = require('./TwitchApiService.js');
 
 const FEATURE_ID = 'twitch';
 const ACCENT      = 0x9146FF;
@@ -48,6 +50,29 @@ class TwitchConfigSystem {
     }).catch(() => []);
 
     return !!perms?.includes('MANAGE_GUILD');
+  }
+
+  async _getChannelDoc(guildId) {
+    return TwitchChannelDb.findOne({ guildId }).lean();
+  }
+
+  async _upsertChannelDoc(guildId, patch) {
+    return TwitchChannelDb.findOneAndUpdate(
+      { guildId },
+      { $set: patch },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+  }
+
+  _errorContainer(titulo, descricao, user, destino) {
+    return CV2.container([
+      CV2.text(`⚠️ **${titulo}**`),
+      CV2.separator(),
+      CV2.text(descricao),
+      CV2.separator(),
+      this._betaNotice(),
+      this.navRow(user, destino),
+    ], { accentColor: ACCENT_DENY });
   }
 
   _noPermissionContainer(interaction) {
@@ -232,25 +257,55 @@ class TwitchConfigSystem {
   }
 
   async painelConta(interaction) {
-    const user = interaction.member.user.id;
+    const user    = interaction.member.user.id;
+    const guildId = interaction.guild_id;
+    const doc     = await this._getChannelDoc(guildId);
 
-    const acoes = [
-      { titulo: 'Conectar Conta', label: 'Conectar Conta', style: 3, emoji: '🔗' },
-      { titulo: 'Alterar Conta',  label: 'Alterar Conta',  style: 2, emoji: '🔄' },
-      { titulo: 'Remover Conta',  label: 'Remover Conta',  style: 4, emoji: '🗑️' },
-    ];
-
-    const botoes = acoes.map(a => this.client.interactions.createButton({
+    const conectarBtn = this.client.interactions.createButton({
       user,
       feature: FEATURE_ID,
-      data: { label: a.label, style: a.style, emoji: { name: a.emoji } },
-      funcao: this._guarded((i) => this.comingSoon(i, a.titulo, (ii) => this.painelConta(ii))),
-    }));
+      data: { label: doc?.twitchId ? 'Alterar Conta' : 'Conectar Conta', style: doc?.twitchId ? 2 : 3, emoji: { name: doc?.twitchId ? '🔄' : '🔗' } },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._abrirModalCanal(i, (ii) => this.painelConta(ii));
+      },
+    });
+
+    const botoes = [conectarBtn];
+
+    if (doc?.twitchId) {
+      botoes.push(this.client.interactions.createButton({
+        user,
+        feature: FEATURE_ID,
+        data: { label: 'Remover Conta', style: 4, emoji: { name: '🗑️' } },
+        funcao: this._guarded((i) => this._removerConta(i)),
+      }));
+
+      botoes.push(this.client.interactions.createButton({
+        user,
+        feature: FEATURE_ID,
+        data: {
+          label: doc.moduleEnabled ? 'Desativar Módulo' : 'Ativar Módulo',
+          style: doc.moduleEnabled ? 4 : 3,
+          emoji: { name: doc.moduleEnabled ? '⏸️' : '▶️' },
+        },
+        funcao: this._guarded((i) => this._alternarModulo(i)),
+      }));
+    }
+
+    const statusTexto = doc?.twitchId
+      ? (
+        `**Canal:** [${doc.displayName || doc.twitchLogin}](https://twitch.tv/${doc.twitchLogin})\n` +
+        `**Status do módulo:** ${doc.moduleEnabled ? '🟢 Ativado' : '🔴 Desativado'}\n` +
+        `**Monitoramento:** ${doc.state?.isLive ? '🔴 Ao vivo agora' : '⚪ Offline'}\n` +
+        `**Vinculado por:** <@${doc.connectedBy}>`
+      )
+      : 'Nenhuma conta Twitch vinculada a este servidor ainda.\n\nUse o botão abaixo para conectar informando o nome ou a URL do canal.';
 
     return this.editOriginal(interaction, [CV2.container([
       CV2.text('🔗 **Conta Twitch**'),
       CV2.separator(),
-      CV2.text('Nenhuma conta Twitch vinculada a este servidor ainda.\n\nUse os botões abaixo para conectar, alterar ou remover a conta vinculada ao módulo.'),
+      CV2.text(statusTexto),
       CV2.separator(),
       this._betaNotice(),
       CV2.row(...botoes),
@@ -258,27 +313,164 @@ class TwitchConfigSystem {
     ], { accentColor: ACCENT })]);
   }
 
-  async painelAnuncios(interaction) {
+  async _abrirModalCanal(interaction, destino) {
     const user = interaction.member.user.id;
+
+    const modal = this.client.interactions.createModal({
+      user,
+      feature: FEATURE_ID,
+      title: 'Conectar Canal Twitch',
+      components: [
+        {
+          type: 1,
+          components: [{
+            type: 4,
+            custom_id: 'canal',
+            label: 'Nome ou URL do canal',
+            style: 1,
+            required: true,
+            max_length: 100,
+            placeholder: 'Ex: minhastreamer ou https://twitch.tv/minhastreamer',
+          }],
+        },
+      ],
+      funcao: this._guardedModal((mi, fields) => this._confirmarCanal(mi, fields, destino)),
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
+  }
+
+  async _confirmarCanal(mi, fields, destino) {
+    const user    = mi.member.user.id;
+    const guildId = mi.guild_id;
+    const entrada = (fields.canal ?? '').trim();
+
+    const responder = (containers) => this.client.interactions._callback(mi, {
+      type: 7,
+      data: CV2.payload(containers, { ephemeral: false }),
+    });
+
+    if (!TwitchApi.parseChannelInput(entrada)) {
+      return responder([this._errorContainer(
+        'Canal Inválido',
+        'Não foi possível reconhecer esse nome ou URL de canal.\n\nInforme apenas o nome do canal (ex: `minhastreamer`) ou a URL completa (ex: `https://twitch.tv/minhastreamer`).',
+        user, destino,
+      )]);
+    }
+
+    let twitchUser;
+    try {
+      twitchUser = await TwitchApi.getUserByLogin(entrada);
+    } catch (err) {
+      console.error('[TwitchConfigSystem] Erro ao validar canal na Twitch:', err.message);
+      return responder([this._errorContainer(
+        'Falha na Validação',
+        'Não foi possível validar o canal com a API da Twitch no momento. Tente novamente em instantes.',
+        user, destino,
+      )]);
+    }
+
+    if (!twitchUser) {
+      return responder([this._errorContainer(
+        'Canal Não Encontrado',
+        `Nenhum canal da Twitch foi encontrado para \`${entrada}\`. Verifique o nome e tente novamente.`,
+        user, destino,
+      )]);
+    }
+
+    const doc = await this._upsertChannelDoc(guildId, {
+      twitchId:     twitchUser.id,
+      twitchLogin:  twitchUser.login,
+      displayName:  twitchUser.display_name,
+      profileImage: twitchUser.profile_image_url ?? null,
+      connectedBy:  user,
+      connectedAt:  new Date(),
+      moduleEnabled: true,
+    });
+
+    this.client.twitchMonitor?.checkOne(guildId).catch(() => {});
+
+    return responder([CV2.container([
+      CV2.text('✅ **Canal Conectado**'),
+      CV2.separator(),
+      CV2.text(`O canal [${doc.displayName || doc.twitchLogin}](https://twitch.tv/${doc.twitchLogin}) foi vinculado a este servidor com sucesso.`),
+      CV2.separator(),
+      this._betaNotice(),
+      this.navRow(user, destino),
+    ], { accentColor: ACCENT })]);
+  }
+
+  async _removerConta(interaction) {
+    const user    = interaction.member.user.id;
+    const guildId = interaction.guild_id;
+
+    await TwitchChannelDb.deleteOne({ guildId });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text('🗑️ **Conta Removida**'),
+      CV2.separator(),
+      CV2.text('O canal Twitch vinculado a este servidor foi removido. Nenhum anúncio será enviado até que uma nova conta seja conectada.'),
+      CV2.separator(),
+      this._betaNotice(),
+      this.navRow(user, (i) => this.painelConta(i)),
+    ], { accentColor: ACCENT_SOFT })]);
+  }
+
+  async _alternarModulo(interaction) {
+    const guildId = interaction.guild_id;
+    const doc     = await this._getChannelDoc(guildId);
+    if (!doc) return this.painelConta(interaction);
+
+    await TwitchChannelDb.updateOne({ guildId }, { $set: { moduleEnabled: !doc.moduleEnabled } });
+
+    return this.painelConta(interaction);
+  }
+
+  async painelAnuncios(interaction) {
+    const user    = interaction.member.user.id;
+    const guildId = interaction.guild_id;
+    const doc     = await this._getChannelDoc(guildId);
+
+    if (!doc?.twitchId) {
+      return this.editOriginal(interaction, [CV2.container([
+        CV2.text('📢 **Anúncios de Live**'),
+        CV2.separator(),
+        CV2.text('Nenhum canal Twitch conectado a este servidor ainda.\n\nConecte um canal na categoria **Conta** antes de configurar os anúncios.'),
+        CV2.separator(),
+        this._betaNotice(),
+        this.navRow(user, (i) => this.home(i)),
+      ], { accentColor: ACCENT })]);
+    }
+
+    const anuncio = doc.announce ?? {};
 
     const canalSelect = this.client.interactions.createChannelSelect({
       user,
       feature: FEATURE_ID,
       data: { placeholder: 'Selecione o canal de anúncios', channel_types: [0, 5] },
-      funcao: this._guarded((i) => this.comingSoon(i, 'Canal de Anúncios', (ii) => this.painelAnuncios(ii))),
+      funcao: this._guarded(async (i) => {
+        const canalId = i.data.values?.[0];
+        if (!canalId) return this.painelAnuncios(i);
+        await this._upsertChannelDoc(guildId, { 'announce.channelId': canalId });
+        return this.painelAnuncios(i);
+      }),
     });
 
     const cargoSelect = this.client.interactions.createRoleSelect({
       user,
       feature: FEATURE_ID,
       data: { placeholder: 'Selecione o cargo para mencionar' },
-      funcao: this._guarded((i) => this.comingSoon(i, 'Cargo para Mencionar', (ii) => this.painelAnuncios(ii))),
+      funcao: this._guarded(async (i) => {
+        const cargoId = i.data.values?.[0];
+        if (!cargoId) return this.painelAnuncios(i);
+        await this._upsertChannelDoc(guildId, { 'announce.roleId': cargoId });
+        return this.painelAnuncios(i);
+      }),
     });
 
     const mensagens = [
-      { titulo: 'Mensagem Personalizada',      label: 'Mensagem Personalizada', style: 1, emoji: '✏️' },
-      { titulo: 'Mensagem de Início da Live',   label: 'Mensagem de Início',     style: 1, emoji: '🔴' },
-      { titulo: 'Mensagem de Encerramento',     label: 'Mensagem de Fim',        style: 1, emoji: '⏹️' },
+      { tipo: 'live',    titulo: 'Mensagem de Início da Live', label: 'Mensagem de Início', style: 1, emoji: '🔴' },
+      { tipo: 'offline', titulo: 'Mensagem de Encerramento',   label: 'Mensagem de Fim',    style: 1, emoji: '⏹️' },
     ];
 
     const botoesMensagem = mensagens.map(m => this.client.interactions.createButton({
@@ -287,25 +479,66 @@ class TwitchConfigSystem {
       data: { label: m.label, style: m.style, emoji: { name: m.emoji } },
       funcao: async (i) => {
         if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
-        return this._abrirModalMensagem(i, m.titulo, (ii) => this.painelAnuncios(ii));
+        return this._abrirModalAnuncioMensagem(i, m.tipo, m.titulo, (ii) => this.painelAnuncios(ii));
       },
     }));
+
+    const toggleAnuncios = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        label: anuncio.enabled === false ? 'Ativar Anúncios' : 'Desativar Anúncios',
+        style: anuncio.enabled === false ? 3 : 2,
+        emoji: { name: anuncio.enabled === false ? '✅' : '🔕' },
+      },
+      funcao: this._guarded(async (i) => {
+        await this._upsertChannelDoc(guildId, { 'announce.enabled': anuncio.enabled === false });
+        return this.painelAnuncios(i);
+      }),
+    });
+
+    const toggleEncerramento = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        label: anuncio.offlineEnabled === false ? 'Ativar Msg. de Encerramento' : 'Desativar Msg. de Encerramento',
+        style: anuncio.offlineEnabled === false ? 3 : 2,
+        emoji: { name: anuncio.offlineEnabled === false ? '✅' : '🔕' },
+      },
+      funcao: this._guarded(async (i) => {
+        await this._upsertChannelDoc(guildId, { 'announce.offlineEnabled': anuncio.offlineEnabled === false });
+        return this.painelAnuncios(i);
+      }),
+    });
+
+    const statusTexto =
+      `**Canal de anúncios:** ${anuncio.channelId ? `<#${anuncio.channelId}>` : '`Não definido`'}\n` +
+      `**Cargo mencionado:** ${anuncio.roleId ? `<@&${anuncio.roleId}>` : '`Nenhum`'}\n` +
+      `**Anúncios de início:** ${anuncio.enabled === false ? '🔴 Desativado' : '🟢 Ativado'}\n` +
+      `**Mensagem de encerramento:** ${anuncio.offlineEnabled === false ? '🔴 Desativada' : '🟢 Ativada'}\n\n` +
+      'Use `{streamer}`, `{titulo}`, `{categoria}` e `{link}` nas mensagens personalizadas.';
 
     return this.editOriginal(interaction, [CV2.container([
       CV2.text('📢 **Anúncios de Live**'),
       CV2.separator(),
-      CV2.text('Configure o canal, o cargo mencionado e as mensagens usadas quando a live começar ou terminar.'),
+      CV2.text(statusTexto),
       CV2.separator(),
       this._betaNotice(),
       CV2.row(canalSelect),
       CV2.row(cargoSelect),
       CV2.row(...botoesMensagem),
+      CV2.row(toggleAnuncios, toggleEncerramento),
       this.navRow(user, (i) => this.home(i)),
     ], { accentColor: ACCENT })]);
   }
 
-  async _abrirModalMensagem(interaction, titulo, destino) {
-    const user = interaction.member.user.id;
+  async _abrirModalAnuncioMensagem(interaction, tipo, titulo, destino) {
+    const user    = interaction.member.user.id;
+    const guildId = interaction.guild_id;
+    const doc     = await this._getChannelDoc(guildId);
+
+    const campo = tipo === 'live' ? 'liveMessage' : 'offlineMessage';
+    const atual = doc?.announce?.[campo] ?? '';
 
     const modal = this.client.interactions.createModal({
       user,
@@ -321,17 +554,38 @@ class TwitchConfigSystem {
             style: 2,
             required: false,
             max_length: 1000,
-            placeholder: 'Ex: 🔴 {streamer} está ao vivo agora!',
+            value: atual || undefined,
+            placeholder: tipo === 'live'
+              ? 'Ex: 🔴 {streamer} está ao vivo agora! Confira: {link}'
+              : 'Ex: ⏹️ {streamer} encerrou a transmissão. Até a próxima!',
           }],
         },
       ],
-      funcao: this._guardedModal((mi) => this.client.interactions._callback(mi, {
-        type: 7,
-        data: CV2.payload([this._comingSoonModalContainer(titulo, user, destino)], { ephemeral: false }),
-      })),
+      funcao: this._guardedModal((mi, fields) => this._salvarMensagemAnuncio(mi, tipo, fields, destino)),
     });
 
     return this.client.interactions.showModal(interaction, modal);
+  }
+
+  async _salvarMensagemAnuncio(mi, tipo, fields, destino) {
+    const user    = mi.member.user.id;
+    const guildId = mi.guild_id;
+    const campo   = tipo === 'live' ? 'liveMessage' : 'offlineMessage';
+    const texto   = (fields.mensagem ?? '').trim();
+
+    await this._upsertChannelDoc(guildId, { [`announce.${campo}`]: texto || null });
+
+    return this.client.interactions._callback(mi, {
+      type: 7,
+      data: CV2.payload([CV2.container([
+        CV2.text('✅ **Mensagem Salva**'),
+        CV2.separator(),
+        CV2.text(texto ? `Nova mensagem:\n> ${texto}` : 'A mensagem padrão será utilizada.'),
+        CV2.separator(),
+        this._betaNotice(),
+        this.navRow(user, destino),
+      ], { accentColor: ACCENT })], { ephemeral: false }),
+    });
   }
 
   async painelAgenda(interaction) {
