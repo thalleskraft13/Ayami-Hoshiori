@@ -46,6 +46,8 @@ const { startInternalApi } = require('./System/LogicScript/InternalApi.js');
 const EndpointManager     = require('./Manager/EndpointManager.js');
 const MediaManager = require('./Manager/MediaManager');
 const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.js');
+const { FeatureManager }  = require('./System/FeatureFlags/FeatureManager.js');
+const TwitchConfigSystem  = require('./System/Twitch/TwitchConfigSystem.js');
 const Economy = require('./Estrelas/Economy.js');
 
 const EventEmitter = require('events');
@@ -115,6 +117,8 @@ class DiscordGatewayClient extends EventEmitter {
         this.logicScriptRunner = new ScriptRunner(this);
         this.endpointManager   = new EndpointManager(this);
         this.ayamiProfile = new AyamiProfileManager(this);
+        this.featureManager = new FeatureManager(this);
+        this.twitchConfig = new TwitchConfigSystem(this);
 
         this.languageManager = new LanguageManager({
             systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
@@ -678,6 +682,10 @@ async _onScheduledEventUserAdd(data) {
     async _executeCommand(interaction) {
         const command = this.commands.get(interaction.data.name);
         if (!command) return;
+
+        if (command.feature && !(await this.featureManager.guardInteraction(interaction, command.feature))) {
+            return;
+        }
 
         this._logCommand(interaction);
 

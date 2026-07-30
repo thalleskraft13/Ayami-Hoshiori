@@ -146,6 +146,12 @@ module.exports = {
             description: client.t("configurar.opt_houses_desc", ctx),
             value: "houses",
             emoji: { name: "🏠" }
+          },
+          {
+            label: "Criadores",
+            description: "Módulos para criadores de conteúdo (ex: Twitch)",
+            value: "creators",
+            emoji: { name: "🎬" }
           }
         ]
       },
@@ -193,6 +199,10 @@ module.exports = {
           case "houses":
             await client.houseSystem.deferUpdate(i);
             return client.houseSystem.open(i);
+
+          case "creators":
+            await client.twitchConfig.deferUpdate(i);
+            return client.twitchConfig.openCreatorsMenu(i);
         }
       }
     });

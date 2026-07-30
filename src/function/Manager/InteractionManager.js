@@ -30,19 +30,23 @@ class InteractionManager {
         this._startCacheSweep();
     }
 
-    createButton({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
-        const id = this._register({ user, funcao }, tempo);
+    createButton({ user, tempo = DEFAULT_TTL_MS, funcao, feature = null, data = {} }) {
+        const id = this._register({ user, funcao, feature }, tempo);
 
-        return {
+        const button = {
             type:      2,
             style:     data.style  ?? 1,
             label:     data.label  ?? 'Botao',
             custom_id: id,
         };
+
+        if (data.emoji) button.emoji = data.emoji;
+
+        return button;
     }
 
-    createSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
-        const id = this._register({ user, funcao }, tempo);
+    createSelect({ user, tempo = DEFAULT_TTL_MS, funcao, feature = null, data = {} }) {
+        const id = this._register({ user, funcao, feature }, tempo);
 
         return {
             type:        3,
@@ -54,8 +58,8 @@ class InteractionManager {
         };
     }
 
-    createUserSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
-        const id = this._register({ user, funcao }, tempo);
+    createUserSelect({ user, tempo = DEFAULT_TTL_MS, funcao, feature = null, data = {} }) {
+        const id = this._register({ user, funcao, feature }, tempo);
 
         return {
             type:        5,
@@ -66,8 +70,8 @@ class InteractionManager {
         };
     }
 
-    createRoleSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
-        const id = this._register({ user, funcao }, tempo);
+    createRoleSelect({ user, tempo = DEFAULT_TTL_MS, funcao, feature = null, data = {} }) {
+        const id = this._register({ user, funcao, feature }, tempo);
 
         return {
             type:        6,
@@ -78,8 +82,8 @@ class InteractionManager {
         };
     }
 
-    createChannelSelect({ user, tempo = DEFAULT_TTL_MS, funcao, data = {} }) {
-        const id = this._register({ user, funcao }, tempo);
+    createChannelSelect({ user, tempo = DEFAULT_TTL_MS, funcao, feature = null, data = {} }) {
+        const id = this._register({ user, funcao, feature }, tempo);
 
         const component = {
             type:        8,
@@ -96,8 +100,8 @@ class InteractionManager {
         return component;
     }
 
-    createModal({ user, tempo = DEFAULT_TTL_MS, title, components, funcao }) {
-        const id = this._register({ user, funcao, modal: true }, tempo);
+    createModal({ user, tempo = DEFAULT_TTL_MS, title, components, funcao, feature = null }) {
+        const id = this._register({ user, funcao, modal: true, feature }, tempo);
 
         return {
             custom_id: id,
@@ -238,6 +242,10 @@ if (interaction.data?.custom_id?.startsWith('ls_secret:')) {
                 return this._replyUnauthorized(interaction);
             }
 
+            if (entry.feature && !(await this.client.featureManager.guardInteraction(interaction, entry.feature))) {
+                return;
+            }
+
             await entry.funcao(interaction, this.client);
 
         } catch (err) {
@@ -258,6 +266,10 @@ if (interaction.data?.custom_id?.startsWith('ls_secret:')) {
 
         if (!this._isAuthorized(interaction, entry.user)) {
             return this._replyUnauthorizedModal(interaction);
+        }
+
+        if (entry.feature && !(await this.client.featureManager.guardInteraction(interaction, entry.feature))) {
+            return;
         }
 
         try {

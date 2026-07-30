@@ -31,6 +31,7 @@ module.exports = {
       await userdb.save();
     }
 
+    
     userdb.dmNotificacoes = !userdb.dmNotificacoes;
 
     await userdb.save();
