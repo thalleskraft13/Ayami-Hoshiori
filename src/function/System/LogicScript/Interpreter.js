@@ -486,6 +486,36 @@ class Interpreter {
       return { id: result.channelId, channelId: result.channelId, panelId: result.panelId };
     });
 
+    G.define('createTopic', async (canal, nome, opts = {}) => {
+      const channelId = extractId(canal?.id ?? canal) ?? ctx.channelId;
+      if (!channelId) throw new RuntimeError('createTopic() precisa de um canal (passe um Channel, um ID, ou use dentro de um evento que já tenha um canal).');
+
+      const nomeTopico = String(nome ?? 'Novo Tópico').slice(0, 100);
+      const tipoRaw    = Number(opts?.type ?? 1);
+      const isPrivado  = tipoRaw === 2;
+      const discordType = isPrivado ? 12 : 11; // 1 = público (PUBLIC_THREAD), 2 = privado (PRIVATE_THREAD)
+
+      const body = {
+        name: nomeTopico,
+        type: discordType,
+        auto_archive_duration: Number(opts?.autoArchiveDuration ?? 1440),
+      };
+      if (isPrivado) body.invitable = opts?.invitable !== false;
+
+      this._logAction('TOPIC_CREATE', `channel=${channelId} nome=${nomeTopico} tipo=${tipoRaw}`);
+
+      const thread = await DiscordRequest(`/channels/${channelId}/threads`, { method: 'POST', body })
+        .catch(err => { throw new RuntimeError(`createTopic(): ${err.message}`); });
+
+      if (!thread?.id) throw new RuntimeError('createTopic(): não foi possível criar o tópico (verifique permissões do bot no canal).');
+
+      if (opts?.message) {
+        await this._sendToChannel(thread.id, opts.message).catch(() => null);
+      }
+
+      return this._buildTopicObj(thread.id, thread);
+    });
+
     G.define('banco', {
       depositar: async (quantidade) => {
         if (!ctx.guildId) throw new RuntimeError('banco.depositar() só funciona dentro de um servidor.');
@@ -931,6 +961,38 @@ class Interpreter {
       rename:   async name => { self._logAction('CHANNEL_RENAME', `channel=${channelId} name=${name}`); return DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { name } }); },
       lock:     async () => { self._logAction('CHANNEL_LOCK', `channel=${channelId}`); return DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { permission_overwrites: [{ id: self.discordCtx.guildId, type: 0, deny: '2048' }] } }); },
       unlock:   async () => { self._logAction('CHANNEL_UNLOCK', `channel=${channelId}`); return DiscordRequest(`/channels/${channelId}`, { method: 'PATCH', body: { permission_overwrites: [{ id: self.discordCtx.guildId, type: 0, allow: '2048' }] } }); },
+    };
+  }
+
+  _buildTopicObj(topicId, data = {}) {
+    const self = this;
+    return {
+      id:        topicId,
+      name:      data?.name,
+      type:      Number(data?.type) === 12 ? 2 : 1, // 1 = público, 2 = privado
+      channelId: data?.parent_id,
+
+      send: async (c, o) => self._sendToChannel(topicId, c, o),
+
+      addMember: async user => {
+        const userId = extractId(user?.id ?? user);
+        if (!userId) throw new RuntimeError('Topic.addMember() precisa de um usuário (User ou ID).');
+        self._logAction('TOPIC_ADD_MEMBER', `topic=${topicId} user=${userId}`);
+        return DiscordRequest(`/channels/${topicId}/thread-members/${userId}`, { method: 'PUT' });
+      },
+      removeMember: async user => {
+        const userId = extractId(user?.id ?? user);
+        if (!userId) throw new RuntimeError('Topic.removeMember() precisa de um usuário (User ou ID).');
+        self._logAction('TOPIC_REMOVE_MEMBER', `topic=${topicId} user=${userId}`);
+        return DiscordRequest(`/channels/${topicId}/thread-members/${userId}`, { method: 'DELETE' });
+      },
+
+      rename:    async nome => { self._logAction('TOPIC_RENAME', `topic=${topicId} nome=${nome}`); return DiscordRequest(`/channels/${topicId}`, { method: 'PATCH', body: { name: String(nome).slice(0, 100) } }); },
+      archive:   async ()   => { self._logAction('TOPIC_ARCHIVE', `topic=${topicId}`);   return DiscordRequest(`/channels/${topicId}`, { method: 'PATCH', body: { archived: true } }); },
+      unarchive: async ()   => { self._logAction('TOPIC_UNARCHIVE', `topic=${topicId}`); return DiscordRequest(`/channels/${topicId}`, { method: 'PATCH', body: { archived: false } }); },
+      lock:      async ()   => { self._logAction('TOPIC_LOCK', `topic=${topicId}`);      return DiscordRequest(`/channels/${topicId}`, { method: 'PATCH', body: { locked: true } }); },
+      unlock:    async ()   => { self._logAction('TOPIC_UNLOCK', `topic=${topicId}`);    return DiscordRequest(`/channels/${topicId}`, { method: 'PATCH', body: { locked: false } }); },
+      delete:    async ()   => { self._logAction('TOPIC_DELETE', `topic=${topicId}`);    return DiscordRequest(`/channels/${topicId}`, { method: 'DELETE' }); },
     };
   }
 

@@ -149,7 +149,7 @@ module.exports = {
           },
           {
             label: "Criadores",
-            description: "Módulos para criadores de conteúdo (ex: Twitch)",
+            description: "Módulos para criadores de conteúdo (Twitch, YouTube)",
             value: "creators",
             emoji: { name: "🎬" }
           }
@@ -201,8 +201,8 @@ module.exports = {
             return client.houseSystem.open(i);
 
           case "creators":
-            await client.twitchConfig.deferUpdate(i);
-            return client.twitchConfig.openCreatorsMenu(i);
+            await client.creatorsMenu.deferUpdate(i);
+            return client.creatorsMenu.open(i);
         }
       }
     });

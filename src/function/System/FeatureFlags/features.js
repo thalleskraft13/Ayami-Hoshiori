@@ -13,6 +13,11 @@ const FEATURES = Object.freeze({
     mode: FEATURE_MODES.BETA,
     description: 'Integração com a Twitch',
   },
+
+  youtube: {
+    mode: FEATURE_MODES.BETA,
+    description: 'Integração com o YouTube',
+  },
 });
 
 module.exports = { FEATURES, FEATURE_MODES };

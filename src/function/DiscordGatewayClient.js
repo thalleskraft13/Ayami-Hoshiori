@@ -48,6 +48,9 @@ const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.j
 const { FeatureManager }  = require('./System/FeatureFlags/FeatureManager.js');
 const TwitchConfigSystem  = require('./System/Twitch/TwitchConfigSystem.js');
 const TwitchMonitorService = require('./System/Twitch/TwitchMonitorService.js');
+const YouTubeConfigSystem = require('./System/YouTube/YouTubeConfigSystem.js');
+const YouTubeManager      = require('./System/YouTube/YouTubeManager.js');
+const CreatorsMenuSystem  = require('./System/Creators/CreatorsMenuSystem.js');
 const Economy = require('./Estrelas/Economy.js');
 
 const EventEmitter = require('events');
@@ -120,6 +123,9 @@ class DiscordGatewayClient extends EventEmitter {
         this.featureManager = new FeatureManager(this);
         this.twitchConfig = new TwitchConfigSystem(this);
         this.twitchMonitor = new TwitchMonitorService(this);
+        this.youtubeConfig = new YouTubeConfigSystem(this);
+        this.youtubeMonitor = new YouTubeManager(this);
+        this.creatorsMenu = new CreatorsMenuSystem(this);
 
         this.languageManager = new LanguageManager({
             systemsPath:    path.resolve(process.cwd(), 'src', 'systems'),
@@ -537,6 +543,7 @@ async _onScheduledEventUserAdd(data) {
         await this._startTaskManager();
         await this.gScheduler.boot();
         await this.twitchMonitor.boot();
+        await this.youtubeMonitor.boot();
         await this.logicEngine.start();
         await this.libraryManager.start()
         await this.messageLibraryManager.start()
