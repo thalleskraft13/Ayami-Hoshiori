@@ -169,11 +169,23 @@ class ShopService {
       );
     }
 
+    const runner = this.context?.client?.logicScriptRunner;
+    if (runner) {
+      runner.emitCustomEvent(this.guildId, 'shopPurchase', {
+        customData: { guildId: this.guildId, userId, produtoId: String(produto._id), nome: produto.nome, quantidade, total }
+      }).catch(err => console.error('[ShopService] Falha ao emitir \'shopPurchase\':', err.message));
+    }
+
     return { produto, total };
   }
 
   async inventario(userId) {
     return ShopUserItemDb.find({ guildId: this.guildId, userId, quantidade: { $gt: 0 } });
+  }
+
+  async quantidadeItem(userId, itemNome) {
+    const entrada = await ShopUserItemDb.findOne({ guildId: this.guildId, userId, itemNome });
+    return entrada?.quantidade ?? 0;
   }
 }
 

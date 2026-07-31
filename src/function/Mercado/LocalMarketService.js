@@ -34,9 +34,15 @@ class LocalMarketService {
       { $inc: { quantidade: -quantidade } }
     );
 
-    return LocalMarketListingDb.create({
+    const listing = await LocalMarketListingDb.create({
       guildId: this.guildId, sellerId, itemNome, quantidade, precoUnitario
     });
+
+    this._emit('localMarketListingCreated', {
+      guildId: this.guildId, sellerId, listingId: String(listing._id), itemNome, quantidade, precoUnitario
+    });
+
+    return listing;
   }
 
   async cancelarVenda(sellerId, listingId) {
@@ -52,6 +58,11 @@ class LocalMarketService {
 
     listing.ativo = false;
     await listing.save();
+
+    this._emit('localMarketListingCancelled', {
+      guildId: this.guildId, sellerId, listingId: String(listing._id), itemNome: listing.itemNome
+    });
+
     return listing;
   }
 
@@ -93,7 +104,19 @@ class LocalMarketService {
     if (listing.quantidade <= 0) listing.ativo = false;
     await listing.save();
 
+    this._emit('localMarketSale', {
+      guildId: this.guildId, buyerId, sellerId: listing.sellerId, listingId: String(listing._id),
+      itemNome: listing.itemNome, quantidade, total, imposto, liquido
+    });
+
     return { listing, quantidade, total, imposto, liquido };
+  }
+
+  _emit(eventName, payload = {}) {
+    const runner = this.context?.client?.logicScriptRunner;
+    if (!runner) return;
+    runner.emitCustomEvent(this.guildId, eventName, { customData: payload })
+      .catch(err => console.error(`[LocalMarketService] Falha ao emitir '${eventName}':`, err.message));
   }
 }
 

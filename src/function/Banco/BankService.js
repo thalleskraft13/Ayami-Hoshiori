@@ -68,8 +68,47 @@ class BankService {
     });
 
     await this._registrar('admin', actorId, null, 0, `Banco "${banco.nome}" criado`);
+    this._emit('bankCreated', { guildId: this.guildId, actorId, nome: banco.nome });
 
     return banco;
+  }
+
+  async listarAdministradores() {
+    const banco = await this.requireBanco();
+    return banco.administradores ?? [];
+  }
+
+  async adicionarAdministrador(actorId, userId) {
+    if (!userId) throw new Error("Informe um usuário válido.");
+    const banco = await this.requireBanco();
+    if (!banco.administradores.includes(userId)) {
+      banco.administradores.push(userId);
+      await banco.save();
+    }
+    await this._registrar('admin', actorId, userId, 0, 'Administrador adicionado ao Banco');
+    this._emit('bankAdminAdded', { guildId: this.guildId, actorId, userId });
+    return banco;
+  }
+
+  async removerAdministrador(actorId, userId) {
+    const banco = await this.requireBanco();
+    banco.administradores = banco.administradores.filter(id => id !== userId);
+    await banco.save();
+    await this._registrar('admin', actorId, userId, 0, 'Administrador removido do Banco');
+    this._emit('bankAdminRemoved', { guildId: this.guildId, actorId, userId });
+    return banco;
+  }
+
+  async detalhes() {
+    const banco = await this.requireBanco();
+    return banco;
+  }
+
+  _emit(eventName, payload = {}) {
+    const runner = this.context?.client?.logicScriptRunner;
+    if (!runner) return;
+    runner.emitCustomEvent(this.guildId, eventName, { customData: payload })
+      .catch(err => console.error(`[BankService] Falha ao emitir '${eventName}':`, err.message));
   }
 
   async configurar(actorId, patch = {}) {
@@ -100,6 +139,7 @@ class BankService {
 
     await banco.save();
     await this._registrar('admin', actorId, null, 0, 'Configurações do Banco alteradas', { patch });
+    this._emit('bankConfigUpdated', { guildId: this.guildId, actorId, patch });
 
     return banco;
   }
@@ -123,6 +163,7 @@ class BankService {
     await banco.save();
 
     await this._registrar('deposito', userId, null, quantidade, `Depósito de ${quantidade} Estrelas`, null, anterior, banco.saldoEstrelas);
+    this._emit('bankDeposit', { guildId: this.guildId, userId, quantidade, saldoEstrelasAnterior: anterior, saldoEstrelasAtual: banco.saldoEstrelas });
 
     return banco;
   }
@@ -156,6 +197,7 @@ class BankService {
       `Emissão de ${moedaEmitida} ${banco.moeda.nome} (consumiu ${quantidadeEstrelas} Estrelas do lastro)`,
       { quantidadeEstrelas }, anteriorBanco, banco.saldoEstrelas
     );
+    this._emit('bankIssue', { guildId: this.guildId, actorId, destinoUserId, quantidadeEstrelas, moedaEmitida });
 
     return { banco, conta, moedaEmitida };
   }
@@ -186,6 +228,7 @@ class BankService {
 
     await this._registrar('gasto', deUserId, paraUserId, quantidade, `Transferência local enviada para ${paraUserId}`, null, contaOrigem.saldoLocal + quantidade, contaOrigem.saldoLocal);
     await this._registrar('recebimento', paraUserId, deUserId, quantidade, `Transferência local recebida de ${deUserId}`, null, contaDestino.saldoLocal - quantidade, contaDestino.saldoLocal);
+    this._emit('bankTransfer', { guildId: this.guildId, deUserId, paraUserId, quantidade });
 
     return { contaOrigem, contaDestino };
   }
@@ -215,6 +258,7 @@ class BankService {
     await conta.save();
 
     await this._registrar('recebimento', userId, null, quantidade, operacao, metadata, anterior, conta.saldoLocal);
+    this._emit('bankCredit', { guildId: this.guildId, userId, quantidade, operacao, metadata, saldoAnterior: anterior, saldoAtual: conta.saldoLocal });
 
     return conta;
   }
@@ -227,6 +271,7 @@ class BankService {
     await banco.save();
 
     await this._registrar('admin', null, null, quantidade, operacao, metadata, null, banco.tesouraria);
+    this._emit('bankTaxCollected', { guildId: this.guildId, quantidade, operacao, metadata, tesouraria: banco.tesouraria });
 
     return banco;
   }
@@ -250,6 +295,7 @@ class BankService {
     await conta.save();
 
     await this._registrar('gasto', userId, null, quantidade, operacao, metadata, anterior, conta.saldoLocal);
+    this._emit('bankDebit', { guildId: this.guildId, userId, quantidade, operacao, metadata, saldoAnterior: anterior, saldoAtual: conta.saldoLocal });
 
     return conta;
   }
@@ -270,6 +316,7 @@ class BankService {
 
     await banco.save();
     await this._registrar('admin', actorId, null, 0, `Recompensa "${tipo}" configurada`, { tipo, patch });
+    this._emit('bankRewardConfigured', { guildId: this.guildId, actorId, tipo, patch });
     return banco;
   }
 
@@ -320,6 +367,7 @@ class BankService {
     banco.impostos = { ...atual, ...patch };
     await banco.save();
     await this._registrar('admin', actorId, null, 0, 'Impostos da economia alterados', { patch });
+    this._emit('bankTaxConfigUpdated', { guildId: this.guildId, actorId, patch });
     return banco;
   }
 
@@ -345,6 +393,7 @@ class BankService {
 
     await banco.save();
     await this._registrar('admin', actorId, null, 0, `Salário configurado para cargo ${cargoId}`, { cargoId, valor });
+    this._emit('bankSalaryConfigured', { guildId: this.guildId, actorId, cargoId, valor });
     return banco;
   }
 
@@ -353,6 +402,7 @@ class BankService {
     banco.salarios = banco.salarios.filter(s => s.cargoId !== cargoId);
     await banco.save();
     await this._registrar('admin', actorId, null, 0, `Salário removido do cargo ${cargoId}`, { cargoId });
+    this._emit('bankSalaryRemoved', { guildId: this.guildId, actorId, cargoId });
     return banco;
   }
 
@@ -363,6 +413,7 @@ class BankService {
     salario.ativo = !salario.ativo;
     await banco.save();
     await this._registrar('admin', actorId, null, 0, `Salário do cargo ${cargoId} ${salario.ativo ? 'ativado' : 'desativado'}`, { cargoId });
+    this._emit('bankSalaryToggled', { guildId: this.guildId, actorId, cargoId, ativo: salario.ativo });
     return banco;
   }
 

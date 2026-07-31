@@ -516,73 +516,470 @@ class Interpreter {
       return this._buildTopicObj(thread.id, thread);
     });
 
-    G.define('banco', {
-      depositar: async (quantidade) => {
-        if (!ctx.guildId) throw new RuntimeError('banco.depositar() só funciona dentro de um servidor.');
+    const bankLib = this._buildBankLib();
+    G.define('bank', bankLib);
+    G.define('banco', bankLib);
 
-        const valor = Number(quantidade);
-        if (!Number.isFinite(valor) || valor <= 0)
-          throw new RuntimeError('banco.depositar() precisa de uma quantidade maior que 0.');
+    G.define('db', this._buildDbObj());
+  }
 
-        if (!ctx.userId)
-          throw new RuntimeError('banco.depositar() precisa de um usuário no contexto.');
+  _bankGuildOrThrow(fnName) {
+    if (!this.discordCtx.guildId) throw new RuntimeError(`${fnName}() só funciona dentro de um servidor.`);
+    return this.discordCtx.guildId;
+  }
 
-        this._logAction('BANCO_DEPOSITAR', `user=${ctx.userId} valor=${valor}`);
+  async _bankSetup(fnName) {
+    const guildId = this._bankGuildOrThrow(fnName);
+    const BankService = require('../../Banco/BankService.js');
+    const bank = new BankService(guildId, { client: this.client });
+    const banco = await bank.getBanco().catch(() => null);
+    if (banco?.configuracoes?.permitirLogicScript === false) {
+      throw new RuntimeError(`${fnName}(): o acesso do Logic Script ao Banco do Servidor foi desativado nas configurações do Banco.`);
+    }
+    return bank;
+  }
 
+  async _bankRequireAdmin(bank, fnName) {
+    const ctx = this.discordCtx;
+    if (!ctx.userId) throw new RuntimeError(`${fnName}() precisa de um usuário no contexto.`);
+    const GetPerm = require('../../Utils/GetPerm.js');
+    const perms = await GetPerm({ id: ctx.userId, guildId: ctx.guildId, client: this.client }).catch(() => []);
+    const ok = await bank.isAdmin(ctx.userId, perms ?? []).catch(() => false);
+    if (!ok) throw new RuntimeError(`${fnName}(): você precisa ser administrador do Banco para executar essa ação.`);
+  }
+
+  _buildBankLib() {
+    const ctx  = this.discordCtx;
+    const self = this;
+
+    const positivo = (v, fnName) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) throw new RuntimeError(`${fnName}() precisa de uma quantidade maior que 0.`);
+      return n;
+    };
+
+    const inteiro = (v, fnName) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n <= 0) throw new RuntimeError(`${fnName}() precisa de uma quantidade inteira maior que 0.`);
+      return n;
+    };
+
+    const rethrow = (fnName) => (err) => { throw new RuntimeError(`${fnName}(): ${err.message}`); };
+
+    return {
+      existe: async () => {
+        const guildId = this._bankGuildOrThrow('bank.existe');
         const BankService = require('../../Banco/BankService.js');
-        const bank = new BankService(ctx.guildId, { client: this.client });
-
-        await bank.depositar(ctx.userId, valor)
-          .catch(err => { throw new RuntimeError(`banco.depositar(): ${err.message}`); });
-
-        return { ok: true };
+        const bank = new BankService(guildId, { client: this.client });
+        const banco = await bank.getBanco().catch(() => null);
+        return !!banco;
       },
 
-      transferirLocal: async (paraUserId, quantidade) => {
-        if (!ctx.guildId) throw new RuntimeError('banco.transferirLocal() só funciona dentro de um servidor.');
+      info: async () => {
+        const bank = await this._bankSetup('bank.info');
+        const banco = await bank.getBanco().catch(() => null);
+        if (!banco) return null;
+        return {
+          nome: banco.nome,
+          icone: banco.icone,
+          descricao: banco.descricao,
+          moeda: banco.moeda?.toObject ? banco.moeda.toObject() : banco.moeda,
+          totalEmitido: banco.totalEmitido,
+          tesouraria: banco.tesouraria,
+          criadoEm: banco.criadoEm,
+        };
+      },
 
-        const alvo = extractId(paraUserId);
-        const valor = Number(quantidade);
-        if (!alvo) throw new RuntimeError('banco.transferirLocal() precisa do usuário de destino.');
-        if (!Number.isFinite(valor) || valor <= 0)
-          throw new RuntimeError('banco.transferirLocal() precisa de uma quantidade maior que 0.');
-
-        this._logAction('BANCO_TRANSFERIR_LOCAL', `de=${ctx.userId} para=${alvo} valor=${valor}`);
-
-        const BankService = require('../../Banco/BankService.js');
-        const bank = new BankService(ctx.guildId, { client: this.client });
-
-        await bank.transferirLocal(ctx.userId, alvo, valor)
-          .catch(err => { throw new RuntimeError(`banco.transferirLocal(): ${err.message}`); });
-
-        return { ok: true };
+      moeda: async () => {
+        const bank = await this._bankSetup('bank.moeda');
+        const banco = await bank.requireBanco().catch(rethrow('bank.moeda'));
+        return banco.moeda?.toObject ? banco.moeda.toObject() : banco.moeda;
       },
 
       saldoBanco: async () => {
-        if (!ctx.guildId) throw new RuntimeError('banco.saldoBanco() só funciona dentro de um servidor.');
-
-        const BankService = require('../../Banco/BankService.js');
-        const bank = new BankService(ctx.guildId, { client: this.client });
-
-        return bank.saldoBanco()
-          .catch(err => { throw new RuntimeError(`banco.saldoBanco(): ${err.message}`); });
+        const bank = await this._bankSetup('bank.saldoBanco');
+        return bank.saldoBanco().catch(rethrow('bank.saldoBanco'));
       },
 
       saldoLocal: async (userId) => {
-        if (!ctx.guildId) throw new RuntimeError('banco.saldoLocal() só funciona dentro de um servidor.');
-
+        const bank = await this._bankSetup('bank.saldoLocal');
         const alvo = extractId(userId) ?? ctx.userId;
-        if (!alvo) throw new RuntimeError('banco.saldoLocal() precisa de um usuário.');
+        if (!alvo) throw new RuntimeError('bank.saldoLocal() precisa de um usuário.');
+        return bank.saldoLocal(alvo).catch(rethrow('bank.saldoLocal'));
+      },
 
+      temConta: async (userId) => {
+        const bank = await this._bankSetup('bank.temConta');
+        const alvo = extractId(userId) ?? ctx.userId;
+        if (!alvo) throw new RuntimeError('bank.temConta() precisa de um usuário.');
+        const saldo = await bank.saldoLocal(alvo).catch(() => null);
+        return saldo !== null;
+      },
+
+      transferirLocal: async (paraUserId, quantidade) => {
+        const bank = await this._bankSetup('bank.transferirLocal');
+        const alvo = extractId(paraUserId);
+        const valor = positivo(quantidade, 'bank.transferirLocal');
+        if (!alvo) throw new RuntimeError('bank.transferirLocal() precisa do usuário de destino.');
+        if (!ctx.userId) throw new RuntimeError('bank.transferirLocal() precisa de um usuário no contexto.');
+        this._logAction('BANK_TRANSFERIR_LOCAL', `de=${ctx.userId} para=${alvo} valor=${valor}`);
+        await bank.transferirLocal(ctx.userId, alvo, valor).catch(rethrow('bank.transferirLocal'));
+        return { ok: true };
+      },
+
+      creditarLocal: async (userId, quantidade, operacao) => {
+        const bank = await this._bankSetup('bank.creditarLocal');
+        await this._bankRequireAdmin(bank, 'bank.creditarLocal');
+        const alvo = extractId(userId);
+        const valor = positivo(quantidade, 'bank.creditarLocal');
+        if (!alvo) throw new RuntimeError('bank.creditarLocal() precisa de um usuário.');
+        this._logAction('BANK_CREDITAR_LOCAL', `user=${alvo} valor=${valor}`);
+        await bank.creditarLocal(alvo, valor, operacao ?? 'credito_manual', { actorId: ctx.userId }).catch(rethrow('bank.creditarLocal'));
+        return { ok: true };
+      },
+
+      debitarLocal: async (userId, quantidade, operacao) => {
+        const bank = await this._bankSetup('bank.debitarLocal');
+        await this._bankRequireAdmin(bank, 'bank.debitarLocal');
+        const alvo = extractId(userId);
+        const valor = positivo(quantidade, 'bank.debitarLocal');
+        if (!alvo) throw new RuntimeError('bank.debitarLocal() precisa de um usuário.');
+        this._logAction('BANK_DEBITAR_LOCAL', `user=${alvo} valor=${valor}`);
+        await bank.gastarLocal(alvo, valor, operacao ?? 'debito_manual', { actorId: ctx.userId }).catch(rethrow('bank.debitarLocal'));
+        return { ok: true };
+      },
+
+      depositar: async (quantidade) => {
+        const bank = await this._bankSetup('bank.depositar');
+        const valor = positivo(quantidade, 'bank.depositar');
+        if (!ctx.userId) throw new RuntimeError('bank.depositar() precisa de um usuário no contexto.');
+        this._logAction('BANK_DEPOSITAR', `user=${ctx.userId} valor=${valor}`);
+        await bank.depositar(ctx.userId, valor).catch(rethrow('bank.depositar'));
+        return { ok: true };
+      },
+
+      emitir: async (paraUserId, quantidadeEstrelas) => {
+        const bank = await this._bankSetup('bank.emitir');
+        await this._bankRequireAdmin(bank, 'bank.emitir');
+        const alvo = extractId(paraUserId);
+        const valor = inteiro(quantidadeEstrelas, 'bank.emitir');
+        if (!alvo) throw new RuntimeError('bank.emitir() precisa do usuário de destino.');
+        this._logAction('BANK_EMITIR', `para=${alvo} estrelas=${valor}`);
+        const resultado = await bank.emitir(ctx.userId, alvo, valor).catch(rethrow('bank.emitir'));
+        return { moedaEmitida: resultado.moedaEmitida };
+      },
+
+      criar: async (dados) => {
+        const guildId = this._bankGuildOrThrow('bank.criar');
         const BankService = require('../../Banco/BankService.js');
-        const bank = new BankService(ctx.guildId, { client: this.client });
+        const bank = new BankService(guildId, { client: this.client });
+        if (!ctx.userId) throw new RuntimeError('bank.criar() precisa de um usuário no contexto.');
+        this._logAction('BANK_CRIAR', `actor=${ctx.userId}`);
+        const banco = await bank.criar(ctx.userId, dados ?? {}).catch(rethrow('bank.criar'));
+        return { nome: banco.nome };
+      },
 
-        return bank.saldoLocal(alvo)
-          .catch(err => { throw new RuntimeError(`banco.saldoLocal(): ${err.message}`); });
-      }
-    });
+      configurar: async (patch) => {
+        const bank = await this._bankSetup('bank.configurar');
+        await this._bankRequireAdmin(bank, 'bank.configurar');
+        this._logAction('BANK_CONFIGURAR', `actor=${ctx.userId}`);
+        await bank.configurar(ctx.userId, patch ?? {}).catch(rethrow('bank.configurar'));
+        return { ok: true };
+      },
 
-    G.define('db', this._buildDbObj());
+      souAdmin: async (userId) => {
+        const bank = await this._bankSetup('bank.souAdmin');
+        const alvo = extractId(userId) ?? ctx.userId;
+        const GetPerm = require('../../Utils/GetPerm.js');
+        const perms = await GetPerm({ id: alvo, guildId: ctx.guildId, client: this.client }).catch(() => []);
+        return bank.isAdmin(alvo, perms ?? []).catch(() => false);
+      },
+
+      administradores: async () => {
+        const bank = await this._bankSetup('bank.administradores');
+        return bank.listarAdministradores().catch(rethrow('bank.administradores'));
+      },
+
+      adicionarAdministrador: async (userId) => {
+        const bank = await this._bankSetup('bank.adicionarAdministrador');
+        await this._bankRequireAdmin(bank, 'bank.adicionarAdministrador');
+        const alvo = extractId(userId);
+        if (!alvo) throw new RuntimeError('bank.adicionarAdministrador() precisa de um usuário.');
+        await bank.adicionarAdministrador(ctx.userId, alvo).catch(rethrow('bank.adicionarAdministrador'));
+        return { ok: true };
+      },
+
+      removerAdministrador: async (userId) => {
+        const bank = await this._bankSetup('bank.removerAdministrador');
+        await this._bankRequireAdmin(bank, 'bank.removerAdministrador');
+        const alvo = extractId(userId);
+        if (!alvo) throw new RuntimeError('bank.removerAdministrador() precisa de um usuário.');
+        await bank.removerAdministrador(ctx.userId, alvo).catch(rethrow('bank.removerAdministrador'));
+        return { ok: true };
+      },
+
+      estatisticas: async () => {
+        const bank = await this._bankSetup('bank.estatisticas');
+        return bank.estatisticas().catch(rethrow('bank.estatisticas'));
+      },
+
+      permissoes: {
+        souAdmin: async (userId) => {
+          const bank = await this._bankSetup('bank.permissoes.souAdmin');
+          const alvo = extractId(userId) ?? ctx.userId;
+          const GetPerm = require('../../Utils/GetPerm.js');
+          const perms = await GetPerm({ id: alvo, guildId: ctx.guildId, client: this.client }).catch(() => []);
+          return bank.isAdmin(alvo, perms ?? []).catch(() => false);
+        },
+        cargosAutorizados: async () => {
+          const bank = await this._bankSetup('bank.permissoes.cargosAutorizados');
+          const banco = await bank.requireBanco().catch(rethrow('bank.permissoes.cargosAutorizados'));
+          return banco.permissoes?.cargosAutorizados ?? [];
+        },
+        definirCargosAutorizados: async (cargoIds) => {
+          const bank = await this._bankSetup('bank.permissoes.definirCargosAutorizados');
+          await this._bankRequireAdmin(bank, 'bank.permissoes.definirCargosAutorizados');
+          const lista = Array.isArray(cargoIds) ? cargoIds.map(String) : [];
+          await bank.configurar(ctx.userId, { permissoes: { cargosAutorizados: lista } }).catch(rethrow('bank.permissoes.definirCargosAutorizados'));
+          return { ok: true };
+        },
+      },
+
+      recompensas: {
+        listar: async () => {
+          const bank = await this._bankSetup('bank.recompensas.listar');
+          const banco = await bank.requireBanco().catch(rethrow('bank.recompensas.listar'));
+          return banco.recompensas ?? [];
+        },
+        configurar: async (tipo, patch) => {
+          const bank = await this._bankSetup('bank.recompensas.configurar');
+          await this._bankRequireAdmin(bank, 'bank.recompensas.configurar');
+          if (!tipo) throw new RuntimeError('bank.recompensas.configurar() precisa do tipo da recompensa.');
+          await bank.configurarRecompensa(ctx.userId, String(tipo), patch ?? {}).catch(rethrow('bank.recompensas.configurar'));
+          return { ok: true };
+        },
+      },
+
+      salarios: {
+        listar: async () => {
+          const bank = await this._bankSetup('bank.salarios.listar');
+          const banco = await bank.requireBanco().catch(rethrow('bank.salarios.listar'));
+          return banco.salarios ?? [];
+        },
+        adicionar: async (dados) => {
+          const bank = await this._bankSetup('bank.salarios.adicionar');
+          await this._bankRequireAdmin(bank, 'bank.salarios.adicionar');
+          await bank.adicionarSalario(ctx.userId, dados ?? {}).catch(rethrow('bank.salarios.adicionar'));
+          return { ok: true };
+        },
+        remover: async (cargoId) => {
+          const bank = await this._bankSetup('bank.salarios.remover');
+          await this._bankRequireAdmin(bank, 'bank.salarios.remover');
+          await bank.removerSalario(ctx.userId, extractId(cargoId)).catch(rethrow('bank.salarios.remover'));
+          return { ok: true };
+        },
+        alternar: async (cargoId) => {
+          const bank = await this._bankSetup('bank.salarios.alternar');
+          await this._bankRequireAdmin(bank, 'bank.salarios.alternar');
+          await bank.toggleSalario(ctx.userId, extractId(cargoId)).catch(rethrow('bank.salarios.alternar'));
+          return { ok: true };
+        },
+      },
+
+      impostos: {
+        listar: async () => {
+          const bank = await this._bankSetup('bank.impostos.listar');
+          const banco = await bank.requireBanco().catch(rethrow('bank.impostos.listar'));
+          return banco.impostos?.toObject ? banco.impostos.toObject() : banco.impostos;
+        },
+        configurar: async (patch) => {
+          const bank = await this._bankSetup('bank.impostos.configurar');
+          await this._bankRequireAdmin(bank, 'bank.impostos.configurar');
+          await bank.configurarImpostos(ctx.userId, patch ?? {}).catch(rethrow('bank.impostos.configurar'));
+          return { ok: true };
+        },
+      },
+
+      logs: {
+        historico: async (limit) => {
+          const bank = await this._bankSetup('bank.logs.historico');
+          const lim = Number.isFinite(Number(limit)) ? Number(limit) : 25;
+          const registros = await bank.historico(lim).catch(rethrow('bank.logs.historico'));
+          return registros.map(r => ({
+            tipo: r.tipo, operacao: r.operacao, userId: r.userId, alvoId: r.alvoId,
+            quantidade: r.quantidade, saldoAnterior: r.saldoAnterior, saldoAtual: r.saldoAtual,
+            sucesso: r.sucesso, criadoEm: r.criadoEm,
+          }));
+        },
+      },
+
+      loja: {
+        categorias: async () => {
+          const guildId = this._bankGuildOrThrow('bank.loja.categorias');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(guildId, { client: this.client });
+          const lista = await shop.listarCategorias().catch(rethrow('bank.loja.categorias'));
+          return lista.map(c => ({ id: String(c._id), nome: c.nome, ordem: c.ordem }));
+        },
+        criarCategoria: async (nome) => {
+          const bank = await this._bankSetup('bank.loja.criarCategoria');
+          await this._bankRequireAdmin(bank, 'bank.loja.criarCategoria');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          const categoria = await shop.criarCategoria(ctx.userId, nome).catch(rethrow('bank.loja.criarCategoria'));
+          return { id: String(categoria._id), nome: categoria.nome };
+        },
+        removerCategoria: async (categoriaId) => {
+          const bank = await this._bankSetup('bank.loja.removerCategoria');
+          await this._bankRequireAdmin(bank, 'bank.loja.removerCategoria');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          await shop.removerCategoria(ctx.userId, categoriaId).catch(rethrow('bank.loja.removerCategoria'));
+          return { ok: true };
+        },
+        moverCategoria: async (categoriaId, direcao) => {
+          const bank = await this._bankSetup('bank.loja.moverCategoria');
+          await this._bankRequireAdmin(bank, 'bank.loja.moverCategoria');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          await shop.moverCategoria(ctx.userId, categoriaId, direcao).catch(rethrow('bank.loja.moverCategoria'));
+          return { ok: true };
+        },
+        produtos: async (categoriaId) => {
+          const guildId = this._bankGuildOrThrow('bank.loja.produtos');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(guildId, { client: this.client });
+          const lista = await shop.listarProdutos(categoriaId).catch(rethrow('bank.loja.produtos'));
+          return lista.map(p => ({
+            id: String(p._id), nome: p.nome, descricao: p.descricao, imagem: p.imagem,
+            preco: p.preco, estoque: p.estoque, ativo: p.ativo,
+          }));
+        },
+        produto: async (produtoId) => {
+          const guildId = this._bankGuildOrThrow('bank.loja.produto');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(guildId, { client: this.client });
+          const p = await shop.getProduto(produtoId).catch(rethrow('bank.loja.produto'));
+          if (!p) return null;
+          return {
+            id: String(p._id), nome: p.nome, descricao: p.descricao, imagem: p.imagem,
+            preco: p.preco, estoque: p.estoque, ativo: p.ativo,
+          };
+        },
+        criarProduto: async (categoriaId, dados) => {
+          const bank = await this._bankSetup('bank.loja.criarProduto');
+          await this._bankRequireAdmin(bank, 'bank.loja.criarProduto');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          const produto = await shop.criarProduto(ctx.userId, categoriaId, dados ?? {}).catch(rethrow('bank.loja.criarProduto'));
+          return { id: String(produto._id), nome: produto.nome };
+        },
+        editarProduto: async (produtoId, patch) => {
+          const bank = await this._bankSetup('bank.loja.editarProduto');
+          await this._bankRequireAdmin(bank, 'bank.loja.editarProduto');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          await shop.editarProduto(ctx.userId, produtoId, patch ?? {}).catch(rethrow('bank.loja.editarProduto'));
+          return { ok: true };
+        },
+        removerProduto: async (produtoId) => {
+          const bank = await this._bankSetup('bank.loja.removerProduto');
+          await this._bankRequireAdmin(bank, 'bank.loja.removerProduto');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          await shop.removerProduto(ctx.userId, produtoId).catch(rethrow('bank.loja.removerProduto'));
+          return { ok: true };
+        },
+        moverProduto: async (produtoId, direcao) => {
+          const bank = await this._bankSetup('bank.loja.moverProduto');
+          await this._bankRequireAdmin(bank, 'bank.loja.moverProduto');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          await shop.moverProduto(ctx.userId, produtoId, direcao).catch(rethrow('bank.loja.moverProduto'));
+          return { ok: true };
+        },
+        comprar: async (produtoId, quantidade) => {
+          const bank = await this._bankSetup('bank.loja.comprar');
+          if (!ctx.userId) throw new RuntimeError('bank.loja.comprar() precisa de um usuário no contexto.');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(ctx.guildId, { client: this.client });
+          const qtd = quantidade === undefined ? 1 : inteiro(quantidade, 'bank.loja.comprar');
+          this._logAction('BANK_LOJA_COMPRAR', `user=${ctx.userId} produto=${produtoId} qtd=${qtd}`);
+          const resultado = await shop.comprar(ctx.userId, produtoId, qtd).catch(rethrow('bank.loja.comprar'));
+          return { total: resultado.total };
+        },
+      },
+
+      inventario: {
+        listar: async (userId) => {
+          const guildId = this._bankGuildOrThrow('bank.inventario.listar');
+          const alvo = extractId(userId) ?? ctx.userId;
+          if (!alvo) throw new RuntimeError('bank.inventario.listar() precisa de um usuário.');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(guildId, { client: this.client });
+          const itens = await shop.inventario(alvo).catch(rethrow('bank.inventario.listar'));
+          return itens.map(i => ({ item: i.itemNome, quantidade: i.quantidade }));
+        },
+        quantidade: async (userId, itemNome) => {
+          const guildId = this._bankGuildOrThrow('bank.inventario.quantidade');
+          const alvo = extractId(userId) ?? ctx.userId;
+          if (!alvo) throw new RuntimeError('bank.inventario.quantidade() precisa de um usuário.');
+          if (!itemNome) throw new RuntimeError('bank.inventario.quantidade() precisa do nome do item.');
+          const ShopService = require('../../Loja/ShopService.js');
+          const shop = new ShopService(guildId, { client: this.client });
+          return shop.quantidadeItem(alvo, String(itemNome)).catch(rethrow('bank.inventario.quantidade'));
+        },
+      },
+
+      mercado: {
+        vender: async (itemNome, quantidade, precoUnitario) => {
+          const bank = await this._bankSetup('bank.mercado.vender');
+          if (!ctx.userId) throw new RuntimeError('bank.mercado.vender() precisa de um usuário no contexto.');
+          if (!itemNome) throw new RuntimeError('bank.mercado.vender() precisa do nome do item.');
+          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
+          const qtd   = inteiro(quantidade, 'bank.mercado.vender');
+          const preco = inteiro(precoUnitario, 'bank.mercado.vender');
+          this._logAction('BANK_MERCADO_VENDER', `user=${ctx.userId} item=${itemNome} qtd=${qtd} preco=${preco}`);
+          const listing = await mercado.vender(ctx.userId, String(itemNome), qtd, preco).catch(rethrow('bank.mercado.vender'));
+          return { id: String(listing._id) };
+        },
+        cancelarVenda: async (listingId) => {
+          const bank = await this._bankSetup('bank.mercado.cancelarVenda');
+          if (!ctx.userId) throw new RuntimeError('bank.mercado.cancelarVenda() precisa de um usuário no contexto.');
+          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
+          await mercado.cancelarVenda(ctx.userId, listingId).catch(rethrow('bank.mercado.cancelarVenda'));
+          return { ok: true };
+        },
+        listarVendas: async (itemNome) => {
+          const bank = await this._bankSetup('bank.mercado.listarVendas');
+          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
+          const lista = await mercado.listarVendas({ itemNome: itemNome ? String(itemNome) : null }).catch(rethrow('bank.mercado.listarVendas'));
+          return lista.map(l => ({
+            id: String(l._id), sellerId: l.sellerId, item: l.itemNome,
+            quantidade: l.quantidade, precoUnitario: l.precoUnitario,
+          }));
+        },
+        comprar: async (listingId, quantidade) => {
+          const bank = await this._bankSetup('bank.mercado.comprar');
+          if (!ctx.userId) throw new RuntimeError('bank.mercado.comprar() precisa de um usuário no contexto.');
+          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
+          const qtd = inteiro(quantidade, 'bank.mercado.comprar');
+          this._logAction('BANK_MERCADO_COMPRAR', `user=${ctx.userId} listing=${listingId} qtd=${qtd}`);
+          const resultado = await mercado.comprar(ctx.userId, listingId, qtd).catch(rethrow('bank.mercado.comprar'));
+          return { total: resultado.total, imposto: resultado.imposto, liquido: resultado.liquido };
+        },
+      },
+
+      formatarMoeda: (quantidade, moeda) => {
+        const casas = moeda?.casasDecimais ?? 0;
+        const valor = casas > 0 ? Number(quantidade).toFixed(casas) : Math.round(Number(quantidade));
+        return `${valor} ${moeda?.simbolo ?? ''} ${moeda?.nome ?? ''}`.trim();
+      },
+    };
   }
 
   _parseTime(tempo) {

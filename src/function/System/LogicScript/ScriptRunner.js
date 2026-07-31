@@ -266,6 +266,25 @@ class ScriptRunner {
 
       case 'ticketUpdate':
       case 'activitySpike':
+      case 'bankCreated':
+      case 'bankConfigUpdated':
+      case 'bankAdminAdded':
+      case 'bankAdminRemoved':
+      case 'bankDeposit':
+      case 'bankIssue':
+      case 'bankTransfer':
+      case 'bankCredit':
+      case 'bankDebit':
+      case 'bankTaxCollected':
+      case 'bankTaxConfigUpdated':
+      case 'bankRewardConfigured':
+      case 'bankSalaryConfigured':
+      case 'bankSalaryRemoved':
+      case 'bankSalaryToggled':
+      case 'shopPurchase':
+      case 'localMarketListingCreated':
+      case 'localMarketListingCancelled':
+      case 'localMarketSale':
         return [ctx.customData ?? {}];
 
       default: return [];
