@@ -358,19 +358,22 @@ function _clampPage(page, total, perPage = 8) {
   return { page: safePage, maxPage };
 }
 
+async function _hasManagePerm(guildId, userId, client, context = 'biblioteca') {
+  let perms = [];
+  try {
+    perms = await getPerm({ guildId, id: userId, client });
+  } catch (err) {
+    console.error(`[${context}] getPerm error:`, err);
+  }
+  return perms.includes('MANAGE_GUILD') || perms.includes('ADMINISTRATOR');
+}
+
 async function _startInstallWizard(interaction, client, lib, entry, userId, guildId, e) {
   guildId = guildId || interaction.guild_id;
   const channelId = interaction.channel_id;
   const ctx = localeCtx(interaction);
 
-  let perms = [];
-  try {
-    perms = await getPerm({ guildId, id: userId, client });
-  } catch (err) {
-    console.error('[instalar] getPerm error:', err);
-  }
-
-  if (!perms.includes('MANAGE_GUILD') && !perms.includes('ADMINISTRATOR')) {
+  if (!(await _hasManagePerm(guildId, userId, client, 'instalar'))) {
     return _edit(interaction, client, cv2Payload([
       cv2Text(client.t('biblioteca.no_permission_install', { ...ctx, eBrava: e.brava }))
     ], { accentColor: COLOR.danger }));
@@ -1273,9 +1276,16 @@ async function _flowInstalar(interaction, client, lib, opts, userId, guildId, e)
 }
 
 async function _flowPublicar(interaction, client, lib, userId, guildId, e) {
+  const ctx = localeCtx(interaction);
+
+  if (!(await _hasManagePerm(guildId, userId, client, 'publicar'))) {
+    return _reply(interaction, cv2Payload([
+      cv2Text(client.t('biblioteca.no_permission_publish', { ...ctx, eBrava: e.brava }))
+    ], { accentColor: COLOR.danger }));
+  }
+
   const { FlowModel } = require('../../Mongodb/flow.js');
   const flows = await FlowModel.find({ guildId }).lean();
-  const ctx = localeCtx(interaction);
 
   if (!flows.length) {
     return _reply(interaction, cv2Payload([
@@ -2102,6 +2112,12 @@ async function _embedsInstalar(interaction, client, lib, opts, userId, guildId, 
     ], { accentColor: COLOR.danger }));
   }
 
+  if (!(await _hasManagePerm(guildId, userId, client, 'instalar'))) {
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(client.t('biblioteca.no_permission_install', { ...ctx, eBrava: e.brava }))
+    ], { accentColor: COLOR.danger }));
+  }
+
   const draft = await lib.install({ libId: opts.id, guildId, channelId: interaction.channel_id, userId });
 
   return _edit(interaction, client, cv2Payload([
@@ -2110,9 +2126,16 @@ async function _embedsInstalar(interaction, client, lib, opts, userId, guildId, 
 }
 
 async function _embedsPublicar(interaction, client, lib, userId, guildId, e) {
+  const ctx = localeCtx(interaction);
+
+  if (!(await _hasManagePerm(guildId, userId, client, 'publicar'))) {
+    return _reply(interaction, cv2Payload([
+      cv2Text(client.t('biblioteca.no_permission_publish', { ...ctx, eBrava: e.brava }))
+    ], { accentColor: COLOR.danger }));
+  }
+
   const { SavedMessageModel } = require('../../Mongodb/savedMessage.js');
   const saved = await SavedMessageModel.find({ guildId }).sort({ updatedAt: -1 }).limit(25).lean();
-  const ctx = localeCtx(interaction);
 
   if (!saved.length) {
     return _reply(interaction, cv2Payload([

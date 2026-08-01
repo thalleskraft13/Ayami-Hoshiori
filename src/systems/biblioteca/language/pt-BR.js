@@ -49,6 +49,9 @@ module.exports = [
   { id: "no_permission_install", render: (ctx) =>
     `# ${ctx.eBrava} Sem permissão\nVocê precisa da permissão **Gerenciar Servidor** para instalar sistemas.` },
 
+  { id: "no_permission_publish", render: (ctx) =>
+    `# ${ctx.eBrava} Sem permissão\nVocê precisa da permissão **Gerenciar Servidor** para publicar sistemas.` },
+
   { id: "install_configuring", render: (ctx) =>
     `# ${ctx.ePensando} Configurando — ${ctx.entryName}\n` +
     `Esse sistema precisa de **${ctx.count} configuração(ões)** antes de instalar.\n\n` +

@@ -49,6 +49,9 @@ module.exports = [
   { id: "no_permission_install", render: (ctx) =>
     `# ${ctx.eBrava} No permission\nYou need the **Manage Server** permission to install systems.` },
 
+  { id: "no_permission_publish", render: (ctx) =>
+    `# ${ctx.eBrava} No permission\nYou need the **Manage Server** permission to publish systems.` },
+
   { id: "install_configuring", render: (ctx) =>
     `# ${ctx.ePensando} Setting up — ${ctx.entryName}\n` +
     `This system needs **${ctx.count} setting(s)** before it can be installed.\n\n` +
