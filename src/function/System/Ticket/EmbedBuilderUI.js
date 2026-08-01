@@ -40,6 +40,20 @@ function cleanEmbed(e) {
   return out;
 }
 
+function normalizeEmbed(e) {
+  return {
+    title: e.title || '',
+    description: e.description || '',
+    color: e.color ?? COLOR_GOLD,
+    url: e.url || '',
+    author: { name: e.author?.name || '', icon_url: e.author?.icon_url || '', url: e.author?.url || '' },
+    footer: { text: e.footer?.text || '', icon_url: e.footer?.icon_url || '' },
+    thumbnail: { url: e.thumbnail?.url || '' },
+    image: { url: e.image?.url || '' },
+    fields: Array.isArray(e.fields) ? e.fields : [],
+  };
+}
+
 function buildLiveEmbed(embed, client, ctx) {
   const e = cleanEmbed(embed);
   if (!e.title && !e.description && !e.fields?.length && !e.image && !e.thumbnail && !e.author) {
@@ -78,9 +92,9 @@ const EmbedBuilderUI = {
 
     await deferUpdate(interaction, client);
 
-    const embed = existingEmbed
-      ? JSON.parse(JSON.stringify(existingEmbed))
-      : { title: '', description: '', color: COLOR_GOLD, url: '', author: { name: '', icon_url: '', url: '' }, footer: { text: '', icon_url: '' }, thumbnail: { url: '' }, image: { url: '' }, fields: [] };
+    const embed = normalizeEmbed(
+      existingEmbed ? JSON.parse(JSON.stringify(existingEmbed)) : {}
+    );
 
     const renderBuilder = async (i, followUpMsgId) => {
 
