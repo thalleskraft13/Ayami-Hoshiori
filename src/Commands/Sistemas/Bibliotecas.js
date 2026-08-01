@@ -2054,14 +2054,20 @@ async function _embedsRenderDetail(interaction, client, lib, libId, userId, e, e
 
   const btnInstall = btn(client, userId, client.t('biblioteca.btn_install', ctx), 3, async (i) => {
     await _deferUpdate(i);
+    const iCtx = localeCtx(i);
+
+    if (!(await _hasManagePerm(i.guild_id, userId, client, 'instalar'))) {
+      return _edit(i, client, cv2Payload([
+        cv2Text(client.t('biblioteca.no_permission_install', { ...iCtx, eBrava: e.brava }))
+      ], { accentColor: COLOR.danger }));
+    }
+
     try {
       const draft = await lib.install({ libId, guildId: i.guild_id, channelId: i.channel_id, userId });
-      const iCtx = localeCtx(i);
       return _edit(i, client, cv2Payload([
         cv2Text(client.t('biblioteca.embeds_install_success', { ...iCtx, eFesta: e.festa, entryName: entry.name, savedId: draft._id.toString() }))
       ], { accentColor: COLOR.success }));
     } catch (err) {
-      const iCtx = localeCtx(i);
       return _edit(i, client, cv2Payload([
         cv2Text(client.t('biblioteca.generic_error', { ...iCtx, eAssustada: e.assustada, message: err.message }))
       ], { accentColor: COLOR.danger }));
