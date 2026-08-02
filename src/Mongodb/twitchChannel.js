@@ -29,6 +29,15 @@ const stateSchema = new Schema({
   currentHistoryId: { type: Schema.Types.ObjectId, default: null },
 }, { _id: false });
 
+// Checkpoint anti-duplicidade do polling de Follow (Alertas) — nunca
+// mantido só em memória, precisa sobreviver a reinício do Bot. Só o
+// tipo Follow usa isto hoje (Sub/Resub/GiftSub/Bits/Raid disparam
+// direto pelos eventos do tmi.js, sem necessidade de checkpoint).
+const alertsStateSchema = new Schema({
+  lastFollowedAt: { type: Date,   default: null },
+  lastFollowerId: { type: String, default: null },
+}, { _id: false });
+
 const twitchChannelSchema = new Schema({
   guildId:      { type: String, required: true, unique: true },
 
@@ -44,6 +53,7 @@ const twitchChannelSchema = new Schema({
 
   announce: { type: announceSchema, default: () => ({}) },
   state:    { type: stateSchema,    default: () => ({}) },
+  alertsState: { type: alertsStateSchema, default: () => ({}) },
 }, { timestamps: true, collection: 'twitch_channels' });
 
 module.exports = mongoose.models.TwitchChannel || mongoose.model('TwitchChannel', twitchChannelSchema);

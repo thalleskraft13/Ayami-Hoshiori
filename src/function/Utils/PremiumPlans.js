@@ -30,6 +30,12 @@ const PLANS = {
     premiumGuildLimit: 0,
     guildLimit: 0,
 
+    // Alertas de Eventos da Twitch — quantidade máxima de alertas ATIVOS
+    // (documentos `twitch_alerts`) que o servidor pode CRIAR neste plano.
+    // Nunca bloqueia quem já é alvo de um alerta — só a criação
+    // administrativa de novos. Checado em Alerts/TwitchAlertService.js#createAlert.
+    twitchAlertLimit: 2,
+
     logicBuilderFlowLimit: 10,
 
     logicScriptFileLimit: 6,
@@ -85,6 +91,8 @@ const PLANS = {
     premiumGuildLimit: 1,
     guildLimit: 1,
 
+    twitchAlertLimit: 6,
+
     logicBuilderFlowLimit: 25,
     logicScriptFileLimit: 15,
     logicScript: {
@@ -139,6 +147,8 @@ const PLANS = {
     premiumGuildLimit: 3,
     guildLimit: 3,
 
+    twitchAlertLimit: 10,
+
     logicBuilderFlowLimit: 35,
     logicScriptFileLimit: 35,
     logicScript: {
@@ -191,6 +201,8 @@ const PLANS = {
 
     premiumGuildLimit: Infinity,
     guildLimit: Infinity,
+
+    twitchAlertLimit: Infinity,
 
     logicBuilderFlowLimit: Infinity,
     logicScriptFileLimit: Infinity,

@@ -48,6 +48,8 @@ const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.j
 const { FeatureManager }  = require('./System/FeatureFlags/FeatureManager.js');
 const TwitchConfigSystem  = require('./System/Twitch/TwitchConfigSystem.js');
 const TwitchMonitorService = require('./System/Twitch/TwitchMonitorService.js');
+const TwitchChatBot        = require('./System/Twitch/Commands/TwitchChatBot.js');
+const TwitchFollowPollingService = require('./System/Twitch/Alerts/TwitchFollowPollingService.js');
 const YouTubeConfigSystem = require('./System/YouTube/YouTubeConfigSystem.js');
 const YouTubeManager      = require('./System/YouTube/YouTubeManager.js');
 const CreatorsMenuSystem  = require('./System/Creators/CreatorsMenuSystem.js');
@@ -123,6 +125,8 @@ class DiscordGatewayClient extends EventEmitter {
         this.featureManager = new FeatureManager(this);
         this.twitchConfig = new TwitchConfigSystem(this);
         this.twitchMonitor = new TwitchMonitorService(this);
+        this.twitchChatBot = new TwitchChatBot(this);
+        this.twitchFollowPolling = new TwitchFollowPollingService(this);
         this.youtubeConfig = new YouTubeConfigSystem(this);
         this.youtubeMonitor = new YouTubeManager(this);
         this.creatorsMenu = new CreatorsMenuSystem(this);
@@ -543,6 +547,8 @@ async _onScheduledEventUserAdd(data) {
         await this._startTaskManager();
         await this.gScheduler.boot();
         await this.twitchMonitor.boot();
+        await this.twitchChatBot.boot();
+        await this.twitchFollowPolling.boot();
         await this.youtubeMonitor.boot();
         await this.logicEngine.start();
         await this.libraryManager.start()
