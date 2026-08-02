@@ -4,6 +4,9 @@ const CV2              = require('../../Messages/CV2.js');
 const CreatorModuleBase = require('../Creators/CreatorModuleBase.js');
 const TwitchChannelDb   = require('../../../Mongodb/twitchChannel.js');
 const TwitchApi         = require('./TwitchApiService.js');
+// Fase 5 — Infraestrutura de Missões (genérica por plataforma).
+const CreatorMissionService = require('../Missions/CreatorMissionService.js');
+const AccountLinkService    = require('../CreatorAccounts/AccountLinkService.js');
 
 const FEATURE_ID = 'twitch';
 
@@ -485,29 +488,51 @@ class TwitchConfigSystem extends CreatorModuleBase {
     ], { accentColor: this.ACCENT })]);
   }
 
+  /**
+   * Fase 5 — lista as missões (reais, já persistidas via
+   * CreatorMissionService) configuradas para este servidor. A
+   * criação de missões pela interface do Discord continua como
+   * "em breve" (comingSoon) — a Fase 5 entrega a INFRAESTRUTURA
+   * (model + service + verificação de vínculo), não o fluxo completo
+   * de cadastro. O cadastro inicial de missões, quando necessário,
+   * pode ser feito diretamente pela Dashboard (Fase 5 — Criadores →
+   * Twitch → Missões) ou por scripts administrativos, reaproveitando
+   * o mesmo CreatorMissionService.
+   */
   async painelMissoes(interaction) {
     const user = interaction.member.user.id;
+    const guildId = interaction.guild_id;
 
-    const select = this.client.interactions.createSelect({
+    const [missoes, vinculado] = await Promise.all([
+      CreatorMissionService.listActiveMissions(guildId, FEATURE_ID),
+      AccountLinkService.isLinked(user, FEATURE_ID),
+    ]);
+
+    const linhas = missoes.length
+      ? missoes.map((m) => {
+        const periodo = { once: 'Única', daily: 'Diária', weekly: 'Semanal', monthly: 'Mensal' }[m.period] || m.period;
+        return `**${m.title}** _(${periodo})_\n${m.description || 'Sem descrição.'}\nMeta: \`${m.goal?.target ?? 1}${m.goal?.unit ? ` ${m.goal.unit}` : ''}\``;
+      }).join('\n\n')
+      : 'Nenhuma missão configurada ainda para este servidor.';
+
+    const avisoVinculo = vinculado
+      ? null
+      : '\n\n⚠️ **Conecte sua conta Twitch em Contas Conectadas para participar das missões.**';
+
+    const criarBtn = this.client.interactions.createButton({
       user,
       feature: FEATURE_ID,
-      data: {
-        placeholder: 'Selecione uma categoria de missão',
-        options: [
-          { label: 'Missões Diárias',  description: 'Missões renovadas a cada dia',  value: 'diarias',  emoji: { name: '📅' } },
-          { label: 'Missões Semanais', description: 'Missões renovadas a cada semana', value: 'semanais', emoji: { name: '🗓️' } },
-        ],
-      },
-      funcao: this._guarded((i) => this.comingSoon(i, 'Missões da Twitch', (ii) => this.painelMissoes(ii))),
+      data: { label: 'Criar Missão', style: 3, emoji: { name: '🧩' } },
+      funcao: this._guarded((i) => this.comingSoon(i, 'Criar Missão da Twitch', (ii) => this.painelMissoes(ii))),
     });
 
     return this.editOriginal(interaction, [CV2.container([
       CV2.text('🧩 **Missões da Twitch**'),
       CV2.separator(),
-      CV2.text('Nenhuma missão configurada ainda.\n\nEsta tela abrigará futuramente as missões relacionadas às transmissões.'),
+      CV2.text(`${linhas}${avisoVinculo || ''}`),
       CV2.separator(),
       this._betaNotice(),
-      CV2.row(select),
+      CV2.row(criarBtn),
       this.navRow(user, (i) => this.home(i)),
     ], { accentColor: this.ACCENT })]);
   }

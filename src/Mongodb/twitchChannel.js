@@ -10,6 +10,13 @@ const announceSchema = new Schema({
   offlineEnabled: { type: Boolean, default: true },
   liveMessage:    { type: String,  default: null },
   offlineMessage: { type: String,  default: null },
+
+  // Espelha o campo adicionado em site/models/twitchChannel.js (Fase
+  // Dashboard — Aparência dos anúncios). Apenas declaração de schema:
+  // o comportamento de envio em TwitchMonitorService#_sendAnnounce
+  // NÃO foi alterado por esta adição.
+  showExtraInfo: { type: Boolean, default: true },
+  format:        { type: String,  enum: ['rich', 'simple'], default: 'rich' },
 }, { _id: false });
 
 const stateSchema = new Schema({

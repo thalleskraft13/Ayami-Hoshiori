@@ -127,6 +127,14 @@ class TwitchMonitorService {
       await this._sendAnnounce(doc, stream, 'live').catch((err) =>
         console.error(`[TwitchMonitorService] Falha ao anunciar início (guild ${doc.guildId}):`, err.message));
     }
+
+    // Fase 5 — ponto de extensão pra Missões: quando existir um
+    // mecanismo de detecção de espectadores (comando de check-in,
+    // EventSub de chat, etc), o progresso de missões do tipo
+    // WATCH_STREAM/WATCH_DURATION deve ser registrado aqui através de
+    // CreatorMissionService.registerProgress(discordUserId, missionId,
+    // amount) — nunca duplicando a lógica de verificação de vínculo,
+    // que já vive dentro do próprio service.
   }
 
   async _handleLiveEnd(doc) {
