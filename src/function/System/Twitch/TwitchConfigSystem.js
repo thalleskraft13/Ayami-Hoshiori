@@ -47,6 +47,7 @@ const MISSION_TYPE_LABELS = {
   [MISSION_TYPES.WATCH_DURATION]: 'Acompanhar Duração',
   [MISSION_TYPES.STREAK]:         'Sequência de Lives',
   [MISSION_TYPES.EVENT]:          'Participação em Evento',
+  [MISSION_TYPES.MESSAGE_COUNT]:  'Quantidade de Mensagens',
   [MISSION_TYPES.CUSTOM]:         'Personalizada',
 };
 
@@ -590,10 +591,7 @@ class TwitchConfigSystem extends CreatorModuleBase {
       user,
       feature: FEATURE_ID,
       data: { label: 'Criar Missão', style: 3, emoji: { name: '🧩' } },
-      funcao: async (i) => {
-        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
-        return this._abrirSelectTipoMissao(i);
-      },
+      funcao: this._guarded((i) => this._abrirSelectTipoMissao(i)),
     });
 
     const componentes = [
@@ -971,10 +969,7 @@ class TwitchConfigSystem extends CreatorModuleBase {
       user,
       feature: FEATURE_ID,
       data: { label: 'Configurar Recompensa', style: 1, emoji: { name: '🎁' } },
-      funcao: async (i) => {
-        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
-        return this._selecionarTipoRecompensaEdicao(i, missionId);
-      },
+      funcao: this._guarded((i) => this._selecionarTipoRecompensaEdicao(i, missionId)),
     });
 
     const removerBtn = this.client.interactions.createButton({
@@ -1552,10 +1547,7 @@ class TwitchConfigSystem extends CreatorModuleBase {
       user,
       feature: FEATURE_ID,
       data: { label: 'Criar Alerta', style: 3, emoji: { name: '➕' } },
-      funcao: async (i) => {
-        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
-        return this._abrirSelectTipoAlerta(i);
-      },
+      funcao: this._guarded((i) => this._abrirSelectTipoAlerta(i)),
     });
 
     const componentes = [

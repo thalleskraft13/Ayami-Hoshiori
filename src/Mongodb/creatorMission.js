@@ -9,6 +9,7 @@ const MISSION_TYPES = Object.freeze({
   WATCH_DURATION: 'watch_duration',
   STREAK:         'streak',
   EVENT:          'event_participation',
+  MESSAGE_COUNT:  'message_count',
   CUSTOM:         'custom',
 });
 

@@ -9,6 +9,11 @@ const TwitchViewerStatsService = require('../Stats/TwitchViewerStatsService.js')
 const TwitchApiService = require('../TwitchApiService.js');
 const TwitchAlertService = require('../Alerts/TwitchAlertService.js');
 const { TYPES: ALERT_TYPES } = TwitchAlertService;
+const CreatorMissionService = require('../../Missions/CreatorMissionService.js');
+const { MISSION_TYPES } = CreatorMissionService;
+const AccountLinkService = require('../../CreatorAccounts/AccountLinkService.js');
+
+const FEATURE_ID = 'twitch';
 
 const CHANNEL_SYNC_INTERVAL_MS = 2 * 60 * 1000;  // igual ao TwitchMonitorService
 const WATCH_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;  // amostragem de "Get Chatters"
@@ -260,6 +265,13 @@ class TwitchChatBot {
       displayName: tags['display-name'] || tags.username,
     }).catch((err) => console.error('[TwitchChatBot] Falha ao registrar mensagem para Estatísticas:', err.message));
 
+    // Missões do tipo "Quantidade de Mensagens" — credita 1 de progresso
+    // por mensagem enviada no chat, pra quem tiver a conta Twitch
+    // vinculada ao Discord. Nunca bloqueia o restante do fluxo (comandos)
+    // se a conta não estiver vinculada ou se a missão já estiver completa.
+    this._registerMessageCountProgress(doc.guildId, tags['user-id']).catch((err) =>
+      console.error('[TwitchChatBot] Falha ao registrar progresso de missão (mensagens):', err.message));
+
     const command = await TwitchCommandService.resolveCommand(doc.guildId, message);
     if (!command) return;
 
@@ -305,6 +317,34 @@ class TwitchChatBot {
       userId: doc.connectedBy,
       username: doc.displayName || doc.twitchLogin,
     }).catch((err) => console.error('[TwitchChatBot] Falha ao registrar log de comando:', err.message));
+  }
+
+  /**
+   * Credita 1 de progresso em toda missão ativa do tipo "Quantidade de
+   * Mensagens" (MISSION_TYPES.MESSAGE_COUNT) deste servidor, pro
+   * espectador que enviou a mensagem — só se a conta Twitch dele
+   * estiver vinculada a um Discord ID (CreatorMissionService já exige
+   * isso internamente, mas resolvemos aqui pra não chamar
+   * registerProgress sem necessidade quando não há vínculo).
+   */
+  async _registerMessageCountProgress(guildId, twitchUserId) {
+    if (!twitchUserId) return;
+
+    const discordUserId = await AccountLinkService.resolveDiscordUserId(FEATURE_ID, twitchUserId);
+    if (!discordUserId) return;
+
+    const missoes = await CreatorMissionService.listActiveMissions(guildId, FEATURE_ID);
+    const missoesDeMensagem = missoes.filter((m) => m.type === MISSION_TYPES.MESSAGE_COUNT);
+    if (!missoesDeMensagem.length) return;
+
+    for (const missao of missoesDeMensagem) {
+      await CreatorMissionService.registerProgress(discordUserId, missao._id, 1).catch((err) => {
+        // NoLinkedAccountError/MissionNotFoundError não deveriam ocorrer
+        // aqui (já filtramos acima), mas nunca deixamos uma missão com
+        // problema derrubar o progresso das demais.
+        console.error(`[TwitchChatBot] Falha ao registrar progresso da missão ${missao._id}:`, err.message);
+      });
+    }
   }
 
   /* ─────────────────────────────────────────────
