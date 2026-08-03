@@ -338,12 +338,23 @@ class TwitchChatBot {
     if (!missoesDeMensagem.length) return;
 
     for (const missao of missoesDeMensagem) {
-      await CreatorMissionService.registerProgress(discordUserId, missao._id, 1).catch((err) => {
+      const progresso = await CreatorMissionService.registerProgress(discordUserId, missao._id, 1).catch((err) => {
         // NoLinkedAccountError/MissionNotFoundError não deveriam ocorrer
         // aqui (já filtramos acima), mas nunca deixamos uma missão com
         // problema derrubar o progresso das demais.
         console.error(`[TwitchChatBot] Falha ao registrar progresso da missão ${missao._id}:`, err.message);
+        return null;
       });
+
+      // registerProgress só ATUALIZA o progresso — a recompensa (cargo,
+      // etc.) só é efetivamente entregue por registerReward. Sem esta
+      // chamada, a missão fica "completed" no banco mas o cargo nunca
+      // é atribuído no Discord.
+      if (progresso?.status === 'completed') {
+        await CreatorMissionService.registerReward(discordUserId, missao._id).catch((err) => {
+          console.error(`[TwitchChatBot] Falha ao registrar recompensa da missão ${missao._id}:`, err.message);
+        });
+      }
     }
   }
 
