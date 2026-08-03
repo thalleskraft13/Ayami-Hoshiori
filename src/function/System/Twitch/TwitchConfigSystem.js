@@ -4,29 +4,22 @@ const CV2              = require('../../Messages/CV2.js');
 const CreatorModuleBase = require('../Creators/CreatorModuleBase.js');
 const TwitchChannelDb   = require('../../../Mongodb/twitchChannel.js');
 const TwitchApi         = require('./TwitchApiService.js');
-// Fase 5 — Infraestrutura de Missões (genérica por plataforma).
 const CreatorMissionService = require('../Missions/CreatorMissionService.js');
+const {
+  MISSION_TYPES,
+  PERIODS: MISSION_PERIODS,
+} = CreatorMissionService;
 const AccountLinkService    = require('../CreatorAccounts/AccountLinkService.js');
-// Fase 6 — Comandos Personalizados de Chat (execução via TwitchChatBot.js).
 const TwitchCommandService  = require('./Commands/TwitchCommandService.js');
 const { PERMISSIONS: CMD_PERMISSIONS } = TwitchCommandService;
-// Fase 7 — Estatísticas por Espectador + ranking (dados escritos pelo
-// TwitchChatBot.js, mesma conexão de chat da Fase 6).
 const TwitchStreamStatsService = require('./Stats/TwitchStreamStatsService.js');
 const TwitchViewerStatsService = require('./Stats/TwitchViewerStatsService.js');
-// Alertas — CRUD reaproveitado 100% de Alerts/TwitchAlertService.js (o
-// mesmo service que TwitchChatBot.js/TwitchFollowPollingService.js usam
-// pra disparar de verdade). Painel aqui só administra o documento
-// `twitch_alerts`, nenhuma regra de validação/limiar é duplicada.
 const TwitchAlertService = require('./Alerts/TwitchAlertService.js');
 const {
   TYPES:            ALERT_TYPES,
   TYPE_LABELS:       ALERT_TYPE_LABELS,
   DEFAULT_MESSAGES:  ALERT_DEFAULT_MESSAGES,
 } = TwitchAlertService;
-// Tipos que aceitam `minAmount` — mesma lista conceitual de
-// `amountTypes` em getAlertFormCatalog() do Dashboard, mas replicada
-// aqui a partir de ALERT_TYPES (nunca importar código do Dashboard pro Bot).
 const ALERT_AMOUNT_TYPES = [ALERT_TYPES.BITS, ALERT_TYPES.RAID, ALERT_TYPES.GIFT_SUB];
 
 function formatHoras(segundos) {
@@ -48,6 +41,33 @@ const CATEGORIES = [
   { value: 'alertas',      label: 'Alertas',      desc: 'Alertas de seguidores, inscrições, bits e raids',      emoji: '🔔' },
   { value: 'equipe',       label: 'Equipe',       desc: 'Membros responsáveis pelo módulo Twitch',              emoji: '🧑‍🤝‍🧑' },
 ];
+
+const MISSION_TYPE_LABELS = {
+  [MISSION_TYPES.WATCH_STREAM]:   'Assistir Transmissão',
+  [MISSION_TYPES.WATCH_DURATION]: 'Acompanhar Duração',
+  [MISSION_TYPES.STREAK]:         'Sequência de Lives',
+  [MISSION_TYPES.EVENT]:          'Participação em Evento',
+  [MISSION_TYPES.CUSTOM]:         'Personalizada',
+};
+
+const MISSION_PERIOD_LABELS = {
+  [MISSION_PERIODS.ONCE]:    'Única',
+  [MISSION_PERIODS.DAILY]:   'Diária',
+  [MISSION_PERIODS.WEEKLY]:  'Semanal',
+  [MISSION_PERIODS.MONTHLY]: 'Mensal',
+};
+
+const MISSION_REWARD_TYPES = Object.freeze({
+  BADGE:  'badge',
+  ROLE:   'role',
+  CUSTOM: 'custom',
+});
+
+const MISSION_REWARD_TYPE_LABELS = {
+  [MISSION_REWARD_TYPES.BADGE]:  'Emblema (Badge)',
+  [MISSION_REWARD_TYPES.ROLE]:   'Cargo do Discord',
+  [MISSION_REWARD_TYPES.CUSTOM]: 'Texto Personalizado',
+};
 
 const PERMISSION_LABELS = {
   [CMD_PERMISSIONS.EVERYONE]:    'Todo mundo',
@@ -546,30 +566,19 @@ class TwitchConfigSystem extends CreatorModuleBase {
     ], { accentColor: this.ACCENT })]);
   }
 
-  /**
-   * Fase 5 — lista as missões (reais, já persistidas via
-   * CreatorMissionService) configuradas para este servidor. A
-   * criação de missões pela interface do Discord continua como
-   * "em breve" (comingSoon) — a Fase 5 entrega a INFRAESTRUTURA
-   * (model + service + verificação de vínculo), não o fluxo completo
-   * de cadastro. O cadastro inicial de missões, quando necessário,
-   * pode ser feito diretamente pela Dashboard (Fase 5 — Criadores →
-   * Twitch → Missões) ou por scripts administrativos, reaproveitando
-   * o mesmo CreatorMissionService.
-   */
   async painelMissoes(interaction) {
     const user = interaction.member.user.id;
     const guildId = interaction.guild_id;
 
     const [missoes, vinculado] = await Promise.all([
-      CreatorMissionService.listActiveMissions(guildId, FEATURE_ID),
+      CreatorMissionService.listMissions(guildId, FEATURE_ID),
       AccountLinkService.isLinked(user, FEATURE_ID),
     ]);
 
     const linhas = missoes.length
       ? missoes.map((m) => {
-        const periodo = { once: 'Única', daily: 'Diária', weekly: 'Semanal', monthly: 'Mensal' }[m.period] || m.period;
-        return `**${m.title}** _(${periodo})_\n${m.description || 'Sem descrição.'}\nMeta: \`${m.goal?.target ?? 1}${m.goal?.unit ? ` ${m.goal.unit}` : ''}\``;
+        const periodo = MISSION_PERIOD_LABELS[m.period] || m.period;
+        return `${m.active ? '🟢' : '🔴'} **${m.title}** _(${periodo})_\n${m.description || 'Sem descrição.'}\nMeta: \`${m.goal?.target ?? 1}${m.goal?.unit ? ` ${m.goal.unit}` : ''}\``;
       }).join('\n\n')
       : 'Nenhuma missão configurada ainda para este servidor.';
 
@@ -581,27 +590,678 @@ class TwitchConfigSystem extends CreatorModuleBase {
       user,
       feature: FEATURE_ID,
       data: { label: 'Criar Missão', style: 3, emoji: { name: '🧩' } },
-      funcao: this._guarded((i) => this.comingSoon(i, 'Criar Missão da Twitch', (ii) => this.painelMissoes(ii))),
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._abrirSelectTipoMissao(i);
+      },
     });
 
-    return this.editOriginal(interaction, [CV2.container([
+    const componentes = [
       CV2.text('🧩 **Missões da Twitch**'),
       CV2.separator(),
       CV2.text(`${linhas}${avisoVinculo || ''}`),
       CV2.separator(),
       this._betaNotice(),
       CV2.row(criarBtn),
-      this.navRow(user, (i) => this.home(i)),
+    ];
+
+    if (missoes.length) {
+      const gerenciarSelect = this.client.interactions.createSelect({
+        user,
+        feature: FEATURE_ID,
+        data: {
+          placeholder: 'Selecione uma missão para gerenciar',
+          options: missoes.slice(0, 25).map((m) => ({
+            label: m.title.slice(0, 100),
+            description: `${MISSION_TYPE_LABELS[m.type] || m.type} · ${MISSION_PERIOD_LABELS[m.period] || m.period}`,
+            value: String(m._id),
+          })),
+        },
+        funcao: this._guarded((i) => this.painelMissaoDetalhe(i, i.data.values?.[0])),
+      });
+
+      componentes.push(CV2.row(gerenciarSelect));
+    }
+
+    componentes.push(this.navRow(user, (i) => this.home(i)));
+
+    return this.editOriginal(interaction, [CV2.container(componentes, { accentColor: this.ACCENT })]);
+  }
+
+  async _abrirSelectTipoMissao(interaction) {
+    const user = interaction.member.user.id;
+
+    const tipoSelect = this.client.interactions.createSelect({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        placeholder: 'Selecione o tipo da missão',
+        options: Object.values(MISSION_TYPES).map((type) => ({
+          label: MISSION_TYPE_LABELS[type],
+          value: type,
+        })),
+      },
+      funcao: this._guarded((i) => {
+        const type = i.data.values?.[0];
+        if (!Object.values(MISSION_TYPES).includes(type)) return this.painelMissoes(i);
+        return this._selecionarPeriodoMissao(i, type);
+      }),
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text('🧩 **Criar Missão — Passo 1 de 4**'),
+      CV2.separator(),
+      CV2.text('Selecione o tipo de objetivo desta missão.'),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(tipoSelect),
+      this.navRow(user, (i) => this.painelMissoes(i)),
     ], { accentColor: this.ACCENT })]);
   }
 
-  /* ═══════════════════════════════════════════
-     COMANDOS PERSONALIZADOS DE CHAT (Fase 6)
-     Execução real acontece em Commands/TwitchChatBot.js (conta
-     dedicada "AyamiBot" via IRC/tmi.js) — este painel só administra os
-     documentos em TwitchCommandService.js, exatamente como a Dashboard
-     também administra (ver routes/creatorsTwitchDashboard.js).
-     ═══════════════════════════════════════════ */
+  async _selecionarPeriodoMissao(interaction, type) {
+    const user = interaction.member.user.id;
+
+    const periodoSelect = this.client.interactions.createSelect({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        placeholder: 'Selecione o período da missão',
+        options: Object.values(MISSION_PERIODS).map((period) => ({
+          label: MISSION_PERIOD_LABELS[period],
+          value: period,
+        })),
+      },
+      funcao: this._guarded((i) => {
+        const period = i.data.values?.[0];
+        if (!Object.values(MISSION_PERIODS).includes(period)) return this._selecionarPeriodoMissao(i, type);
+        return this._selecionarRecompensaMissao(i, type, period);
+      }),
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text(`🧩 **Criar Missão de ${MISSION_TYPE_LABELS[type]} — Passo 2 de 4**`),
+      CV2.separator(),
+      CV2.text('Selecione com que frequência esta missão é renovada.'),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(periodoSelect),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+    async _selecionarRecompensaMissao(interaction, type, period) {
+    const user = interaction.member.user.id;
+
+    const recompensaSelect = this.client.interactions.createSelect({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        placeholder: 'Selecione o tipo de recompensa (opcional)',
+        options: Object.values(MISSION_REWARD_TYPES).map((rewardType) => ({
+          label: MISSION_REWARD_TYPE_LABELS[rewardType],
+          value: rewardType,
+        })),
+      },
+      funcao: this._guarded((i) => {
+        const rewardType = i.data.values?.[0] || null;
+        if (rewardType === MISSION_REWARD_TYPES.ROLE) return this._selecionarCargoRecompensaMissao(i, type, period, rewardType);
+        return this._selecionarLogRecompensaMissao(i, type, period, rewardType, null);
+      }),
+    });
+
+    const semRecompensaBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: { label: 'Sem Recompensa', style: 2, emoji: { name: '⏭️' } },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._abrirModalCriarMissao(i, type, period, null, null, null);
+      },
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text(`🧩 **Criar Missão de ${MISSION_TYPE_LABELS[type]} — Passo 3 de 6**`),
+      CV2.separator(),
+      CV2.text(
+        `Período: ${MISSION_PERIOD_LABELS[period]}\n\n` +
+        'Selecione um tipo de recompensa estrutural para quem concluir esta missão ' +
+        '(nunca moeda/saldo — cargo atribui de verdade, badge/texto ficam só registrados), ou pule esta etapa.',
+      ),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(recompensaSelect),
+      CV2.row(semRecompensaBtn),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _selecionarCargoRecompensaMissao(interaction, type, period, rewardType) {
+    const user = interaction.member.user.id;
+
+    const cargoSelect = this.client.interactions.createRoleSelect({
+      user,
+      feature: FEATURE_ID,
+      data: { placeholder: 'Selecione o cargo a atribuir' },
+      funcao: this._guarded((i) => {
+        const roleId = i.data.values?.[0] || null;
+        return this._selecionarLogRecompensaMissao(i, type, period, rewardType, roleId);
+      }),
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text(`🧩 **Criar Missão de ${MISSION_TYPE_LABELS[type]} — Passo 4 de 6**`),
+      CV2.separator(),
+      CV2.text('Selecione o cargo do Discord que será atribuído a quem concluir e tiver a recompensa registrada.'),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(cargoSelect),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+    async _selecionarLogRecompensaMissao(interaction, type, period, rewardType, roleId) {
+    const user = interaction.member.user.id;
+
+    const logSelect = this.client.interactions.createChannelSelect({
+      user,
+      feature: FEATURE_ID,
+      data: { placeholder: 'Selecione o canal onde o log de recompensa será publicado', channel_types: [0, 5] },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdminModal(i);
+        const logChannelId = i.data.values?.[0] || null;
+        return this._abrirModalCriarMissao(i, type, period, rewardType, roleId, logChannelId);
+      },
+    });
+
+    const semLogBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: { label: 'Sem Log', style: 2, emoji: { name: '⏭️' } },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._abrirModalCriarMissao(i, type, period, rewardType, roleId, null);
+      },
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text(`🧩 **Criar Missão de ${MISSION_TYPE_LABELS[type]} — Passo 5 de 6**`),
+      CV2.separator(),
+      CV2.text(
+        'Selecione um canal do Discord pra publicar uma mensagem sempre que a recompensa desta missão for registrada, ou pule esta etapa.',
+      ),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(logSelect),
+      CV2.row(semLogBtn),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _abrirModalCriarMissao(interaction, type, period, rewardType, roleId, logChannelId) {
+    const user = interaction.member.user.id;
+
+    const components = [
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'titulo', label: 'Título da missão', style: 1,
+          required: true, max_length: 100, placeholder: 'Ex: Assista a live de hoje',
+        }],
+      },
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'descricao', label: 'Descrição (opcional)', style: 2,
+          required: false, max_length: 300,
+        }],
+      },
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'meta', label: 'Meta (número)', style: 1,
+          required: true, max_length: 6, placeholder: 'Ex: 30',
+        }],
+      },
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'unidade', label: 'Unidade da meta (opcional)', style: 1,
+          required: false, max_length: 30, placeholder: 'Ex: minutos, lives',
+        }],
+      },
+    ];
+
+    if (rewardType) {
+      components.push({
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'recompensa', label: 'Descrição da recompensa', style: 1,
+          required: true, max_length: 200, placeholder: 'Ex: Cargo VIP da comunidade',
+        }],
+      });
+    }
+
+    const modal = this.client.interactions.createModal({
+      user,
+      feature: FEATURE_ID,
+      title: `Criar Missão — ${MISSION_TYPE_LABELS[type]}`,
+      components,
+      funcao: this._guardedModal((mi, fields) => this._confirmarCriarMissao(mi, type, period, rewardType, roleId, logChannelId, fields)),
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
+  }
+
+  async _confirmarCriarMissao(mi, type, period, rewardType, roleId, logChannelId, fields) {
+    const user    = mi.member.user.id;
+    const guildId = mi.guild_id;
+
+    const responder = (containers) => this.client.interactions._callback(mi, {
+      type: 7,
+      data: CV2.payload(containers, { ephemeral: false }),
+    });
+
+            const key = String(fields.titulo || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 60) || `mission_${Date.now()}`;
+
+    try {
+      await CreatorMissionService.createMission({
+        guildId,
+        platform: FEATURE_ID,
+        key,
+        type,
+        title: fields.titulo,
+        description: fields.descricao || '',
+        goal: { target: Math.max(1, Number(fields.meta) || 1), unit: fields.unidade || null },
+        period,
+        requiredPlan: 'FREE',
+        createdBy: user,
+        reward: rewardType ? {
+          type: rewardType,
+          description: fields.recompensa || null,
+          roleId: rewardType === MISSION_REWARD_TYPES.ROLE ? roleId : null,
+          logChannelId: logChannelId || null,
+        } : null,
+      });
+    } catch (err) {
+      return responder([this._errorContainer(
+        'Não foi possível criar a missão', err.message, user, (i) => this.painelMissoes(i),
+      )]);
+    }
+
+    return responder([CV2.container([
+      CV2.text('✅ **Missão criada!**'),
+      CV2.separator(),
+      this._betaNotice(),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async painelMissaoDetalhe(interaction, missionId) {
+    const user    = interaction.member.user.id;
+    const guildId = interaction.guild_id;
+
+    const missao = await CreatorMissionService.getMission(missionId);
+    if (!missao || missao.guildId !== guildId) {
+      return this.painelMissoes(interaction);
+    }
+
+    const toggleBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        label: missao.active ? 'Desativar' : 'Ativar',
+        style: missao.active ? 2 : 3,
+        emoji: { name: missao.active ? '🔕' : '✅' },
+      },
+      funcao: this._guarded(async (i) => {
+        await CreatorMissionService.setMissionActive(missionId, !missao.active);
+        return this.painelMissaoDetalhe(i, missionId);
+      }),
+    });
+
+    const editarBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: { label: 'Editar Título/Descrição/Meta', style: 1, emoji: { name: '✏️' } },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._abrirModalEditarMissao(i, missionId);
+      },
+    });
+
+    const tipoSelect = this.client.interactions.createSelect({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        placeholder: 'Trocar o tipo da missão',
+        options: Object.values(MISSION_TYPES).map((type) => ({
+          label: MISSION_TYPE_LABELS[type], value: type, default: type === missao.type,
+        })),
+      },
+      funcao: this._guarded(async (i) => {
+        const type = i.data.values?.[0];
+        if (type) await CreatorMissionService.updateMission(missionId, { type });
+        return this.painelMissaoDetalhe(i, missionId);
+      }),
+    });
+
+    const periodoSelect = this.client.interactions.createSelect({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        placeholder: 'Trocar o período da missão',
+        options: Object.values(MISSION_PERIODS).map((period) => ({
+          label: MISSION_PERIOD_LABELS[period], value: period, default: period === missao.period,
+        })),
+      },
+      funcao: this._guarded(async (i) => {
+        const period = i.data.values?.[0];
+        if (period) await CreatorMissionService.updateMission(missionId, { period });
+        return this.painelMissaoDetalhe(i, missionId);
+      }),
+    });
+
+    const configurarRecompensaBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: { label: 'Configurar Recompensa', style: 1, emoji: { name: '🎁' } },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._selecionarTipoRecompensaEdicao(i, missionId);
+      },
+    });
+
+    const removerBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: { label: 'Remover', style: 4, emoji: { name: '🗑️' } },
+      funcao: this._guarded(async (i) => {
+        await CreatorMissionService.deleteMission(missionId);
+        return this.painelMissoes(i);
+      }),
+    });
+
+    const recompensaTexto = missao.reward?.type
+      ? `${MISSION_REWARD_TYPE_LABELS[missao.reward.type] || missao.reward.type}` +
+        `${missao.reward.description ? ` — ${missao.reward.description}` : ''}` +
+        `${missao.reward.roleId ? `\nCargo: <@&${missao.reward.roleId}>` : ''}` +
+        `${missao.reward.logChannelId ? `\nLog em: <#${missao.reward.logChannelId}>` : ''}`
+      : 'Nenhuma';
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text(`🧩 **${missao.title}**`),
+      CV2.separator(),
+      CV2.text(
+        `**Descrição:** ${missao.description || 'Sem descrição.'}\n` +
+        `**Status:** ${missao.active ? '🟢 Ativa' : '🔴 Inativa'}\n` +
+        `**Tipo:** ${MISSION_TYPE_LABELS[missao.type] || missao.type}\n` +
+        `**Período:** ${MISSION_PERIOD_LABELS[missao.period] || missao.period}\n` +
+        `**Meta:** ${missao.goal?.target ?? 1}${missao.goal?.unit ? ` ${missao.goal.unit}` : ''}\n` +
+        `**Recompensa:** ${recompensaTexto}`,
+      ),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(tipoSelect),
+      CV2.row(periodoSelect),
+      CV2.row(toggleBtn, editarBtn, configurarRecompensaBtn, removerBtn),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _selecionarTipoRecompensaEdicao(interaction, missionId) {
+    const user = interaction.member.user.id;
+    const missao = await CreatorMissionService.getMission(missionId);
+    if (!missao) return this.painelMissoes(interaction);
+
+    const recompensaSelect = this.client.interactions.createSelect({
+      user,
+      feature: FEATURE_ID,
+      data: {
+        placeholder: 'Selecione o tipo de recompensa',
+        options: [
+          { label: 'Nenhuma (remover recompensa)', value: 'none', default: !missao.reward?.type },
+          ...Object.values(MISSION_REWARD_TYPES).map((rewardType) => ({
+            label: MISSION_REWARD_TYPE_LABELS[rewardType], value: rewardType, default: rewardType === missao.reward?.type,
+          })),
+        ],
+      },
+      funcao: this._guarded(async (i) => {
+        const valor = i.data.values?.[0];
+        if (valor === 'none') {
+          await CreatorMissionService.updateMission(missionId, { reward: null });
+          return this.painelMissaoDetalhe(i, missionId);
+        }
+        if (valor === MISSION_REWARD_TYPES.ROLE) return this._selecionarCargoRecompensaEdicao(i, missionId, valor);
+        return this._selecionarLogRecompensaEdicao(i, missionId, valor, null);
+      }),
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text(`🎁 **Configurar Recompensa — ${missao.title}**`),
+      CV2.separator(),
+      CV2.text('Selecione o tipo de recompensa (nunca moeda/saldo), ou escolha "Nenhuma" pra remover a recompensa atual.'),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(recompensaSelect),
+      this.navRow(user, (i) => this.painelMissaoDetalhe(i, missionId)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _selecionarCargoRecompensaEdicao(interaction, missionId, rewardType) {
+    const user = interaction.member.user.id;
+
+    const cargoSelect = this.client.interactions.createRoleSelect({
+      user,
+      feature: FEATURE_ID,
+      data: { placeholder: 'Selecione o cargo a atribuir' },
+      funcao: this._guarded((i) => {
+        const roleId = i.data.values?.[0] || null;
+        return this._selecionarLogRecompensaEdicao(i, missionId, rewardType, roleId);
+      }),
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text('🎁 **Configurar Recompensa — Passo 2 de 4**'),
+      CV2.separator(),
+      CV2.text('Selecione o cargo do Discord que será atribuído a quem concluir e tiver a recompensa registrada.'),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(cargoSelect),
+      this.navRow(user, (i) => this.painelMissaoDetalhe(i, missionId)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _selecionarLogRecompensaEdicao(interaction, missionId, rewardType, roleId) {
+    const user = interaction.member.user.id;
+
+    const logSelect = this.client.interactions.createChannelSelect({
+      user,
+      feature: FEATURE_ID,
+      data: { placeholder: 'Selecione o canal onde o log de recompensa será publicado', channel_types: [0, 5] },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdminModal(i);
+        const logChannelId = i.data.values?.[0] || null;
+        return this._abrirModalRecompensaEdicao(i, missionId, rewardType, roleId, logChannelId);
+      },
+    });
+
+    const semLogBtn = this.client.interactions.createButton({
+      user,
+      feature: FEATURE_ID,
+      data: { label: 'Sem Log', style: 2, emoji: { name: '⏭️' } },
+      funcao: async (i) => {
+        if (!(await this._hasAdminPerm(i))) return this._denyAdmin(i);
+        return this._abrirModalRecompensaEdicao(i, missionId, rewardType, roleId, null);
+      },
+    });
+
+    return this.editOriginal(interaction, [CV2.container([
+      CV2.text('🎁 **Configurar Recompensa — Passo 3 de 4**'),
+      CV2.separator(),
+      CV2.text('Selecione um canal do Discord pra publicar uma mensagem sempre que a recompensa for registrada, ou pule esta etapa.'),
+      CV2.separator(),
+      this._betaNotice(),
+      CV2.row(logSelect),
+      CV2.row(semLogBtn),
+      this.navRow(user, (i) => this.painelMissaoDetalhe(i, missionId)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _abrirModalRecompensaEdicao(interaction, missionId, rewardType, roleId, logChannelId) {
+    const user = interaction.member.user.id;
+    const missao = await CreatorMissionService.getMission(missionId);
+    if (!missao) return this.painelMissoes(interaction);
+
+    const modal = this.client.interactions.createModal({
+      user,
+      feature: FEATURE_ID,
+      title: 'Configurar Recompensa',
+      components: [
+        {
+          type: 1,
+          components: [{
+            type: 4, custom_id: 'recompensa', label: 'Descrição da recompensa', style: 1,
+            required: true, max_length: 200,
+            value: rewardType === missao.reward?.type ? (missao.reward?.description || undefined) : undefined,
+            placeholder: 'Ex: Cargo VIP da comunidade',
+          }],
+        },
+      ],
+      funcao: this._guardedModal((mi, fields) => this._salvarRecompensaEdicao(mi, missionId, rewardType, roleId, logChannelId, fields)),
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
+  }
+
+  async _salvarRecompensaEdicao(mi, missionId, rewardType, roleId, logChannelId, fields) {
+    const user = mi.member.user.id;
+
+    const responder = (containers) => this.client.interactions._callback(mi, {
+      type: 7,
+      data: CV2.payload(containers, { ephemeral: false }),
+    });
+
+    try {
+      await CreatorMissionService.updateMission(missionId, {
+        reward: {
+          type: rewardType,
+          description: fields.recompensa || null,
+          roleId: rewardType === MISSION_REWARD_TYPES.ROLE ? roleId : null,
+          logChannelId: logChannelId || null,
+        },
+      });
+    } catch (err) {
+      return responder([this._errorContainer(
+        'Não foi possível salvar a recompensa', err.message, user, (i) => this.painelMissoes(i),
+      )]);
+    }
+
+    return responder([CV2.container([
+      CV2.text('✅ **Recompensa atualizada!**'),
+      CV2.separator(),
+      this._betaNotice(),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
+
+  async _abrirModalEditarMissao(interaction, missionId) {
+    const user  = interaction.member.user.id;
+    const missao = await CreatorMissionService.getMission(missionId);
+    if (!missao) return this.painelMissoes(interaction);
+
+    const components = [
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'titulo', label: 'Título da missão', style: 1,
+          required: true, max_length: 100, value: missao.title,
+        }],
+      },
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'descricao', label: 'Descrição (opcional)', style: 2,
+          required: false, max_length: 300, value: missao.description || undefined,
+        }],
+      },
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'meta', label: 'Meta (número)', style: 1,
+          required: true, max_length: 6, value: String(missao.goal?.target ?? 1),
+        }],
+      },
+      {
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'unidade', label: 'Unidade da meta (opcional)', style: 1,
+          required: false, max_length: 30, value: missao.goal?.unit || undefined,
+        }],
+      },
+    ];
+
+    if (missao.reward?.type) {
+      components.push({
+        type: 1,
+        components: [{
+          type: 4, custom_id: 'recompensa', label: 'Descrição da recompensa', style: 1,
+          required: true, max_length: 200, value: missao.reward.description || undefined,
+        }],
+      });
+    }
+
+    const modal = this.client.interactions.createModal({
+      user,
+      feature: FEATURE_ID,
+      title: `Editar Missão — ${missao.title.slice(0, 30)}`,
+      components,
+      funcao: this._guardedModal((mi, fields) => this._salvarEdicaoMissao(mi, missionId, fields)),
+    });
+
+    return this.client.interactions.showModal(interaction, modal);
+  }
+
+  async _salvarEdicaoMissao(mi, missionId, fields) {
+    const user = mi.member.user.id;
+
+    const responder = (containers) => this.client.interactions._callback(mi, {
+      type: 7,
+      data: CV2.payload(containers, { ephemeral: false }),
+    });
+
+    try {
+      const missaoAtual = await CreatorMissionService.getMission(missionId);
+      const patch = {
+        title:       fields.titulo,
+        description: fields.descricao || '',
+        goal: {
+          target: Math.max(1, Number(fields.meta) || 1),
+          unit:   fields.unidade || null,
+        },
+      };
+      if (missaoAtual?.reward?.type && fields.recompensa !== undefined) {
+        patch.reward = { type: missaoAtual.reward.type, description: fields.recompensa };
+      }
+      await CreatorMissionService.updateMission(missionId, patch);
+    } catch (err) {
+      return responder([this._errorContainer(
+        'Não foi possível salvar a missão', err.message, user, (i) => this.painelMissoes(i),
+      )]);
+    }
+
+    return responder([CV2.container([
+      CV2.text('✅ **Missão atualizada!**'),
+      CV2.separator(),
+      this._betaNotice(),
+      this.navRow(user, (i) => this.painelMissoes(i)),
+    ], { accentColor: this.ACCENT })]);
+  }
 
   async painelComandos(interaction) {
     const user    = interaction.member.user.id;
@@ -861,17 +1521,6 @@ class TwitchConfigSystem extends CreatorModuleBase {
     ], { accentColor: this.ACCENT })]);
   }
 
-  /* ─────────────────────────────────────────────
-     Alertas — painel no Bot (Components V2).
-     ESPELHA a UI de Alertas do Dashboard (creators-twitch.ejs), mesmo
-     documento `twitch_alerts`, mesmo TwitchAlertService (CRUD) —
-     nenhuma regra nova. Diferente do Dashboard (que usa um <select>
-     HTML nativo pro tipo), o modal do Discord só aceita texto, então a
-     criação é uma cadeia de painéis (tipo → canal → cargo → modal da
-     mensagem/limiar), passando os valores já escolhidos adiante via
-     parâmetro — mesmo padrão de `painelComandoDetalhe(i, commandId)`.
-     ───────────────────────────────────────────── */
-
   _alertAmountLabel(type) {
     switch (type) {
       case ALERT_TYPES.BITS:     return 'Bits mínimos (opcional)';
@@ -941,7 +1590,6 @@ class TwitchConfigSystem extends CreatorModuleBase {
     return this.editOriginal(interaction, [CV2.container(componentes, { accentColor: this.ACCENT })]);
   }
 
-  /** Passo 1 de 3 — escolher o tipo do alerta (select, mesmos TYPES do service). */
   async _abrirSelectTipoAlerta(interaction) {
     const user = interaction.member.user.id;
 
@@ -973,7 +1621,6 @@ class TwitchConfigSystem extends CreatorModuleBase {
     ], { accentColor: this.ACCENT })]);
   }
 
-  /** Passo 2 de 3 — escolher o canal onde o alerta será publicado. */
   async _selecionarCanalAlerta(interaction, type) {
     const user = interaction.member.user.id;
 
@@ -999,14 +1646,7 @@ class TwitchConfigSystem extends CreatorModuleBase {
     ], { accentColor: this.ACCENT })]);
   }
 
-  /**
-   * Passo 3 de 3 — escolher o cargo (opcional). Cargo/canal não cabem
-   * em modal (só texto), então esta etapa ainda é um painel; a
-   * seleção (ou o botão "Sem Cargo") já abre o MODAL final direto —
-   * uma interação de select/botão pode responder com um modal
-   * normalmente, sem precisar de `deferUpdate` antes.
-   */
-  async _selecionarCargoAlerta(interaction, type, channelId) {
+    async _selecionarCargoAlerta(interaction, type, channelId) {
     const user = interaction.member.user.id;
 
     const cargoSelect = this.client.interactions.createRoleSelect({
@@ -1047,7 +1687,6 @@ class TwitchConfigSystem extends CreatorModuleBase {
     ], { accentColor: this.ACCENT })]);
   }
 
-  /** Modal final da criação — mensagem sempre, limiar só se o tipo aceitar (bits/raid/giftsub). */
   async _abrirModalCriarAlerta(interaction, type, channelId, roleId) {
     const user = interaction.member.user.id;
 
@@ -1169,9 +1808,7 @@ class TwitchConfigSystem extends CreatorModuleBase {
       }),
     });
 
-    // Canal/cargo — igual ao padrão de `painelAnuncios`: select grava
-    // direto no documento, sem passar por modal.
-    const canalSelect = this.client.interactions.createChannelSelect({
+            const canalSelect = this.client.interactions.createChannelSelect({
       user,
       feature: FEATURE_ID,
       data: { placeholder: 'Trocar o canal do alerta', channel_types: [0, 5] },

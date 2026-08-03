@@ -1,31 +1,17 @@
 'use strict';
 
 const CreatorMissionModel   = require('../../../Mongodb/creatorMission.js');
+const { MISSION_TYPES, PERIODS } = CreatorMissionModel;
 const CreatorMissionProgress= require('../../../Mongodb/creatorMissionProgress.js');
 const CreatorMissionLedger  = require('../../../Mongodb/creatorMissionLedger.js');
 const { EVENT_TYPES }       = CreatorMissionLedger;
 const AccountLinkService    = require('../CreatorAccounts/AccountLinkService.js');
+const { GuildDb } = require('../../../Mongodb/guild.js');
+const { getPlan, resolveActivePlan } = require('../../Utils/PremiumPlans.js');
+const DiscordRequest = require('../../DiscordRequest.js');
+const CV2             = require('../../Messages/CV2.js');
 
-/**
- * FASE 5 — Engine genérico de Missões de Criador (Bot).
- *
- * Este é o ÚNICO ponto de entrada pra criar/consultar missões,
- * registrar progresso, concluir missões e consultar histórico. Nunca
- * duplicar esta lógica em cada plataforma (Twitch, YouTube, ...) —
- * este service já é genérico por `platform` (mesmo padrão do
- * CreatorAccountLink). Ele ESPELHA site/services/creatorMissionService.js
- * do lado da Dashboard — os dois lêem/escrevem os mesmos documentos
- * Mongo, nenhum estado é duplicado entre processos.
- *
- * Regra inegociável (Fase 5): identificação de usuários é SEMPRE via
- * Discord User ID ↔ Platform User ID, resolvidos através de
- * CreatorAccountLink/AccountLinkService — nunca nome, login, display
- * name ou avatar.
- *
- * Regra inegociável (Fase 5): nada aqui toca Bank/BankAccount/
- * BankLedger ou qualquer coleção de economia/moeda. `reward` é apenas
- * uma estrutura preparatória.
- */
+const REWARD_ACCENT = 0x9146FF;
 
 class NoLinkedAccountError extends Error {
   constructor() {
@@ -41,16 +27,10 @@ class MissionNotFoundError extends Error {
   }
 }
 
-/* ─────────────────────────────────────────────
-   Missões (definição)
-   ───────────────────────────────────────────── */
-
-/** Lista as missões ativas de um servidor numa plataforma. */
 async function listActiveMissions(guildId, platform) {
   return CreatorMissionModel.find({ guildId, platform, active: true }).lean();
 }
 
-/** Lista TODAS as missões de um servidor numa plataforma (painel de administração). */
 async function listMissions(guildId, platform) {
   return CreatorMissionModel.find({ guildId, platform }).sort({ createdAt: -1 }).lean();
 }
@@ -59,11 +39,12 @@ async function getMission(missionId) {
   return CreatorMissionModel.findById(missionId).lean();
 }
 
-/**
- * Cria uma missão. Reforça em código (além do schema) que `reward`
- * nunca descreve moeda/saldo — isso é responsabilidade de todo
- * consumidor deste service, bot ou Dashboard.
- */
+async function _guildMissionLimit(guildId) {
+  const guildDoc = await GuildDb.findOne({ guildId }).lean();
+  const plan = getPlan(resolveActivePlan(guildDoc));
+  return { plan, limit: plan.twitchMissionLimit ?? 0 };
+}
+
 async function createMission({
   guildId,
   platform,
@@ -81,6 +62,12 @@ async function createMission({
     throw new Error('Missões de Criador não podem entregar moeda/saldo — apenas estruturas de recompensa (badge, cargo, texto customizado).');
   }
 
+          const { plan, limit } = await _guildMissionLimit(guildId);
+  const totalAtual = await CreatorMissionModel.countDocuments({ guildId, platform });
+  if (totalAtual >= limit) {
+    throw new Error(`Limite de missões do plano ${plan.name} atingido (${limit}). Remova uma missão existente ou faça upgrade do servidor para criar mais.`);
+  }
+
   return CreatorMissionModel.create({
     guildId, platform, key, type, title, description, goal, period, requiredPlan, createdBy, reward,
   });
@@ -90,16 +77,24 @@ async function setMissionActive(missionId, active) {
   return CreatorMissionModel.findByIdAndUpdate(missionId, { $set: { active } }, { new: true }).lean();
 }
 
-/* ─────────────────────────────────────────────
-   Verificação de vínculo (obrigatória antes de participar)
-   ───────────────────────────────────────────── */
+async function updateMission(missionId, patch = {}) {
+  if (patch.reward?.type && ['currency', 'coins', 'saldo', 'moeda'].includes(String(patch.reward.type).toLowerCase())) {
+    throw new Error('Missões de Criador não podem entregar moeda/saldo — apenas estruturas de recompensa (badge, cargo, texto customizado).');
+  }
 
-/**
- * Garante que existe um vínculo ativo Discord ↔ Plataforma antes de
- * qualquer participação. Lança NoLinkedAccountError (com a mensagem
- * padrão pedida na Fase 5) se não existir — quem chamar deve exibir
- * essa mensagem ao usuário, nunca registrar progresso sem vínculo.
- */
+  const $set = {};
+  for (const campo of ['title', 'description', 'goal', 'type', 'period', 'requiredPlan', 'reward']) {
+    if (Object.prototype.hasOwnProperty.call(patch, campo)) $set[campo] = patch[campo];
+  }
+
+  return CreatorMissionModel.findByIdAndUpdate(missionId, { $set }, { new: true }).lean();
+}
+
+async function deleteMission(missionId) {
+  await CreatorMissionProgress.deleteMany({ missionId });
+  await CreatorMissionModel.deleteOne({ _id: missionId });
+}
+
 async function requireLinkedAccount(discordUserId, platform) {
   const link = await AccountLinkService.getLink(discordUserId, platform);
   if (!link || link.status !== 'connected') {
@@ -108,26 +103,14 @@ async function requireLinkedAccount(discordUserId, platform) {
   return link;
 }
 
-/* ─────────────────────────────────────────────
-   Progresso / Participação
-   ───────────────────────────────────────────── */
-
-/** Progresso do usuário numa missão específica (ou null se nunca participou). */
 async function getProgress(missionId, discordUserId) {
   return CreatorMissionProgress.findOne({ missionId, discordUserId }).lean();
 }
 
-/** Todo o progresso (histórico de estado) de um usuário num servidor. */
 async function getUserProgressForGuild(discordUserId, guildId) {
   return CreatorMissionProgress.find({ discordUserId, guildId }).sort({ updatedAt: -1 }).lean();
 }
 
-/**
- * Garante (cria se preciso) o documento de progresso de um usuário
- * numa missão — SEMPRE após confirmar o vínculo (requireLinkedAccount).
- * Não deve ser chamado diretamente por consumidores externos; use
- * registerProgress, que já faz essa checagem.
- */
 async function _ensureProgress(mission, discordUserId, platformUserId) {
   const existing = await CreatorMissionProgress.findOne({ missionId: mission._id, discordUserId });
   if (existing) return existing;
@@ -157,20 +140,6 @@ async function _ensureProgress(mission, discordUserId, platformUserId) {
   return created;
 }
 
-/**
- * Registra progresso de um usuário numa missão. Este é o ponto de
- * entrada que futuros consumidores (monitoramento de lives, comandos
- * do Discord, EventSub, Logic Script, ...) devem chamar.
- *
- * - SEMPRE verifica vínculo ativo antes de qualquer coisa (regra
- *   obrigatória da Fase 5). Se não houver vínculo, lança
- *   NoLinkedAccountError — quem chamar deve informar a mensagem
- *   "Conecte sua conta Twitch em Contas Conectadas para participar
- *   das missões." e não deve registrar nada.
- * - Não permite progresso em missão inativa/inexistente.
- * - Marca como concluída automaticamente ao atingir a meta e grava
- *   o evento no histórico (ledger).
- */
 async function registerProgress(discordUserId, missionId, amount = 1) {
   const mission = await CreatorMissionModel.findOne({ _id: missionId, active: true }).lean();
   if (!mission) throw new MissionNotFoundError();
@@ -220,11 +189,6 @@ async function registerProgress(discordUserId, missionId, amount = 1) {
   return progressDoc.toObject();
 }
 
-/**
- * Registra a recompensa (ESTRUTURAL — sem entregar moeda/saldo) de
- * uma missão já concluída. Preparado para uso futuro; por enquanto só
- * marca o status e grava o evento no histórico.
- */
 async function registerReward(discordUserId, missionId) {
   const progressDoc = await CreatorMissionProgress.findOne({ missionId, discordUserId });
   if (!progressDoc || progressDoc.status !== 'completed') return null;
@@ -232,6 +196,35 @@ async function registerReward(discordUserId, missionId) {
 
   progressDoc.reward = { status: 'registered', registeredAt: new Date() };
   await progressDoc.save();
+
+  const mission = await CreatorMissionModel.findById(progressDoc.missionId).lean();
+
+  if (mission?.reward?.type === 'role' && mission.reward.roleId) {
+    await DiscordRequest(`/guilds/${progressDoc.guildId}/members/${discordUserId}/roles/${mission.reward.roleId}`, {
+      method: 'PUT',
+    }).catch((err) =>
+      console.error(`[CreatorMissionService] Falha ao atribuir cargo de recompensa da missão ${missionId}:`, err.message));
+  }
+
+  if (mission?.reward?.logChannelId) {
+    const container = CV2.container([
+      CV2.text(
+        `🧩 **Recompensa registrada — ${mission.title}**\n` +
+        `<@${discordUserId}> concluiu a missão e teve a recompensa registrada.` +
+        (mission.reward.description ? `\n${mission.reward.description}` : ''),
+      ),
+    ], { accentColor: REWARD_ACCENT });
+
+    await DiscordRequest(`/channels/${mission.reward.logChannelId}/messages`, {
+      method: 'POST',
+      body: {
+        flags:            CV2.IS_COMPONENTS_V2,
+        components:       [container],
+        allowed_mentions: { parse: [] },
+      },
+    }).catch((err) =>
+      console.error(`[CreatorMissionService] Falha ao publicar log de recompensa da missão ${missionId}:`, err.message));
+  }
 
   await CreatorMissionLedger.create({
     missionId: progressDoc.missionId,
@@ -247,10 +240,6 @@ async function registerReward(discordUserId, missionId) {
   return progressDoc.toObject();
 }
 
-/* ─────────────────────────────────────────────
-   Histórico
-   ───────────────────────────────────────────── */
-
 async function getHistory(discordUserId, guildId, limit = 50) {
   return CreatorMissionLedger.find({ discordUserId, guildId })
     .sort({ criadoEm: -1 })
@@ -262,11 +251,16 @@ module.exports = {
   NoLinkedAccountError,
   MissionNotFoundError,
 
+  MISSION_TYPES,
+  PERIODS,
+
   listActiveMissions,
   listMissions,
   getMission,
   createMission,
   setMissionActive,
+  updateMission,
+  deleteMission,
 
   requireLinkedAccount,
 
