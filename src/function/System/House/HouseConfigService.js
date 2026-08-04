@@ -152,6 +152,23 @@ class HouseConfigService {
     return doc;
   }
 
+  async updateCallMessage(guildId, { type, content, embed }) {
+    const doc = await this.getOrCreate(guildId);
+    if (type !== undefined) doc.call.message.type = type;
+    if (content !== undefined) doc.call.message.content = content;
+    if (embed !== undefined) doc.call.message.embed = embed;
+    doc.markModified('call.message');
+    await doc.save();
+    return doc;
+  }
+
+  async updateCallDuration(guildId, minutes) {
+    const doc = await this.getOrCreate(guildId);
+    doc.call.duration = minutes; // null pra desativar timeout
+    await doc.save();
+    return doc;
+  }
+
   async updateCallInactivity(guildId, { enabled, days, punish } = {}) {
     const doc = await this.getOrCreate(guildId);
     if (enabled !== undefined) doc.call.inactivity.enabled = enabled;

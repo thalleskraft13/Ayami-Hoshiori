@@ -43,20 +43,47 @@ class CallScheduler {
     await this.tasks.cancelHouseCallScheduled(guildId);
   }
 
-  async runScheduledCall(guildId) {
+  async syncCallTimeout(guildId) {
+    const openCall = await this.call.getOpen(guildId);
+
+    if (!openCall?.closesAt) {
+      return this.cancelCallTimeout(guildId);
+    }
+
+    await this.tasks.createHouseCallTimeout({ guildId, closesAt: openCall.closesAt });
+  }
+
+  async cancelCallTimeout(guildId) {
+    await this.tasks.cancelHouseCallTimeout(guildId);
+  }
+
+  async runCallTimeout(guildId) {
     const cfg = await this.config.get(guildId);
-    if (!cfg?.enabled || !cfg.call?.schedule?.enabled) return;
-    if (!(await this.premium.hasSubscription(guildId))) return;
-    if (!cfg.call.channelId) return;
+    if (!cfg) return;
 
-    const existing = await this.call.getOpen(guildId);
-    if (existing) return;
+    const openCall = await this.call.getOpen(guildId);
+    if (!openCall) return;
 
-    const started = await this.call.start(guildId, this.client.clientId ?? 'system', cfg.call.channelId);
-    if (!started.ok) return;
+    const expected = await this._expectedCallMembers(guildId);
+    const result    = await this.call.closeByTimeout(guildId, expected);
+    if (!result.ok) return;
 
-    await this.history.log(guildId, { action: 'chamada_iniciada', detail: this.client.t('house.detail_call_auto_started', {}) });
+    await this.history.log(guildId, {
+      action: 'chamada_encerrada',
+      detail: this.client.t('house.detail_call_auto_closed', {
+        percent: result.stats.percent, present: result.stats.present, total: result.stats.total,
+      }),
+    });
 
+    await this.logCallClosed(guildId, cfg, result.stats, null);
+  }
+
+  async _expectedCallMembers(guildId) {
+    const occupied = await this.characters.listOccupied(guildId);
+    return occupied.map(c => c.currentUserId).filter(Boolean);
+  }
+
+  buildCallMessagePayload(cfg) {
     const mention = cfg.call.notifyRoleId ? `<@&${cfg.call.notifyRoleId}> ` : '';
 
     const confirmButton = {
@@ -66,14 +93,62 @@ class CallScheduler {
       custom_id: 'house_call_confirm',
     };
 
+    const message = cfg.call.message ?? {};
+    const body = {
+      components: [{ type: 1, components: [confirmButton] }],
+      allowed_mentions: { roles: cfg.call.notifyRoleId ? [cfg.call.notifyRoleId] : [] },
+    };
+
+    if (message.type === 'embed' && message.embed) {
+      body.content = mention || undefined;
+      body.embeds  = [message.embed];
+    } else if (message.type === 'normal' && message.content) {
+      body.content = `${mention}${message.content}`;
+    } else {
+      body.content = `${mention}${this.client.t('house.auto_call_message', {})}`;
+    }
+
+    return body;
+  }
+
+  async sendCallMessage(cfg) {
+    if (!cfg.call.channelId) return;
+    const body = this.buildCallMessagePayload(cfg);
     await DiscordRequest(`/channels/${cfg.call.channelId}/messages`, {
-      method: 'POST',
-      body: {
-        content: `${mention}${this.client.t('house.auto_call_message', {})}`,
-        components: [{ type: 1, components: [confirmButton] }],
-        allowed_mentions: { roles: cfg.call.notifyRoleId ? [cfg.call.notifyRoleId] : [] },
-      },
-    }).catch(err => console.error('[House/CallScheduler] Falha ao enviar mensagem da chamada automática:', err?.message));
+      method: 'POST', body,
+    }).catch(err => console.error('[House/CallScheduler] Falha ao enviar mensagem da chamada:', err?.message));
+  }
+
+  async runScheduledCall(guildId) {
+    const cfg = await this.config.get(guildId);
+    if (!cfg?.enabled || !cfg.call?.schedule?.enabled) return;
+    if (!(await this.premium.hasSubscription(guildId))) return;
+    if (!cfg.call.channelId) return;
+
+    const existing = await this.call.getOpen(guildId);
+    if (existing) return;
+
+    const started = await this.call.start(guildId, this.client.clientId ?? 'system', cfg.call.channelId, cfg.call.duration);
+    if (!started.ok) return;
+
+    await this.history.log(guildId, { action: 'chamada_iniciada', detail: this.client.t('house.detail_call_auto_started', {}) });
+
+    await this.sendCallMessage(cfg);
+    await this.syncCallTimeout(guildId);
+  }
+
+  async startManualCall(guildId, startedBy, cfg) {
+    if (!cfg.call.channelId) return { ok: false, reason: 'canal_nao_definido' };
+
+    const started = await this.call.start(guildId, startedBy, cfg.call.channelId, cfg.call.duration);
+    if (!started.ok) return started;
+
+    await this.history.log(guildId, { action: 'chamada_iniciada', staffId: startedBy, detail: 'Manual' });
+
+    await this.sendCallMessage(cfg);
+    await this.syncCallTimeout(guildId);
+
+    return started;
   }
 
   async syncInactivityTask(guildId, cfg) {

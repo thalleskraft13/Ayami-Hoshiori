@@ -538,7 +538,8 @@ module.exports = {
             choices: [
               { name: '🔗 Fluxo', name_localizations: { 'en-US': '🔗 Flow', 'en-GB': '🔗 Flow', 'es-ES': '🔗 Flujo' }, value: 'fluxo' },
               { name: '📋 Embed', name_localizations: { 'en-US': '📋 Embed', 'en-GB': '📋 Embed', 'es-ES': '📋 Embed' }, value: 'embed' },
-              { name: '🧩 Components V2', name_localizations: { 'en-US': '🧩 Components V2', 'en-GB': '🧩 Components V2', 'es-ES': '🧩 Components V2' }, value: 'components_v2' }
+              { name: '🧩 Components V2', name_localizations: { 'en-US': '🧩 Components V2', 'en-GB': '🧩 Components V2', 'es-ES': '🧩 Components V2' }, value: 'components_v2' },
+              { name: '🎫 Ticket', name_localizations: { 'en-US': '🎫 Ticket', 'en-GB': '🎫 Ticket', 'es-ES': '🎫 Ticket' }, value: 'ticket' }
             ] },
           { type: 3, name: 'categoria',
           name_localizations: { 'en-US': "category", 'en-GB': "category", 'es-ES': "categoria" }, description: 'Filtrar por categoria',
@@ -710,15 +711,19 @@ async function _findAnyLibEntry(client, libId) {
   const msgEntry = await client.messageLibraryManager.getById(libId);
   if (msgEntry) return { kind: msgEntry.type, entry: msgEntry };
 
+  const ticketEntry = await client.ticketSystem.templates.getById(libId);
+  if (ticketEntry) return { kind: 'ticket', entry: ticketEntry };
+
   return null;
 }
 
 async function _pesquisar(interaction, client, opts, userId, e) {
   const tipo = opts.tipo;
 
-  const wantFlows  = !tipo || tipo === 'fluxo';
-  const wantEmbeds = !tipo || tipo === 'embed' || tipo === 'components_v2';
-  const msgType    = (tipo === 'embed' || tipo === 'components_v2') ? tipo : undefined;
+  const wantFlows   = !tipo || tipo === 'fluxo';
+  const wantEmbeds  = !tipo || tipo === 'embed' || tipo === 'components_v2';
+  const wantTickets = (!tipo || tipo === 'ticket') && (!opts.categoria || opts.categoria === 'Tickets');
+  const msgType     = (tipo === 'embed' || tipo === 'components_v2') ? tipo : undefined;
 
   const baseFilters = {
     query:    opts.nome,
@@ -728,14 +733,16 @@ async function _pesquisar(interaction, client, opts, userId, e) {
     sort:     opts.ordenar || 'installs'
   };
 
-  const [flowsRes, msgsRes] = await Promise.all([
-    wantFlows  ? client.libraryManager.search({ ...baseFilters, page: 0, limit: 200 }) : { results: [] },
-    wantEmbeds ? client.messageLibraryManager.search({ ...baseFilters, type: msgType, page: 0, limit: 200 }) : { results: [] }
+  const [flowsRes, msgsRes, ticketsRes] = await Promise.all([
+    wantFlows   ? client.libraryManager.search({ ...baseFilters, page: 0, limit: 200 }) : { results: [] },
+    wantEmbeds  ? client.messageLibraryManager.search({ ...baseFilters, type: msgType, page: 0, limit: 200 }) : { results: [] },
+    wantTickets ? client.ticketSystem.templates.search({ ...baseFilters, page: 0, limit: 200 }) : { results: [] }
   ]);
 
   const combined = [
     ...flowsRes.results.map(r => ({ ...r, _kind: 'fluxo' })),
-    ...msgsRes.results.map(r => ({ ...r, _kind: r.type }))
+    ...msgsRes.results.map(r => ({ ...r, _kind: r.type })),
+    ...ticketsRes.results.map(r => ({ ...r, _kind: 'ticket', category: 'Tickets' }))
   ];
 
   if (!combined.length) {
@@ -769,13 +776,13 @@ async function _renderUnifiedSearchPage(interaction, client, combined, filters, 
 
   const authorNames = await Promise.all(
     pageItems.map(entry => _resolveAuthorName(
-      entry._kind === 'fluxo' ? client.libraryManager : client.messageLibraryManager,
+      entry._kind === 'embed' || entry._kind === 'components_v2' ? client.messageLibraryManager : client.libraryManager,
       entry.authorId, client, ctx, entry.authorName
     ))
   );
   pageItems.forEach((entry, i) => { entry._resolvedAuthor = authorNames[i]; });
 
-  const kindIcon = (k) => k === 'fluxo' ? '🔗' : (k === 'components_v2' ? '🧩' : '📋');
+  const kindIcon = (k) => k === 'fluxo' ? '🔗' : (k === 'components_v2' ? '🧩' : (k === 'ticket' ? '🎫' : '📋'));
 
   const filterDesc = [];
   if (filters.query)    filterDesc.push(`🔎 \`${filters.query}\``);
@@ -850,6 +857,9 @@ async function _renderUnifiedDetail(interaction, client, libId, userId, e, kind,
   if (kind === 'fluxo') {
     return _renderDetail(interaction, client, client.libraryManager, libId, userId, e, entry);
   }
+  if (kind === 'ticket') {
+    return _ticketRenderDetail(interaction, client, libId, userId, e, entry);
+  }
   return _embedsRenderDetail(interaction, client, client.messageLibraryManager, libId, userId, e, entry);
 }
 
@@ -874,6 +884,9 @@ async function _instalar(interaction, client, opts, userId, guildId, e) {
   }
   if (found.kind === 'fluxo') {
     return _flowInstalar(interaction, client, client.libraryManager, opts, userId, guildId, e);
+  }
+  if (found.kind === 'ticket') {
+    return _ticketInstalar(interaction, client, opts, userId, guildId, e);
   }
   return _embedsInstalar(interaction, client, client.messageLibraryManager, opts, userId, guildId, e);
 }
@@ -2128,6 +2141,93 @@ async function _embedsInstalar(interaction, client, lib, opts, userId, guildId, 
 
   return _edit(interaction, client, cv2Payload([
     cv2Text(client.t('biblioteca.embeds_install_success', { ...ctx, eFesta: e.festa, entryName: entry.name, savedId: draft._id.toString() }))
+  ], { accentColor: COLOR.success }));
+}
+
+async function _ticketRenderDetail(interaction, client, libId, userId, e, entry = null) {
+  const lib = client.ticketSystem.templates;
+  entry = entry || await lib.getById(libId);
+  if (!entry) return;
+
+  const ctx = localeCtx(interaction);
+  const numLocale = ctx.system?.locale || 'pt-BR';
+
+  const authorName = await _resolveAuthorName(client.libraryManager, entry.authorId, client, ctx, entry.authorName);
+  const tags = entry.tags?.length ? entry.tags.map(t => `\`${t}\``).join(' ') : client.t('biblioteca.detail_no_tags', ctx);
+
+  const btnInstall = btn(client, userId, client.t('biblioteca.btn_install', ctx), 3, async (i) => {
+    await _deferUpdate(i);
+    const iCtx = localeCtx(i);
+
+    if (!(await _hasManagePerm(i.guild_id, userId, client, 'instalar'))) {
+      return _edit(i, client, cv2Payload([
+        cv2Text(client.t('biblioteca.no_permission_install', { ...iCtx, eBrava: e.brava }))
+      ], { accentColor: COLOR.danger }));
+    }
+
+    try {
+      const panelId = await lib.install({ libId, guildId: i.guild_id, userId });
+      return _edit(i, client, cv2Payload([
+        cv2Text(client.t('biblioteca.ticket_install_success', { ...iCtx, eFesta: e.festa, entryName: entry.name, panelId }))
+      ], { accentColor: COLOR.success }));
+    } catch (err) {
+      return _edit(i, client, cv2Payload([
+        cv2Text(client.t('biblioteca.generic_error', { ...iCtx, eAssustada: e.assustada, message: err.message }))
+      ], { accentColor: COLOR.danger }));
+    }
+  });
+
+  const btnLike = btn(client, userId, `👍 ${entry.stats.likes}`, 2, async (i) => {
+    await _deferUpdate(i);
+    await lib.vote(libId, userId, 'like');
+    const updated = await lib.getById(libId);
+    return _ticketRenderDetail(i, client, libId, userId, e, updated);
+  });
+
+  const btnDislike = btn(client, userId, `👎 ${entry.stats.dislikes}`, 2, async (i) => {
+    await _deferUpdate(i);
+    await lib.vote(libId, userId, 'dislike');
+    const updated = await lib.getById(libId);
+    return _ticketRenderDetail(i, client, libId, userId, e, updated);
+  });
+
+  const blocks = [
+    cv2Text(`# 🎫 ${entry.name} \`v${entry.version}\`\n${entry.fullDesc || entry.shortDesc || client.t('biblioteca.detail_no_desc', ctx)}`),
+    cv2Divider(),
+    cv2Text(
+      `> ${client.t('biblioteca.detail_author', ctx)} ${authorName}\n` +
+      `> ${client.t('biblioteca.detail_category', ctx)} Tickets\n` +
+      `> ${client.t('biblioteca.detail_installs', ctx)} ${entry.stats.installs.toLocaleString(numLocale)}\n` +
+      `> ${client.t('biblioteca.detail_tags', ctx)} ${tags}\n` +
+      `> ${client.t('biblioteca.detail_id', ctx)} \`${entry.libId}\``
+    ),
+    cv2Divider(),
+    row(btnInstall, btnLike, btnDislike),
+  ];
+
+  return _edit(interaction, client, cv2Payload(blocks, { accentColor: COLOR.library }));
+}
+
+async function _ticketInstalar(interaction, client, opts, userId, guildId, e) {
+  const lib = client.ticketSystem.templates;
+  const entry = await lib.getById(opts.id);
+  const ctx = localeCtx(interaction);
+  if (!entry) {
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(client.t('biblioteca.entry_not_found', { ...ctx, eEmduvida: e.emduvida }))
+    ], { accentColor: COLOR.danger }));
+  }
+
+  if (!(await _hasManagePerm(guildId, userId, client, 'instalar'))) {
+    return _edit(interaction, client, cv2Payload([
+      cv2Text(client.t('biblioteca.no_permission_install', { ...ctx, eBrava: e.brava }))
+    ], { accentColor: COLOR.danger }));
+  }
+
+  const panelId = await lib.install({ libId: opts.id, guildId, userId });
+
+  return _edit(interaction, client, cv2Payload([
+    cv2Text(client.t('biblioteca.ticket_install_success', { ...ctx, eFesta: e.festa, entryName: entry.name, panelId }))
   ], { accentColor: COLOR.success }));
 }
 

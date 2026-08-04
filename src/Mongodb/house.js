@@ -64,12 +64,20 @@ const callInactivitySchema = new Schema({
   punish:  { type: Boolean, default: true },
 }, { _id: false });
 
+const callMessageSchema = new Schema({
+  type:    { type: String, enum: ['normal', 'embed'], default: 'embed' },
+  content: { type: String, default: null },
+  embed:   { type: Schema.Types.Mixed, default: null },
+}, { _id: false });
+
 const callConfigSchema = new Schema({
   channelId:    { type: String, default: null },
   notifyRoleId: { type: String, default: null },
   logChannelId: { type: String, default: null },
   schedule:     { type: callScheduleSchema, default: () => ({}) },
   inactivity:   { type: callInactivitySchema, default: () => ({}) },
+  message:      { type: callMessageSchema, default: () => ({}) },
+  duration:     { type: Number, default: null }, // em minutos; null = sem timeout (fechamento manual, comportamento atual)
 }, { _id: false });
 
 const permissionsSchema = new Schema({

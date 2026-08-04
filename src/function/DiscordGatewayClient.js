@@ -420,6 +420,10 @@ if (payload.t === 'GUILD_SCHEDULED_EVENT_USER_ADD') return await this._onSchedul
   if (data.guild_id && data.author?.id && !data.author?.bot) {
     Missions.progress(data.author.id, { client: this, guildId: data.guild_id, actor: data.author }, 'enviar_mensagens', 1);
   }
+
+  if (data.guild_id && data.author?.id && !data.author?.bot) {
+    this.ticketSystem.actionMenu.handleMessage(data).catch(err => console.error('[TicketActionMenu]', err));
+  }
 }
 
     async _onMemberAdd(data) {
@@ -530,6 +534,7 @@ async _onScheduledEventUserAdd(data) {
 
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
      await this.MediaManager.init()
+   // await this.registerSlashCommands()
     if (!this._commandsLoaded) {
         this._commandsLoaded = true;
         await this._loadCommands();

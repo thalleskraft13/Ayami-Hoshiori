@@ -60,6 +60,7 @@ const PLANS = {
 
     tickets: {
       maxQuestions: 5,
+      maxFaqs: 5,
       advancedTypeLimit: 0,
       modalEnabled: false,
     },
@@ -117,6 +118,7 @@ const PLANS = {
 
     tickets: {
       maxQuestions: 10,
+      maxFaqs: 10,
       advancedTypeLimit: 2,
       modalEnabled: true,
     },
@@ -173,6 +175,7 @@ const PLANS = {
 
     tickets: {
       maxQuestions: Infinity,
+      maxFaqs: 15,
       advancedTypeLimit: Infinity,
       modalEnabled: true,
     },
@@ -229,6 +232,7 @@ const PLANS = {
 
     tickets: {
       maxQuestions: Infinity,
+      maxFaqs: 30,
       advancedTypeLimit: Infinity,
       modalEnabled: true,
     },

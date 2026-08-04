@@ -789,6 +789,7 @@ class HouseSystem {
           const expected = await this._expectedCallMembers(guildId);
           const result   = await this.call.closeAndSummarize(guildId, expected);
           if (result.ok) {
+            await this.callScheduler.cancelCallTimeout(guildId);
             await this.history.log(guildId, {
               action: 'chamada_encerrada', staffId: userId,
               detail: `Presença: ${result.stats.percent}% (${result.stats.present}/${result.stats.total})`,
@@ -806,8 +807,16 @@ class HouseSystem {
         data: { label: t('house.btn_start_call'), style: 3 },
         funcao: async (i, client) => {
           await client.interactions.defer(i);
-          await this.call.start(guildId, userId, cfg.call.channelId || null);
-          await this.history.log(guildId, { action: 'chamada_iniciada', staffId: userId, detail: 'Manual' });
+          const iCtx = localeCtx(i);
+
+          if (!cfg.call.channelId) {
+            return this.editOriginal(i, [this.errorContainer(
+              this.client.t('house.call_channel_missing', iCtx),
+              { userId, ctx: iCtx, destino: (ii) => this.callPanel(ii) },
+            )]);
+          }
+
+          await this.callScheduler.startManualCall(guildId, userId, cfg);
           return this.callPanel(i);
         },
       });
@@ -920,6 +929,65 @@ class HouseSystem {
       },
     });
 
+    const callMessageBtn = this.client.interactions.createButton({
+      user: userId,
+      data: { label: t('house.btn_edit_call_message'), style: 2 },
+      funcao: async (i, client) => {
+        return EmbedBuilderUI.open(i, client, {
+          user: userId,
+          existingEmbed: cfg.call.message?.embed ?? null,
+          title: t('house.modal_call_message_title'),
+          onDone: async (rootInteraction, embedResult) => {
+            await this.config.updateCallMessage(guildId, {
+              type: embedResult ? 'embed' : 'normal',
+              embed: embedResult,
+            });
+            await this.history.log(guildId, { action: 'mensagem_chamada_atualizada', staffId: userId });
+            return this.callConfigPanel(rootInteraction);
+          },
+        });
+      },
+    });
+
+    const durationBtn = this.client.interactions.createButton({
+      user: userId,
+      data: { label: t('house.btn_set_call_duration'), style: 2 },
+      funcao: async (i, client) => {
+        const modal = client.interactions.createModal({
+          user: userId,
+          title: this.client.t('house.modal_call_duration_title', localeCtx(i)),
+          components: [
+            { type: 1, components: [{ type: 4, custom_id: 'minutos', style: 1, label: this.client.t('house.field_duration_minutes', localeCtx(i)), required: false, max_length: 5, value: cfg.call.duration != null ? String(cfg.call.duration) : '' }] },
+          ],
+          funcao: async (modalInt, modalClient, fields) => {
+            await modalClient.interactions.defer(modalInt);
+            const modalCtx = localeCtx(modalInt);
+            const raw = (fields.minutos ?? '').trim();
+
+            let minutes = null;
+            if (raw !== '') {
+              minutes = parseInt(raw, 10);
+              if (!Number.isInteger(minutes) || minutes < 1) {
+                return this.editOriginal(modalInt, [this.errorContainer(
+                  this.client.t('house.invalid_duration', modalCtx),
+                  { userId, ctx: modalCtx, destino: (ii) => this.callConfigPanel(ii) },
+                )]);
+              }
+            }
+
+            await this.config.updateCallDuration(guildId, minutes);
+            await this.callScheduler.syncCallTimeout(guildId);
+            await this.history.log(guildId, {
+              action: 'duracao_chamada_definida', staffId: userId,
+              detail: minutes != null ? `${minutes} min` : this.client.t('house.status_disabled', modalCtx),
+            });
+            return this.callConfigPanel(modalInt);
+          },
+        });
+        return client.interactions.showModal(i, modal);
+      },
+    });
+
     const schedule   = cfg.call.schedule;
     const inactivity = cfg.call.inactivity;
     const notDefined = t('house.not_defined');
@@ -937,6 +1005,9 @@ class HouseSystem {
           inactivityLine: inactivity.enabled
             ? `🟢 ${t('house.inactivity_days_count', { days: inactivity.days })} · ${inactivity.punish ? t('house.punish_kick') : t('house.punish_log_only')}`
             : t('house.status_disabled'),
+          durationLine: cfg.call.duration != null
+            ? t('house.duration_minutes_count', { minutes: cfg.call.duration })
+            : t('house.duration_manual_only'),
         })
       ),
       CV2.text(t('house.call_config_note')),
@@ -944,6 +1015,7 @@ class HouseSystem {
       CV2.row(channelSelect),
       CV2.row(roleSelect),
       CV2.row(scheduleBtn, logChannelBtn, inactivityBtn),
+      CV2.row(callMessageBtn, durationBtn),
       this.backRow(userId, (i) => this.callPanel(i), ctx),
     ];
 
@@ -1293,6 +1365,7 @@ class HouseSystem {
       'modulo_ativado', 'modulo_desativado', 'escolha_personagem_desativada', 'escolha_personagem_ativada',
       'decoracao_emoji_desativado', 'decoracao_emoji_ativado', 'chamada_automatica_ativada',
       'chamada_automatica_desativada', 'checagem_inatividade_ativada', 'checagem_inatividade_desativada',
+      'mensagem_chamada_atualizada', 'duracao_chamada_definida',
     ];
     if (!KNOWN.includes(action)) return action;
     return this.client.t(`house.action_${action}`, ctx);
@@ -1337,6 +1410,94 @@ class HouseSystem {
     blocks.push(this.backRow(userId, (i) => this.mainPanel(i), ctx));
 
     return this.editOriginal(interaction, [CV2.container(blocks, { accentColor: ACCENT })]);
+  }
+
+  // ---------------------------------------------------------------------
+  // /house personagens lista | /house personagens usuario
+  // ---------------------------------------------------------------------
+
+  async _personagensListaContainer(guildId, userId, page, ctx) {
+    const t = (key, extra) => this.client.t(key, { ...ctx, ...extra });
+    const perPage = 8;
+
+    const all     = await this.characters.list(guildId);
+    const total    = all.length;
+    const maxPage   = Math.max(0, Math.ceil(total / perPage) - 1);
+    const clamped    = Math.min(Math.max(0, page), maxPage);
+    const slice        = all.slice(clamped * perPage, clamped * perPage + perPage);
+
+    const list = slice.length
+      ? slice.map(c => t('house.characters_list_row', {
+          name: c.name,
+          status: c.available ? t('house.character_available') : t('house.character_occupied'),
+          occupied: c.occupiedSlots,
+          slots: c.slots,
+          holder: c.currentUserId ? `<@${c.currentUserId}>` : t('house.slot_vacant'),
+        })).join('\n')
+      : t('house.characters_list_empty');
+
+    const navButtons = [];
+    if (clamped > 0) {
+      navButtons.push(this.client.interactions.createButton({
+        user: userId, data: { label: t('house.btn_previous'), style: 2 },
+        funcao: async (i, client) => { await client.interactions.defer(i); return this.personagensListaPanel(i, clamped - 1); },
+      }));
+    }
+    if (clamped < maxPage) {
+      navButtons.push(this.client.interactions.createButton({
+        user: userId, data: { label: t('house.btn_next'), style: 2 },
+        funcao: async (i, client) => { await client.interactions.defer(i); return this.personagensListaPanel(i, clamped + 1); },
+      }));
+    }
+
+    const blocks = [
+      CV2.text(t('house.characters_list_title')),
+      CV2.text(t('house.characters_list_page', { page: clamped + 1, maxPage: maxPage + 1, total })),
+      CV2.text(list),
+    ];
+    if (navButtons.length) blocks.push(CV2.separator(), CV2.row(...navButtons));
+
+    return CV2.container(blocks, { accentColor: ACCENT });
+  }
+
+  async personagensListaPanel(interaction, page = 0) {
+    const guildId = interaction.guild_id;
+    const userId  = interaction.member?.user?.id;
+    const cfg     = await this.config.getOrCreate(guildId);
+    const ctx     = localeCtx(interaction);
+
+    if (!(await this._requireLevel(interaction, guildId, 'visualizador', cfg))) return;
+
+    const container = await this._personagensListaContainer(guildId, userId, page, ctx);
+    return this.editOriginal(interaction, [container]);
+  }
+
+  async _characterUserContainer(guildId, targetUserId, ctx) {
+    const t = (key, extra) => this.client.t(key, { ...ctx, ...extra });
+    const character = await this.characters.findByUser(guildId, targetUserId);
+
+    if (!character) {
+      return CV2.container([
+        CV2.text(t('house.character_user_title')),
+        CV2.text(t('house.character_user_none', { userId: targetUserId })),
+      ], { accentColor: ACCENT });
+    }
+
+    const blocks = [
+      CV2.text(t('house.character_user_title')),
+      CV2.text(t('house.character_user_found', {
+        userId: targetUserId,
+        name: character.name,
+        description: character.description || t('house.not_defined'),
+        roleId: character.roleId ? `<@&${character.roleId}>` : t('house.not_defined'),
+        chosenAt: character.chosenAt ? `<t:${Math.floor(character.chosenAt.getTime() / 1000)}:R>` : t('house.not_defined'),
+        approvedBy: character.approvedBy ? `<@${character.approvedBy}>` : t('house.not_defined'),
+      })),
+    ];
+
+    if (character.image) blocks.push(CV2.mediaGallery([{ url: character.image }]));
+
+    return CV2.container(blocks, { accentColor: ACCENT });
   }
 }
 

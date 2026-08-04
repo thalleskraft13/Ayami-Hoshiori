@@ -259,6 +259,16 @@ class TaskManager {
         break;
       }
 
+      case 'house_call_timeout': {
+        const { guildId } = task.dados;
+        if (this.client.houseSystem?.callScheduler) {
+          await this.client.houseSystem.callScheduler
+            .runCallTimeout(guildId)
+            .catch(err => console.error('[TaskManager] house_call_timeout error:', err));
+        }
+        break;
+      }
+
       case 'house_call_inactivity_check': {
         const { guildId, hour, minute = 0 } = task.dados;
         if (this.client.houseSystem?.callScheduler) {
@@ -407,6 +417,36 @@ class TaskManager {
   async cancelHouseCallScheduled(guildId) {
     await TaskModel.updateMany(
       { tipo: 'house_call_scheduled', 'dados.guildId': guildId, status: 'pending' },
+      { $set: { status: 'cancelled' } }
+    );
+  }
+
+  async createHouseCallTimeout({ guildId, closesAt }) {
+    await TaskModel.updateMany(
+      { tipo: 'house_call_timeout', 'dados.guildId': guildId, status: 'pending' },
+      { $set: { status: 'cancelled' } }
+    );
+
+    const task = await TaskModel.create({
+      taskId:      randomUUID(),
+      tipo:        'house_call_timeout',
+      executeAt:   closesAt,
+      dados:       { guildId },
+      repeat:      false,
+      repeatDelay: null
+    });
+
+    this._logTask('criada', task, [
+      { name: 'Guild',      value: `\`${guildId}\``, inline: true },
+      { name: 'Executa em', value: `<t:${Math.floor(task.executeAt.getTime() / 1000)}:R>` },
+    ]);
+
+    return task;
+  }
+
+  async cancelHouseCallTimeout(guildId) {
+    await TaskModel.updateMany(
+      { tipo: 'house_call_timeout', 'dados.guildId': guildId, status: 'pending' },
       { $set: { status: 'cancelled' } }
     );
   }

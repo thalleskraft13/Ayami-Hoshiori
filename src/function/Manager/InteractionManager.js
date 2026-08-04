@@ -160,6 +160,11 @@ if (parsed?.t === 'ayami_profile_reject')  return this.client.ayamiProfile.handl
                     .catch((err) => this._replyError(interaction, err, 'Ticket V2 Create (Button)'));
             }
 
+            if (parsed?.t === 'create_ticket_option' && parsed?.p && parsed?.o) {
+                return await this.client.ticketSystem.createFromOptionButton(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket V2 Create (Option Button)'));
+            }
+
             if (parsed?.t === 'ticket_select_hub' && parsed?.p) {
                 return await this.client.ticketSystem.createFromSelect(interaction)
                     .catch((err) => this._replyError(interaction, err, 'Ticket V2 Create (Select)'));
@@ -168,6 +173,31 @@ if (parsed?.t === 'ayami_profile_reject')  return this.client.ayamiProfile.handl
             if (parsed?.t === 'close_ticket_v2') {
                 return await this.client.ticketSystem.closeTicket(interaction)
                     .catch((err) => this._replyError(interaction, err, 'Ticket V2 Close'));
+            }
+
+            if (parsed?.t === 'ticket_claim') {
+                return await this.client.ticketSystem.claim.claim(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket Claim'));
+            }
+
+            if (parsed?.t === 'ticket_unclaim') {
+                return await this.client.ticketSystem.claim.unclaim(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket Unclaim'));
+            }
+
+            if (parsed?.t === 'ticket_transfer') {
+                return await this.client.ticketSystem.claim.transferPrompt(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket Transfer'));
+            }
+
+            if (parsed?.t === 'ticket_add_participant') {
+                return await this.client.ticketSystem.participants.promptAdd(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket Add Participant'));
+            }
+
+            if (parsed?.t === 'ticket_remove_participant') {
+                return await this.client.ticketSystem.participants.promptRemove(interaction)
+                    .catch((err) => this._replyError(interaction, err, 'Ticket Remove Participant'));
             }
 
             if (parsed?.t === 'hub_select') {
@@ -419,8 +449,14 @@ async _replyError(interaction, err, context = 'Erro interno') {
                 'auth_deny',
                 'create_ticket',
                 'create_ticket_select',
+                'create_ticket_option',
                 'ticket_select_hub',
                 'close_ticket_v2',
+                'ticket_claim',
+                'ticket_unclaim',
+                'ticket_transfer',
+                'ticket_add_participant',
+                'ticket_remove_participant',
                 'hub_select',
                 'flow_trigger',
                 'cv2_select',

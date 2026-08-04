@@ -264,6 +264,10 @@ module.exports = [
     `# ${ctx.eFesta} ¡Instalado!\n**${ctx.entryName}** se guardó como borrador en este servidor.\n\n` +
     `> 🆔 **ID del borrador:** \`${ctx.savedId}\`\n> Usa \`/crear editar id:${ctx.savedId}\` para editarlo y enviarlo cuando quieras~` },
 
+  { id: "ticket_install_success", render: (ctx) =>
+    `# ${ctx.eFesta} ¡Instalado!\n**${ctx.entryName}** se añadió como un nuevo panel de tickets en este servidor.\n\n` +
+    `> 🆔 **ID del panel:** \`${ctx.panelId}\`\n> Usa \`/configurar\` → Sistema de Tickets para personalizarlo~` },
+
   { id: "publish_type_chooser_title", render: (ctx) => `# ${ctx.eAnimada} ¿Qué quieres publicar en la biblioteca?` },
   { id: "publish_type_flow", render: () => "Flujo(s)" },
   { id: "publish_type_message", render: () => "Embed / Components V2" },

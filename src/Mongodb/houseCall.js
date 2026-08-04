@@ -12,6 +12,8 @@ const houseCallSchema = new Schema({
   status:       { type: String, enum: ['aberta', 'encerrada'], default: 'aberta' },
   startedAt:    { type: Date, default: Date.now },
   endedAt:      { type: Date, default: null },
+  closesAt:     { type: Date, default: null }, // calculado no start: startedAt + duration, se configurado
+  autoClosed:   { type: Boolean, default: false }, // true se fechou por timeout
 }, {
   collection: 'house_calls',
 });

@@ -8,6 +8,12 @@ const SeqQuestionsManager = require('./SeqQuestionsManager.js');
 const TranscriptManager   = require('./TranscriptManager.js');
 const EmbedBuilderUI      = require('./EmbedBuilderUI.js');
 const ComponentsV2Renderer = require('./ComponentsV2Renderer.js');
+const TicketVariables     = require('./TicketVariables.js');
+const TicketClaim         = require('./TicketClaim.js');
+const TicketParticipants  = require('./TicketParticipants.js');
+const TicketActionMenu    = require('./TicketActionMenu.js');
+const TicketFAQ           = require('./TicketFAQ.js');
+const TicketTemplates     = require('./TicketTemplates.js');
 const { randomUUID }      = require('crypto');
 const PremiumManager      = require('../../Utils/PremiumManager.js');
 const { getPlan }         = require('../../Utils/PremiumPlans.js');
@@ -74,6 +80,11 @@ class TicketSystem {
   constructor(client) {
     this.client = client;
     this.autoRoleManager = new AutoRoleManager(client);
+    this.claim = new TicketClaim(this);
+    this.participants = new TicketParticipants(this);
+    this.actionMenu = new TicketActionMenu(this);
+    this.faq = new TicketFAQ(this);
+    this.templates = new TicketTemplates(this);
   }
 
   _e(name) {
@@ -181,6 +192,20 @@ class TicketSystem {
 
   _findPanel(guildDoc, panelId) {
     return guildDoc.ticket?.find(t => t.panelId === panelId);
+  }
+
+  _ensureExtraConfigs(panel) {
+    if (!panel) return panel;
+    if (!panel.claimConfig) panel.claimConfig = { enabled: true, cargosPermitidos: [], logChannelId: null };
+    if (!panel.participantsConfig) panel.participantsConfig = { addRoles: [], removeRoles: [] };
+    if (!panel.faqConfig) panel.faqConfig = { enabled: false, faqs: [] };
+    if (!panel.actionMenuConfig) {
+      panel.actionMenuConfig = {
+        enabled: true,
+        keywords: [{ keyword: 'menu', actions: ['claim', 'transfer', 'add_participant', 'remove_participant', 'close'], cargosPermitidos: [], autoDelete: false }]
+      };
+    }
+    return panel;
   }
 
   _uid() {
@@ -380,6 +405,11 @@ class TicketSystem {
       { label: this.t('opt_transcript', ctx),            value: 'transcript', description: statusLabel(panel.transcriptConfig?.enabled) },
       { label: this.t('opt_selecthub', ctx),           value: 'selecthub', description: hubEnabled ? this.t('opt_selecthub_desc', { ...ctx, count: panel.selectMenuConfig.options.length }) : this.t('opt_inactive', ctx) },
       { label: this.t('opt_messages', ctx),             value: 'mensagens', description: this.t('opt_messages_desc', ctx) },
+      { label: this.t('opt_claim', ctx),                value: 'claim', description: this.t('opt_claim_desc', ctx) },
+      { label: this.t('opt_participants', ctx),         value: 'participants', description: this.t('opt_participants_desc', ctx) },
+      { label: this.t('opt_faq', ctx),                  value: 'faq', description: this.t('opt_faq_desc', ctx) },
+      { label: this.t('opt_actionmenu', ctx),           value: 'actionmenu', description: this.t('opt_actionmenu_desc', ctx) },
+      { label: this.t('opt_template', ctx),             value: 'template', description: this.t('opt_template_desc', ctx) },
     ], this.t('select_what_configure', ctx), async (i) => {
       await this.deferUpdate(i);
       const dest = {
@@ -406,6 +436,11 @@ class TicketSystem {
         transcript: () => this.transcriptMenu(i, user, panelId),
         selecthub:  () => this.selectHubMenu(i, user, panelId),
         mensagens:  () => this.mensagensMenu(i, user, panelId),
+        claim:        () => this.claimMenu(i, user, panelId),
+        participants: () => this.participantsMenu(i, user, panelId),
+        faq:          () => this.faqConfigMenu(i, user, panelId),
+        actionmenu:   () => this.actionMenuConfigMenu(i, user, panelId),
+        template:   () => this.templateMenu(i, user, panelId),
       };
       return dest[i.data.values[0]]?.();
     });
@@ -438,6 +473,444 @@ class TicketSystem {
       cv2Divider(),
       row(navSelect),
       row(btnPublish, btnDelete, btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async claimMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._ensureExtraConfigs(this._findPanel(doc, panelId));
+    panel.claimConfig = panel.claimConfig || { enabled: true, cargosPermitidos: [], logChannelId: null };
+    const cfg = panel.claimConfig;
+    const ctx = this._tctx(interaction);
+
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_off', ctx) : this.t('btn_toggle_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.claimConfig.enabled = !fp.claimConfig.enabled;
+      await fd.save();
+      return this.claimMenu(i, user, panelId);
+    });
+
+    const roleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: this.t('claim_roles_placeholder', ctx), max_values: 10 },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+        fp.claimConfig.cargosPermitidos = i.data.values;
+        await fd.save();
+        return this.claimMenu(i, user, panelId);
+      }
+    });
+
+    const chSel = this.client.interactions.createChannelSelect({
+      user, data: { placeholder: this.t('claim_log_channel_placeholder', ctx), channel_types: [0, 5] },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+        fp.claimConfig.logChannelId = i.data.values[0];
+        await fd.save();
+        return this.claimMenu(i, user, panelId);
+      }
+    });
+
+    const btnClearRoles = this.btn(user, this.t('btn_clear_roles', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.claimConfig.cargosPermitidos = [];
+      await fd.save();
+      return this.claimMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(this.t('claim_menu_header', {
+        ...ctx,
+        status:     cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        roles:      cfg.cargosPermitidos?.length ? cfg.cargosPermitidos.map(r => `<@&${r}>`).join(' ') : this.t('claim_roles_none', ctx),
+        logChannel: cfg.logChannelId ? `<#${cfg.logChannelId}>` : this.t('destino_none_channel', ctx),
+      })),
+      cv2Divider(),
+      row(btnToggle, btnClearRoles),
+      row(roleSel),
+      row(chSel),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async participantsMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._ensureExtraConfigs(this._findPanel(doc, panelId));
+    panel.participantsConfig = panel.participantsConfig || { addRoles: [], removeRoles: [] };
+    const cfg = panel.participantsConfig;
+    const ctx = this._tctx(interaction);
+
+    const addRoleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: this.t('participants_add_roles_placeholder', ctx), max_values: 10 },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+        fp.participantsConfig.addRoles = i.data.values;
+        await fd.save();
+        return this.participantsMenu(i, user, panelId);
+      }
+    });
+
+    const removeRoleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: this.t('participants_remove_roles_placeholder', ctx), max_values: 10 },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+        fp.participantsConfig.removeRoles = i.data.values;
+        await fd.save();
+        return this.participantsMenu(i, user, panelId);
+      }
+    });
+
+    const btnClear = this.btn(user, this.t('btn_clear_roles', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.participantsConfig = { addRoles: [], removeRoles: [] };
+      await fd.save();
+      return this.participantsMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(this.t('participants_menu_header', {
+        ...ctx,
+        addRoles:    cfg.addRoles?.length ? cfg.addRoles.map(r => `<@&${r}>`).join(' ') : this.t('claim_roles_none', ctx),
+        removeRoles: cfg.removeRoles?.length ? cfg.removeRoles.map(r => `<@&${r}>`).join(' ') : this.t('claim_roles_none', ctx),
+      })),
+      cv2Divider(),
+      row(addRoleSel),
+      row(removeRoleSel),
+      row(btnClear, btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async faqConfigMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._ensureExtraConfigs(this._findPanel(doc, panelId));
+    panel.faqConfig = panel.faqConfig || { enabled: false, faqs: [] };
+    const cfg  = panel.faqConfig;
+    const ctx  = this._tctx(interaction);
+    const plan = await this._getGuildPlan(interaction.guild_id).catch(() => null);
+    const maxFaqs = plan?.tickets?.maxFaqs ?? 5;
+
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_off', ctx) : this.t('btn_toggle_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.faqConfig.enabled = !fp.faqConfig.enabled;
+      await fd.save();
+      return this.faqConfigMenu(i, user, panelId);
+    });
+
+    const btnAdd = this.btn(user, this.t('faq_add_button', ctx), 3, async (i) => {
+      if (cfg.faqs.length >= maxFaqs) {
+        return this.reply(i, { content: this.t('faq_limit_reached', { ...ctx, max: maxFaqs }), flags: 64 });
+      }
+      const modal = this.client.interactions.createModal({
+        user, title: this.t('modal_faq_add_title', ctx),
+        components: [
+          { type: 1, components: [{ type: 4, custom_id: 'question', label: this.t('modal_faq_question_label', ctx), style: 1, required: true, max_length: 100 }] },
+          { type: 1, components: [{ type: 4, custom_id: 'answer', label: this.t('modal_faq_answer_label', ctx), style: 2, required: true, max_length: 1500 }] },
+        ],
+        funcao: async (mi, _, fields) => {
+          const fd = await this._getGuildDoc(mi.guild_id);
+          const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+          fp.faqConfig = fp.faqConfig || { enabled: false, faqs: [] };
+          if (fp.faqConfig.faqs.length < maxFaqs) {
+            fp.faqConfig.faqs.push({ id: this._uid(), question: fields.question, answer: fields.answer });
+            await fd.save();
+          }
+          await this.client.interactions._callback(mi, { type: 4, data: cv2Payload([cv2Text(this.t('faq_added_success', this._tctx(mi)))], { ephemeral: true }) });
+          return this.faqConfigMenu(mi, user, panelId);
+        }
+      });
+      return this.client.interactions.showModal(i, modal);
+    });
+
+    const removeSel = cfg.faqs.length ? this.select(user, cfg.faqs.slice(0, 25).map(f => ({
+      label: f.question.slice(0, 100), value: f.id,
+    })), this.t('faq_remove_placeholder', ctx), async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.faqConfig.faqs = fp.faqConfig.faqs.filter(f => f.id !== i.data.values[0]);
+      await fd.save();
+      return this.faqConfigMenu(i, user, panelId);
+    }) : null;
+
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(this.t('faq_menu_header', {
+        ...ctx,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        count: cfg.faqs.length,
+        max: maxFaqs,
+      })),
+      cv2Divider(),
+      row(btnToggle, btnAdd),
+      ...(removeSel ? [row(removeSel)] : []),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async actionMenuConfigMenu(interaction, user, panelId) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._ensureExtraConfigs(this._findPanel(doc, panelId));
+    panel.actionMenuConfig = panel.actionMenuConfig || { enabled: true, keywords: [{ keyword: 'menu', actions: ['claim', 'transfer', 'add_participant', 'remove_participant', 'close'], cargosPermitidos: [], autoDelete: false }] };
+    const cfg  = panel.actionMenuConfig;
+    const ctx  = this._tctx(interaction);
+    const plan = await this._getGuildPlan(interaction.guild_id).catch(() => null);
+    const isPremium = plan?.key && plan.key !== 'FREE';
+
+    const btnToggle = this.btn(user, cfg.enabled ? this.t('btn_toggle_off', ctx) : this.t('btn_toggle_on', ctx), cfg.enabled ? 4 : 3, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.actionMenuConfig.enabled = !fp.actionMenuConfig.enabled;
+      await fd.save();
+      return this.actionMenuConfigMenu(i, user, panelId);
+    });
+
+    const btnAdd = this.btn(user, this.t('actionmenu_add_button', ctx), 3, async (i) => {
+      if (!isPremium) {
+        return this.reply(i, { content: this.t('actionmenu_premium_required', ctx), flags: 64 });
+      }
+      const modal = this.client.interactions.createModal({
+        user, title: this.t('modal_actionmenu_add_title', ctx),
+        components: [
+          { type: 1, components: [{ type: 4, custom_id: 'keyword', label: this.t('modal_actionmenu_keyword_label', ctx), style: 1, required: true, max_length: 50 }] },
+        ],
+        funcao: async (mi, _, fields) => {
+          const fd = await this._getGuildDoc(mi.guild_id);
+          const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+          fp.actionMenuConfig = fp.actionMenuConfig || { enabled: true, keywords: [] };
+          fp.actionMenuConfig.keywords.push({
+            keyword: fields.keyword.trim().toLowerCase().slice(0, 50),
+            actions: ['claim', 'transfer', 'add_participant', 'remove_participant', 'close'],
+            cargosPermitidos: [],
+            autoDelete: false,
+          });
+          await fd.save();
+          await this.client.interactions._callback(mi, { type: 4, data: cv2Payload([cv2Text(this.t('actionmenu_added_success', this._tctx(mi)))], { ephemeral: true }) });
+          return this.actionMenuConfigMenu(mi, user, panelId);
+        }
+      });
+      return this.client.interactions.showModal(i, modal);
+    });
+
+    const editSel = cfg.keywords.length ? this.select(user, cfg.keywords.map((k, idx) => ({
+      label: `#${idx + 1} — ${k.keyword}`.slice(0, 100), value: String(idx),
+    })), this.t('actionmenu_edit_placeholder', ctx), async (i) => {
+      await this.deferUpdate(i);
+      return this.actionMenuKeywordMenu(i, user, panelId, Number(i.data.values[0]));
+    }) : null;
+
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(this.t('actionmenu_menu_header', {
+        ...ctx,
+        status: cfg.enabled ? this.t('status_on', ctx) : this.t('status_off', ctx),
+        count: cfg.keywords.length,
+        plan: isPremium ? this.t('actionmenu_plan_premium', ctx) : this.t('actionmenu_plan_free', ctx),
+      })),
+      cv2Divider(),
+      row(btnToggle, btnAdd),
+      ...(editSel ? [row(editSel)] : []),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async actionMenuKeywordMenu(interaction, user, panelId, index) {
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._ensureExtraConfigs(this._findPanel(doc, panelId));
+    const kw    = panel.actionMenuConfig?.keywords?.[index];
+    const ctx   = this._tctx(interaction);
+    if (!kw) return this.actionMenuConfigMenu(interaction, user, panelId);
+
+    const ALL_ACTIONS = [
+      { id: 'claim',              label: this.t('btn_claim', ctx) },
+      { id: 'transfer',           label: this.t('btn_transfer', ctx) },
+      { id: 'add_participant',    label: this.t('btn_add_participant', ctx) },
+      { id: 'remove_participant', label: this.t('btn_remove_participant', ctx) },
+      { id: 'close',              label: this.t('btn_close', ctx) },
+    ];
+
+    const actionsSel = this.select(user, ALL_ACTIONS.map(a => ({
+      label: a.label.slice(0, 100), value: a.id, description: kw.actions.includes(a.id) ? this.t('status_on', ctx) : this.t('status_off', ctx),
+    })), this.t('actionmenu_actions_placeholder', ctx), async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.actionMenuConfig.keywords[index].actions = i.data.values;
+      await fd.save();
+      return this.actionMenuKeywordMenu(i, user, panelId, index);
+    }, { minValues: 1, maxValues: ALL_ACTIONS.length });
+
+    const roleSel = this.client.interactions.createRoleSelect({
+      user, data: { placeholder: this.t('actionmenu_roles_placeholder', ctx), max_values: 10 },
+      funcao: async (i) => {
+        await this.deferUpdate(i);
+        const fd = await this._getGuildDoc(i.guild_id);
+        const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+        fp.actionMenuConfig.keywords[index].cargosPermitidos = i.data.values;
+        await fd.save();
+        return this.actionMenuKeywordMenu(i, user, panelId, index);
+      }
+    });
+
+    const btnAutoDelete = this.btn(user, kw.autoDelete ? this.t('actionmenu_autodelete_off', ctx) : this.t('actionmenu_autodelete_on', ctx), kw.autoDelete ? 4 : 2, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.actionMenuConfig.keywords[index].autoDelete = !fp.actionMenuConfig.keywords[index].autoDelete;
+      await fd.save();
+      return this.actionMenuKeywordMenu(i, user, panelId, index);
+    });
+
+    const btnDelete = this.btn(user, this.t('actionmenu_delete_keyword', ctx), 4, async (i) => {
+      await this.deferUpdate(i);
+      const fd = await this._getGuildDoc(i.guild_id);
+      const fp = this._ensureExtraConfigs(this._findPanel(fd, panelId));
+      fp.actionMenuConfig.keywords.splice(index, 1);
+      if (!fp.actionMenuConfig.keywords.length) {
+        fp.actionMenuConfig.keywords.push({ keyword: 'menu', actions: ['claim', 'transfer', 'add_participant', 'remove_participant', 'close'], cargosPermitidos: [], autoDelete: false });
+      }
+      await fd.save();
+      return this.actionMenuConfigMenu(i, user, panelId);
+    });
+
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.actionMenuConfigMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(this.t('actionmenu_keyword_header', {
+        ...ctx,
+        keyword: kw.keyword,
+        actions: kw.actions.map(a => ALL_ACTIONS.find(x => x.id === a)?.label).filter(Boolean).join(', ') || this.t('claim_roles_none', ctx),
+        roles: kw.cargosPermitidos?.length ? kw.cargosPermitidos.map(r => `<@&${r}>`).join(' ') : this.t('claim_roles_none', ctx),
+        autoDelete: kw.autoDelete ? this.t('status_on', ctx) : this.t('status_off', ctx),
+      })),
+      cv2Divider(),
+      row(actionsSel),
+      row(roleSel),
+      row(btnAutoDelete, btnDelete),
+      cv2Divider(),
+      row(btnBack),
+    ];
+
+    return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
+  }
+
+  async templateMenu(interaction, user, panelId) {
+    const ctx = this._tctx(interaction);
+
+    const btnPublish = this.btn(user, this.t('btn_template_publish', ctx), 3, async (i) => {
+      const modal = this.client.interactions.createModal({
+        user,
+        title: this.t('modal_template_publish_title', ctx),
+        components: [
+          { type: 1, components: [{ type: 4, custom_id: 'name', label: this.t('modal_template_name_label', ctx), style: 1, required: true, max_length: 100 }] },
+          { type: 1, components: [{ type: 4, custom_id: 'shortDesc', label: this.t('modal_template_short_desc_label', ctx), style: 1, required: false, max_length: 150 }] },
+          { type: 1, components: [{ type: 4, custom_id: 'tags', label: this.t('modal_template_tags_label', ctx), style: 1, required: false, max_length: 100, placeholder: this.t('modal_template_tags_placeholder', ctx) }] },
+        ],
+        funcao: async (mi, _, fields) => {
+          const miCtx = this._tctx(mi);
+          try {
+            const entry = await this.templates.publish({
+              authorId:   mi.member?.user?.id || mi.user?.id,
+              authorName: mi.member?.user?.username || mi.user?.username,
+              guildId:    mi.guild_id,
+              panelId,
+              name:       fields.name,
+              shortDesc:  fields.shortDesc,
+              tags:       (fields.tags || '').split(',').map(t => t.trim()).filter(Boolean),
+            });
+            await this.client.interactions._callback(mi, { type: 4, data: cv2Payload([cv2Text(this.t('template_publish_success', { ...miCtx, libId: entry.libId }))], { ephemeral: true }) });
+          } catch (err) {
+            await this.client.interactions._callback(mi, { type: 4, data: cv2Payload([cv2Text(this.t('template_publish_error', { ...miCtx, error: err.message }))], { ephemeral: true }) });
+          }
+          return this.painelMenu(mi, user, panelId);
+        }
+      });
+      return this.client.interactions.showModal(i, modal);
+    });
+
+    const btnInstall = this.btn(user, this.t('btn_template_install', ctx), 1, async (i) => {
+      const modal = this.client.interactions.createModal({
+        user,
+        title: this.t('modal_template_install_title', ctx),
+        components: [
+          { type: 1, components: [{ type: 4, custom_id: 'libId', label: this.t('modal_template_libid_label', ctx), style: 1, required: true, max_length: 60 }] },
+        ],
+        funcao: async (mi, _, fields) => {
+          const miCtx = this._tctx(mi);
+          try {
+            const newPanelId = await this.templates.install({
+              libId:   fields.libId.trim(),
+              guildId: mi.guild_id,
+              userId:  mi.member?.user?.id || mi.user?.id,
+            });
+            await this.client.interactions._callback(mi, { type: 4, data: cv2Payload([cv2Text(this.t('template_install_success', { ...miCtx, panelId: newPanelId }))], { ephemeral: true }) });
+            return this.painelMenu(mi, user, newPanelId);
+          } catch (err) {
+            return this.client.interactions._callback(mi, { type: 4, data: cv2Payload([cv2Text(this.t('template_install_error', { ...miCtx, error: err.message }))], { ephemeral: true }) });
+          }
+        }
+      });
+      return this.client.interactions.showModal(i, modal);
+    });
+
+    const btnBack = this.btn(user, this.t('btn_back', ctx), 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.painelMenu(i, user, panelId);
+    });
+
+    const blocks = [
+      cv2Text(this.t('template_menu_header', ctx)),
+      cv2Divider(),
+      row(btnPublish, btnInstall, btnBack),
     ];
 
     return this.editOriginal(interaction, cv2Payload(blocks, { ephemeral: false, accentColor: COLOR.main }));
@@ -1677,6 +2150,18 @@ class TicketSystem {
     return this._startTicketFlow(interaction, doc, panel, null);
   }
 
+  async createFromOptionButton(interaction) {
+    const data  = JSON.parse(interaction.data.custom_id);
+    const doc   = await this._getGuildDoc(interaction.guild_id);
+    const panel = this._findPanel(doc, data.p);
+    if (!panel) return this.reply(interaction, { content: this.t('panel_not_found_short', this._tctx(interaction)), flags: 64 });
+
+    const option = panel.selectMenuConfig?.options?.find(o => o.optionId === data.o);
+    if (!option) return this.reply(interaction, { content: this.t('option_not_found', this._tctx(interaction)), flags: 64 });
+
+    return this._startTicketFlow(interaction, doc, panel, option);
+  }
+
   async createFromSelect(interaction) {
     const data    = JSON.parse(interaction.data.custom_id);
     const doc     = await this._getGuildDoc(interaction.guild_id);
@@ -1691,6 +2176,15 @@ class TicketSystem {
   }
 
   async _startTicketFlow(interaction, doc, panel, option) {
+    const faqs = panel.faqConfig?.enabled ? (panel.faqConfig.faqs || []) : [];
+    if (faqs.length) {
+      return this.faq.start(interaction, doc, panel, option);
+    }
+
+    return this._proceedTicketFlow(interaction, panel, option);
+  }
+
+  async _proceedTicketFlow(interaction, panel, option) {
     const modalCfg = option?.modalConfig?.enabled ? option.modalConfig : (panel.modalConfig?.enabled ? panel.modalConfig : null);
 
     if (modalCfg) {
@@ -1729,6 +2223,7 @@ class TicketSystem {
   async _createTicketChannel(interaction, panel, option, modalAnswers, isModalFlow = false) {
     const guildId = interaction.guild_id;
     const userId  = interaction.member?.user?.id || interaction.user?.id;
+    const username = interaction.member?.user?.username || interaction.user?.username || userId;
 
     const fresh = await this._getGuildDoc(guildId);
     const fp    = this._findPanel(fresh, panel.panelId);
@@ -1739,7 +2234,7 @@ class TicketSystem {
     const fo = option ? fp.selectMenuConfig?.options?.find(o => o.optionId === option.optionId) : null;
 
     const nameTemplate = fo?.ticketChatName || fp.ticketChatName || 'ticket-{count}';
-    const channelName  = nameTemplate.replaceAll('{count}', String(count)).slice(0, 90);
+    const channelName  = TicketVariables.buildChannelName(nameTemplate, { username, userId, count });
 
     const staffRoles = fo?.cargosStaff?.length ? fo.cargosStaff : (fp.cargosStaff || []);
 
@@ -1773,7 +2268,7 @@ class TicketSystem {
       { userId }
     );
 
-    const embedBoasVindas = fo?.embedBoasVindas || fp.painelPrincipal;
+    const embedBoasVindas = fo?.embedBoasVindas || null;
 
     const respostasText = Object.keys(modalAnswers).length
       ? Object.entries(modalAnswers).map(([k, v]) => `**${k}:** ${v}`).join('\n')
@@ -1781,21 +2276,30 @@ class TicketSystem {
 
     const fecharLabel = resolveMsg(fp, 'fecharBotaoLabel', this.t('default_close_button_label', ctx));
 
-    await DiscordRequest(`/channels/${channel.id}/messages`, {
+    const instance = await this.claim.createInstance({
+      guildId, channelId: channel.id, panelId: fp.panelId, ownerId: userId
+    });
+
+    const claimRow = fp.claimConfig?.enabled === false ? null : this.claim.buildStatusRow(ctx, instance);
+
+    const statusMsg = await DiscordRequest(`/channels/${channel.id}/messages`, {
       method: 'POST',
       body: {
         content: `<@${userId}>` + (staffRoles.length ? ` ${staffRoles.map(r => `<@&${r}>`).join(' ')}` : ''),
         embeds: [
-          { title: tituloCriado, description: descCriado, color: 0x7C8FFF },
+          { title: tituloCriado, description: descCriado, color: 0x7C8FFF, fields: fp.claimConfig?.enabled === false ? [] : [{ name: '\u200b', value: this.claim.statusFieldText(ctx, instance) }] },
           ...(embedBoasVindas ? [embedBoasVindas] : []),
           ...(respostasText ? [{ title: resolveMsg(fp, 'modalRespostasTitulo', this.t('default_modal_answers_title', ctx)), description: respostasText, color: 0xFFD966 }] : []),
         ],
-        components: [{
-          type: 1,
-          components: [{ type: 2, style: 4, label: fecharLabel, custom_id: JSON.stringify({ t: 'close_ticket_v2', ch: channel.id, u: userId }) }]
-        }]
+        components: [
+          { type: 1, components: [{ type: 2, style: 4, label: fecharLabel, custom_id: JSON.stringify({ t: 'close_ticket_v2', ch: channel.id, u: userId }) }] },
+          ...(claimRow ? [claimRow] : []),
+        ]
       }
     });
+
+    instance.statusMessageId = statusMsg.id;
+    await instance.save();
 
     const seqCfg = fo?.seqQuestionsConfig?.enabled ? fo.seqQuestionsConfig : (fp.seqQuestionsConfig?.enabled ? fp.seqQuestionsConfig : null);
     if (seqCfg) {
@@ -1843,6 +2347,14 @@ class TicketSystem {
     const data      = JSON.parse(interaction.data.custom_id);
     const closedBy  = interaction.member?.user?.id || interaction.user?.id;
     const ownerId   = data.u || closedBy;
+
+    this.claim.getInstance(data.ch).then(instance => {
+      if (!instance) return;
+      instance.status = 'closed';
+      instance.closedBy = closedBy;
+      instance.closedAt = new Date();
+      return instance.save();
+    }).catch(err => console.error('[TicketSystem] Erro ao fechar instância do ticket:', err));
 
     let panelId = null;
     try {
@@ -1918,8 +2430,16 @@ class TicketSystem {
     const count = panel.contadorTicket;
     await doc.save();
 
+    let username = userId;
+    try {
+      const member = await DiscordRequest(`/guilds/${guildId}/members/${userId}`);
+      username = member?.user?.username || userId;
+    } catch (err) {
+      console.error('[TicketSystem] Erro ao buscar membro para variável {user}:', err);
+    }
+
     const nameTemplate = panel.ticketChatName || 'ticket-{count}';
-    const channelName  = nameTemplate.replaceAll('{count}', String(count)).slice(0, 90);
+    const channelName  = TicketVariables.buildChannelName(nameTemplate, { username, userId, count });
     const staffRoles   = panel.cargosStaff || [];
 
     const permissionOverwrites = [
@@ -1949,17 +2469,26 @@ class TicketSystem {
     const tituloCriado = resolveMsg(panel, 'ticketCriadoTitulo', '🎫 Ticket Criado');
     const descCriado   = resolveMsg(panel, 'ticketCriadoDescricao', 'Ticket aberto por {user}.', { userId });
 
-    await DiscordRequest(`/channels/${channel.id}/messages`, {
+    const scriptCtx = this._tctx(null);
+    const instance = await this.claim.createInstance({
+      guildId, channelId: channel.id, panelId: panel.panelId, ownerId: userId
+    });
+    const claimRow = panel.claimConfig?.enabled === false ? null : this.claim.buildStatusRow(scriptCtx, instance);
+
+    const statusMsg = await DiscordRequest(`/channels/${channel.id}/messages`, {
       method: 'POST',
       body: {
         content: `<@${userId}>` + (staffRoles.length ? ` ${staffRoles.map(r => `<@&${r}>`).join(' ')}` : ''),
-        embeds: [{ title: tituloCriado, description: descCriado, color: 0x7C8FFF }],
-        components: [{
-          type: 1,
-          components: [{ type: 2, style: 4, label: fecharLabel, custom_id: JSON.stringify({ t: 'close_ticket_v2', ch: channel.id, u: userId }) }]
-        }]
+        embeds: [{ title: tituloCriado, description: descCriado, color: 0x7C8FFF, fields: panel.claimConfig?.enabled === false ? [] : [{ name: '\u200b', value: this.claim.statusFieldText(scriptCtx, instance) }] }],
+        components: [
+          { type: 1, components: [{ type: 2, style: 4, label: fecharLabel, custom_id: JSON.stringify({ t: 'close_ticket_v2', ch: channel.id, u: userId }) }] },
+          ...(claimRow ? [claimRow] : []),
+        ]
       }
     });
+
+    instance.statusMessageId = statusMsg.id;
+    await instance.save();
 
     if (await this._isPremiumEventsEnabled(guildId).catch(() => false)) {
       this._emitTicketUpdate(guildId, {

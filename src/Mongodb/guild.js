@@ -469,6 +469,43 @@ const ticketMensagensConfigSchema = new Schema({
   transcriptDmDescricao: { type: String, default: null },
 }, { _id: false });
 
+const faqItemSchema = new Schema({
+  id:       { type: String, required: true },
+  question: { type: String, required: true },
+  answer:   { type: String, required: true }
+}, { _id: false });
+
+const faqConfigSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  faqs:    { type: [faqItemSchema], default: [] }
+}, { _id: false });
+
+const claimConfigSchema = new Schema({
+  enabled:          { type: Boolean, default: true  },
+  cargosPermitidos: { type: [String], default: []   },
+  logChannelId:     { type: String,  default: null  }
+}, { _id: false });
+
+const participantsConfigSchema = new Schema({
+  addRoles:    { type: [String], default: [] },
+  removeRoles: { type: [String], default: [] }
+}, { _id: false });
+
+const actionMenuKeywordSchema = new Schema({
+  keyword:          { type: String, required: true },
+  actions:          { type: [String], default: ['claim', 'transfer', 'add_participant', 'remove_participant', 'close'] },
+  cargosPermitidos: { type: [String], default: [] },
+  autoDelete:       { type: Boolean, default: false }
+}, { _id: false });
+
+const actionMenuConfigSchema = new Schema({
+  enabled:  { type: Boolean, default: true },
+  keywords: {
+    type: [actionMenuKeywordSchema],
+    default: () => ([{ keyword: 'menu', actions: ['claim', 'transfer', 'add_participant', 'remove_participant', 'close'], cargosPermitidos: [], autoDelete: false }])
+  }
+}, { _id: false });
+
 const ticketSchema = new Schema({
   panelId:         { type: String, required: true },
   categoriaId:     { type: String, default: null  },
@@ -485,6 +522,10 @@ const ticketSchema = new Schema({
   transcriptConfig:    { type: transcriptConfigSchema,   default: () => ({}) },
   selectMenuConfig:    { type: selectMenuConfigSchema,   default: () => ({}) },
   mensagensConfig:     { type: ticketMensagensConfigSchema, default: () => ({}) },
+  claimConfig:         { type: claimConfigSchema,        default: () => ({}) },
+  faqConfig:           { type: faqConfigSchema,           default: () => ({}) },
+  participantsConfig:  { type: participantsConfigSchema, default: () => ({}) },
+  actionMenuConfig:    { type: actionMenuConfigSchema,    default: () => ({}) },
 
   useComponentsV2:     { type: Boolean, default: false },
   painelComponentsV2:  { type: [Schema.Types.Mixed], default: [] }

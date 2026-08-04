@@ -264,6 +264,10 @@ module.exports = [
     `# ${ctx.eFesta} Installed!\n**${ctx.entryName}** was saved as a draft on this server.\n\n` +
     `> 🆔 **Draft ID:** \`${ctx.savedId}\`\n> Use \`/create edit id:${ctx.savedId}\` to edit and send it whenever you'd like~` },
 
+  { id: "ticket_install_success", render: (ctx) =>
+    `# ${ctx.eFesta} Installed!\n**${ctx.entryName}** was added as a new ticket panel on this server.\n\n` +
+    `> 🆔 **Panel ID:** \`${ctx.panelId}\`\n> Use \`/configurar\` → Ticket System to customize it~` },
+
   { id: "publish_type_chooser_title", render: (ctx) => `# ${ctx.eAnimada} What do you want to publish to the library?` },
   { id: "publish_type_flow", render: () => "Flow(s)" },
   { id: "publish_type_message", render: () => "Embed / Components V2" },
