@@ -15,57 +15,21 @@ const AccountLinkService = require('../../CreatorAccounts/AccountLinkService.js'
 
 const FEATURE_ID = 'twitch';
 
-const CHANNEL_SYNC_INTERVAL_MS = 2 * 60 * 1000;  // igual ao TwitchMonitorService
-const WATCH_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;  // amostragem de "Get Chatters"
+const CHANNEL_SYNC_INTERVAL_MS = 2 * 60 * 1000;  
+const WATCH_SAMPLE_INTERVAL_MS = 5 * 60 * 1000;  
 const WATCH_SAMPLE_SECONDS     = WATCH_SAMPLE_INTERVAL_MS / 1000;
 
-// Nome usado no CommandLog (mesma coleção `command_logs` que já é usada
-// pelas Missões/Dashboard e pelos comandos de barra do Discord) — não
-// cria coleção nova, só um valor próprio de `commandName` pra esta
-// origem (ver §5/§9 de docs/INTEGRACAO_CRIADORES.md).
 const CHAT_LOG_COMMAND = 'twitch_chat_command';
 
-/**
- * Bot de chat dedicado da Ayami na Twitch ("AyamiBot") via IRC clássico
- * (tmi.js). Duas responsabilidades, ambas sobre a MESMA conexão de
- * chat (não cria uma segunda conexão pra cada finalidade):
- *
- *   1. EXECUTAR os Comandos Personalizados (Fase 6) — nunca duplica a
- *      definição de comando, cooldown ou permissão, que vivem
- *      inteiramente em TwitchCommandService.js.
- *   2. ALIMENTAR as Estatísticas por Espectador (Fase 7) — contagem de
- *      mensagens (em tempo real, por mensagem) e tempo assistido
- *      (amostragem periódica via Helix "Get Chatters") — nunca duplica
- *      a lógica de agregação, que vive em TwitchViewerStatsService.js.
- *   3. DISPARAR os Alertas de Eventos (Subscribe/Resub/GiftSub/Bits/
- *      Raid) — nos eventos nativos do tmi.js, na mesma conexão IRC.
- *      Nunca duplica a lógica de disparo/limiar/renderização, que vive
- *      inteiramente em Alerts/TwitchAlertService.js#triggerAlert. Follow
- *      não entra aqui (não é um evento IRC) — ver polling da Helix numa
- *      etapa futura.
- *
- * Credenciais (variáveis de ambiente, únicas pra toda a aplicação —
- * não por servidor):
- *   TWITCH_BOT_USERNAME     — login da conta dedicada da Ayami na Twitch
- *   TWITCH_BOT_OAUTH_TOKEN  — token de acesso da MESMA conta, escopos
- *                              chat:read + chat:edit + moderator:read:chatters
- *                              (aceita com ou sem o prefixo "oauth:")
- *
- * Pra que a AyamiBot consiga falar em modo lento/só-inscritos/só-mod de
- * um canal E pra que a leitura de "Get Chatters" funcione (Fase 7), o
- * streamer precisa dar cargo de Moderador pra conta configurada acima
- * dentro do próprio chat da Twitch — isso é feito na Twitch, não tem
- * configuração equivalente aqui.
- */
 class TwitchChatBot {
 
   constructor(client) {
-    this.client = client;    // client do Discord (pra logs/erros consistentes com o resto do bot)
+    this.client = client;    
     this.irc    = null;
     this._channelTimer = null;
     this._watchTimer   = null;
     this._joinedLogins = new Set();
-    this._botUserId    = null; // ID oficial da própria AyamiBot na Twitch (moderator_id do Get Chatters)
+    this._botUserId    = null; 
   }
 
   _credentialsPresent() {
@@ -102,13 +66,13 @@ class TwitchChatBot {
         console.error('[TwitchChatBot] Erro ao processar mensagem de chat:', err.message));
     });
 
-    // Alertas de Eventos (Fase Alertas — disparo real) — MESMA conexão
-    // IRC já aberta acima, nenhuma conexão nova é criada. Cada handler
-    // resolve o `doc` do canal (mesmo padrão de `_handleMessage`) e
-    // delega inteiramente a `TwitchAlertService.triggerAlert`, que já é
-    // defensivo (nunca lança). O `.catch` aqui é só uma segunda camada
-    // de proteção pra garantir que uma falha de Alertas nunca derrube a
-    // conexão de chat usada por Comandos/Estatísticas.
+    
+    
+    
+    
+    
+    
+    
     this.irc.on('subscription', (channel, username, method, message, userstate) => {
       this._handleSubscription(channel, username, method, userstate).catch((err) =>
         console.error('[TwitchChatBot] Erro ao processar subscription (Alertas):', err.message));
@@ -145,8 +109,8 @@ class TwitchChatBot {
     await this.irc.connect().catch((err) =>
       console.error('[TwitchChatBot] Falha ao conectar no chat da Twitch:', err.message));
 
-    // ID oficial da própria AyamiBot — necessário como `moderator_id`
-    // do endpoint "Get Chatters" (Fase 7). Resolvido uma vez no boot.
+    
+    
     try {
       const botUser = await TwitchApiService.getUserByLogin(process.env.TWITCH_BOT_USERNAME);
       this._botUserId = botUser?.id || null;
@@ -182,13 +146,8 @@ class TwitchChatBot {
     if (this.irc) this.irc.disconnect().catch(() => {});
   }
 
-  /**
-   * Entra em TODOS os canais conectados e com o módulo habilitado —
-   * necessário tanto pros Comandos (Fase 6, só dispara se o servidor
-   * tiver comando ativo) quanto pras Estatísticas por Espectador
-   * (Fase 7, precisa contar mensagens em qualquer canal conectado,
-   * mesmo sem nenhum comando configurado).
-   */
+  
+
   async _syncChannels() {
     const canais = await TwitchChannelDb.find({
       moduleEnabled: true,
@@ -213,12 +172,8 @@ class TwitchChatBot {
     }
   }
 
-  /**
-   * A cada WATCH_SAMPLE_INTERVAL_MS, consulta "Get Chatters" pra cada
-   * canal AO VIVO conectado e credita WATCH_SAMPLE_SECONDS de tempo
-   * assistido pra cada espectador presente (Fase 7). Canais offline
-   * são pulados (sem stream, não há "tempo assistido" pra creditar).
-   */
+  
+
   async _sampleWatchTime() {
     const canaisAoVivo = await TwitchChannelDb.find({
       moduleEnabled: true,
@@ -233,7 +188,7 @@ class TwitchChatBot {
         );
 
         for (const chatter of chatters) {
-          if (chatter.user_login === process.env.TWITCH_BOT_USERNAME?.toLowerCase()) continue; // ignora a própria AyamiBot
+          if (chatter.user_login === process.env.TWITCH_BOT_USERNAME?.toLowerCase()) continue; 
 
           await TwitchViewerStatsService.recordWatchSample(
             canal.guildId,
@@ -243,8 +198,8 @@ class TwitchChatBot {
           );
         }
       } catch (err) {
-        // Falha isolada por canal (ex.: AyamiBot ainda não é moderadora
-        // desse canal) não pode interromper a amostragem dos demais.
+        
+        
         console.error(`[TwitchChatBot] Falha ao amostrar chatters de #${canal.twitchLogin}:`, err.message);
       }
     }
@@ -256,19 +211,19 @@ class TwitchChatBot {
     const doc = await TwitchChannelDb.findOne({ twitchLogin: login, moduleEnabled: true }).lean();
     if (!doc) return;
 
-    // Estatísticas por Espectador (Fase 7) — conta TODA mensagem, tenha
-    // ela disparado um comando ou não. Nunca bloqueia a resposta do
-    // comando abaixo se falhar.
+    
+    
+    
     TwitchViewerStatsService.recordMessage(doc.guildId, {
       id: tags['user-id'],
       login: tags.username,
       displayName: tags['display-name'] || tags.username,
     }).catch((err) => console.error('[TwitchChatBot] Falha ao registrar mensagem para Estatísticas:', err.message));
 
-    // Missões do tipo "Quantidade de Mensagens" — credita 1 de progresso
-    // por mensagem enviada no chat, pra quem tiver a conta Twitch
-    // vinculada ao Discord. Nunca bloqueia o restante do fluxo (comandos)
-    // se a conta não estiver vinculada ou se a missão já estiver completa.
+    
+    
+    
+    
     this._registerMessageCountProgress(doc.guildId, tags['user-id']).catch((err) =>
       console.error('[TwitchChatBot] Falha ao registrar progresso de missão (mensagens):', err.message));
 
@@ -303,11 +258,11 @@ class TwitchChatBot {
 
     await TwitchCommandService.registerUsage(command._id, tags.username);
 
-    // Log best-effort — nunca bloqueia a resposta do comando. Reaproveita
-    // a MESMA coleção `command_logs` já usada pelo resto da Ayami (ver
-    // twitchChannelDashboardService.js#logDashboardAction); como o
-    // schema exige `userId`, usamos o dono da conexão (connectedBy) já
-    // que a execução acontece no chat da Twitch, não no Discord.
+    
+    
+    
+    
+    
     CommandLog.create({
       commandName: CHAT_LOG_COMMAND,
       subcommandName: command.trigger,
@@ -319,14 +274,8 @@ class TwitchChatBot {
     }).catch((err) => console.error('[TwitchChatBot] Falha ao registrar log de comando:', err.message));
   }
 
-  /**
-   * Credita 1 de progresso em toda missão ativa do tipo "Quantidade de
-   * Mensagens" (MISSION_TYPES.MESSAGE_COUNT) deste servidor, pro
-   * espectador que enviou a mensagem — só se a conta Twitch dele
-   * estiver vinculada a um Discord ID (CreatorMissionService já exige
-   * isso internamente, mas resolvemos aqui pra não chamar
-   * registerProgress sem necessidade quando não há vínculo).
-   */
+  
+
   async _registerMessageCountProgress(guildId, twitchUserId) {
     if (!twitchUserId) return;
 
@@ -339,17 +288,17 @@ class TwitchChatBot {
 
     for (const missao of missoesDeMensagem) {
       const progresso = await CreatorMissionService.registerProgress(discordUserId, missao._id, 1).catch((err) => {
-        // NoLinkedAccountError/MissionNotFoundError não deveriam ocorrer
-        // aqui (já filtramos acima), mas nunca deixamos uma missão com
-        // problema derrubar o progresso das demais.
+        
+        
+        
         console.error(`[TwitchChatBot] Falha ao registrar progresso da missão ${missao._id}:`, err.message);
         return null;
       });
 
-      // registerProgress só ATUALIZA o progresso — a recompensa (cargo,
-      // etc.) só é efetivamente entregue por registerReward. Sem esta
-      // chamada, a missão fica "completed" no banco mas o cargo nunca
-      // é atribuído no Discord.
+      
+      
+      
+      
       if (progresso?.status === 'completed') {
         await CreatorMissionService.registerReward(discordUserId, missao._id).catch((err) => {
           console.error(`[TwitchChatBot] Falha ao registrar recompensa da missão ${missao._id}:`, err.message);
@@ -358,20 +307,14 @@ class TwitchChatBot {
     }
   }
 
-  /* ─────────────────────────────────────────────
-     Alertas de Eventos — handlers (ver registro dos listeners no
-     boot()). Todos seguem o mesmo formato: resolver `doc` do canal
-     (mesmo padrão de `_handleMessage`) e delegar a
-     `TwitchAlertService.triggerAlert`, que já filtra por alertas
-     ativos/limiar e nunca lança erro.
-     ───────────────────────────────────────────── */
+  
 
   async _findChannelDoc(channel) {
     const login = channel.replace(/^#/, '').toLowerCase();
     return TwitchChannelDb.findOne({ twitchLogin: login, moduleEnabled: true }).lean();
   }
 
-  /** Converte o `method`/`methods` do tmi.js (plano da inscrição) no valor de {tier}. */
+  
   _tierLabel(method = {}) {
     if (!method) return null;
     if (method.prime) return 'Prime';
@@ -401,9 +344,9 @@ class TwitchChatBot {
     const doc = await this._findChannelDoc(channel);
     if (!doc) return;
 
-    // `msg-param-cumulative-months` (tag do IRC) é a contagem total real
-    // de meses acumulados; `months` (argumento do tmi.js) é só um
-    // fallback caso a tag não venha por algum motivo.
+    
+    
+    
     const totalMonths = Number(userstate['msg-param-cumulative-months']) || Number(months) || 0;
 
     await TwitchAlertService.triggerAlert(doc.guildId, ALERT_TYPES.RESUB, {
@@ -417,15 +360,8 @@ class TwitchChatBot {
     });
   }
 
-  /**
-   * Gift sub individual. Quando faz parte de um "Mystery Gift" (lote),
-   * a tag `msg-param-community-gift-id` vem preenchida — nesse caso o
-   * disparo já é feito uma única vez em `_handleMysteryGift` (com
-   * `count` = total do lote), então este handler não dispara de novo
-   * pra cada presente individual do mesmo lote (evitaria contar 1 + N).
-   * Só dispara aqui um gift sub AVULSO (fora de um mystery gift), com
-   * `count: 1`.
-   */
+  
+
   async _handleSubGift(channel, username, methods, userstate) {
     if (userstate['msg-param-community-gift-id']) return;
 
@@ -443,7 +379,7 @@ class TwitchChatBot {
     });
   }
 
-  /** Lote de gift subs ("Mystery Gift") — um único disparo com `count` = total do lote. */
+  
   async _handleMysteryGift(channel, username, numbOfSubs, methods, userstate) {
     const doc = await this._findChannelDoc(channel);
     if (!doc) return;
@@ -473,15 +409,8 @@ class TwitchChatBot {
     });
   }
 
-  /**
-   * O evento `raided` do tmi.js só traz o login de quem raidou (sem
-   * `user-id`) — pra atribuir cargo (que depende de `platformUserId`
-   * pra resolver o vínculo Discord) é preciso resolver o usuário via
-   * Helix (`TwitchApiService.getUserByLogin`). Só faz essa chamada
-   * extra se houver ao menos um alerta ATIVO do tipo Raid pra este
-   * servidor — evita gastar chamada de API em raids de servidores sem
-   * esse alerta configurado.
-   */
+  
+
   async _handleRaid(channel, username, viewers) {
     const doc = await this._findChannelDoc(channel);
     if (!doc) return;

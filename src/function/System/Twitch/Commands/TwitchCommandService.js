@@ -5,7 +5,6 @@ const { PERMISSIONS } = TwitchCommandDb;
 
 const PLATFORM = 'twitch';
 
-// Ordem de hierarquia — cada nível inclui os cargos abaixo dele.
 const PERMISSION_RANK = {
   [PERMISSIONS.EVERYONE]:    0,
   [PERMISSIONS.SUBSCRIBER]:  1,
@@ -13,21 +12,6 @@ const PERMISSION_RANK = {
   [PERMISSIONS.MODERATOR]:   2,
   [PERMISSIONS.BROADCASTER]: 3,
 };
-
-/**
- * Engine de Comandos Personalizados de Chat da Twitch.
- *
- * ESPELHA EXATAMENTE ayami-fixed/services/twitchCommandService.js do
- * Dashboard — os dois lêem/escrevem o MESMO documento Mongo
- * (`twitch_chat_commands`), nenhuma regra de negócio (cooldown,
- * permissão, unicidade de gatilho) tem valores diferentes entre os
- * dois lados. Qualquer alteração de regra precisa ser replicada nos
- * dois arquivos.
- *
- * Quem efetivamente fala no chat da Twitch é o TwitchChatBot.js — este
- * arquivo só resolve QUAL comando disparar, SE pode disparar (cooldown
- * + permissão) e COM QUE TEXTO (variáveis), sem depender de tmi.js.
- */
 
 class CommandNotFoundError extends Error {
   constructor() {
@@ -49,10 +33,6 @@ function normalizeTrigger(raw) {
     .toLowerCase()
     .replace(/^!+/, '');
 }
-
-/* ─────────────────────────────────────────────
-   CRUD
-   ───────────────────────────────────────────── */
 
 async function listCommands(guildId, platform = PLATFORM) {
   return TwitchCommandDb.find({ guildId, platform }).sort({ createdAt: -1 }).lean();
@@ -131,11 +111,6 @@ async function deleteCommand(commandId, guildId) {
   await TwitchCommandDb.deleteOne({ _id: commandId });
 }
 
-/* ─────────────────────────────────────────────
-   Execução (usado pelo TwitchChatBot.js)
-   ───────────────────────────────────────────── */
-
-/** Encontra o comando ativo correspondente à primeira palavra da mensagem do chat. */
 async function resolveCommand(guildId, messageText, platform = PLATFORM) {
   const first = String(messageText || '').trim().split(/\s+/)[0] || '';
   const trigger = normalizeTrigger(first);
@@ -144,7 +119,6 @@ async function resolveCommand(guildId, messageText, platform = PLATFORM) {
   return TwitchCommandDb.findOne({ guildId, platform, trigger, active: true }).lean();
 }
 
-/** badges: { broadcaster, moderator, vip, subscriber } (booleans, vindos das tags do IRC). */
 function userRank(badges = {}) {
   if (badges.broadcaster) return PERMISSION_RANK[PERMISSIONS.BROADCASTER];
   if (badges.moderator)   return PERMISSION_RANK[PERMISSIONS.MODERATOR];
@@ -157,7 +131,6 @@ function canUseCommand(command, badges = {}) {
   return userRank(badges) >= required;
 }
 
-/** Cooldown é global por comando (não por usuário) — evita spam no chat. */
 function isOnCooldown(command) {
   if (!command.lastUsedAt || !command.cooldownSeconds) return false;
   const elapsedMs = Date.now() - new Date(command.lastUsedAt).getTime();
@@ -186,7 +159,6 @@ function formatUptime(ms) {
   return h > 0 ? `${h}h${m}min` : `${m}min`;
 }
 
-/** Registra o uso (contador + cooldown) — chamado só depois do envio ter sucesso. */
 async function registerUsage(commandId, viewerLogin) {
   return TwitchCommandDb.findByIdAndUpdate(commandId, {
     $inc: { usageCount: 1 },

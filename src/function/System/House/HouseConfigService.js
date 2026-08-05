@@ -164,7 +164,7 @@ class HouseConfigService {
 
   async updateCallDuration(guildId, minutes) {
     const doc = await this.getOrCreate(guildId);
-    doc.call.duration = minutes; // null pra desativar timeout
+    doc.call.duration = minutes; 
     await doc.save();
     return doc;
   }

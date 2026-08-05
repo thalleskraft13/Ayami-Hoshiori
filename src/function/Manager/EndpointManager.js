@@ -140,10 +140,10 @@ class EndpointManager {
     }
 
     const historyLimit = plan.endpoints?.historyLimit ?? 20;
-    // Os prints de print() sempre são gravados — são o console do Logic
-    // Script, não um recurso premium. `errorLogs` (plano) só limitava isso
-    // antes; o que o plano realmente controla é `historyLimit` (quantas
-    // requisições ficam guardadas) e os demais limites do endpoint.
+    
+    
+    
+    
 
     try {
       await LogicEndpointLogModel.create({

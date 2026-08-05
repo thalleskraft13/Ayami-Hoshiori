@@ -6,10 +6,10 @@ const YouTubeApi       = require('./YouTubeApiService.js');
 const DiscordRequest   = require('../../DiscordRequest.js');
 const CV2              = require('../../Messages/CV2.js');
 
-const CHECK_INTERVAL_MS      = 5 * 60 * 1000; // 5 minutos — a Data API tem cota diária limitada
+const CHECK_INTERVAL_MS      = 5 * 60 * 1000; 
 const RECENT_UPLOADS_LIMIT   = 5;
 const KNOWN_IDS_CACHE_LIMIT  = 30;
-const SHORTS_MAX_SECONDS     = 180; // heurística: a Data API não sinaliza Shorts diretamente
+const SHORTS_MAX_SECONDS     = 180; 
 
 const ACCENT = {
   video: 0xFF0000,
@@ -119,7 +119,7 @@ class YouTubeManager {
     });
     const detailsById  = new Map(detalhes.map((d) => [d.id, d]));
 
-    // processa do mais antigo para o mais novo, para manter a ordem cronológica dos anúncios
+    
     const ordenados = [...novos].reverse();
 
     let lastLiveVideoId = doc.state?.lastLiveVideoId ?? null;
@@ -132,7 +132,7 @@ class YouTubeManager {
       const tipo = this._classify(detail);
 
       if (tipo === 'live') {
-        if (lastLiveVideoId === detail.id) continue; // impede anúncio duplicado da mesma live
+        if (lastLiveVideoId === detail.id) continue; 
         lastLiveVideoId = detail.id;
         isLiveAtual = detail.liveBroadcastContent === 'live';
       }

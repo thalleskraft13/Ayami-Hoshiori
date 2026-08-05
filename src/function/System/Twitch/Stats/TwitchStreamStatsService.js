@@ -6,16 +6,6 @@ const CreatorMissionService  = require('../../Missions/CreatorMissionService.js'
 
 const PLATFORM = 'twitch';
 
-/**
- * Estatísticas de transmissão (nível stream, não por espectador).
- *
- * ESPELHA EXATAMENTE a função `getStatsOverview` de
- * ayami-fixed/services/twitchChannelDashboardService.js do Dashboard —
- * mesmo cálculo, sobre os mesmos documentos (`TwitchHistory` +
- * `CreatorMissionProgress`). Extraído aqui pro Bot poder mostrar os
- * mesmos números no painel de Estatísticas (antes só a Dashboard tinha
- * esse cálculo implementado; o painel do Bot ficava só com "—").
- */
 async function getStatsOverview(guildId) {
   const [missions, historyDocs] = await Promise.all([
     CreatorMissionService.listMissions(guildId, PLATFORM),

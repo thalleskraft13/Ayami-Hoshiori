@@ -1412,9 +1412,9 @@ class HouseSystem {
     return this.editOriginal(interaction, [CV2.container(blocks, { accentColor: ACCENT })]);
   }
 
-  // ---------------------------------------------------------------------
-  // /house personagens lista | /house personagens usuario
-  // ---------------------------------------------------------------------
+  
+  
+  
 
   async _personagensListaContainer(guildId, userId, page, ctx) {
     const t = (key, extra) => this.client.t(key, { ...ctx, ...extra });

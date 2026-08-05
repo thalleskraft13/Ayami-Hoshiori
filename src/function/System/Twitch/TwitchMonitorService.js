@@ -6,7 +6,7 @@ const TwitchApi       = require('./TwitchApiService.js');
 const DiscordRequest  = require('../../DiscordRequest.js');
 const CV2             = require('../../Messages/CV2.js');
 
-const CHECK_INTERVAL_MS = 2 * 60 * 1000; // 2 minutos — respeita o rate limit da Helix
+const CHECK_INTERVAL_MS = 2 * 60 * 1000; 
 
 const ACCENT_LIVE    = 0x9146FF;
 const ACCENT_OFFLINE = 0x2F3136;
@@ -88,8 +88,8 @@ class TwitchMonitorService {
     const wasLive = !!doc.state?.isLive;
     const isLive  = !!stream;
 
-    // impede anúncios duplicados: só dispara início se não estava ao vivo
-    // ou se a stream mudou (ex.: bot ficou offline entre uma live e outra)
+    
+    
     if (isLive && (!wasLive || doc.state?.streamId !== stream.id)) {
       return this._handleLiveStart(doc, stream);
     }
@@ -128,13 +128,13 @@ class TwitchMonitorService {
         console.error(`[TwitchMonitorService] Falha ao anunciar início (guild ${doc.guildId}):`, err.message));
     }
 
-    // Fase 5 — ponto de extensão pra Missões: quando existir um
-    // mecanismo de detecção de espectadores (comando de check-in,
-    // EventSub de chat, etc), o progresso de missões do tipo
-    // WATCH_STREAM/WATCH_DURATION deve ser registrado aqui através de
-    // CreatorMissionService.registerProgress(discordUserId, missionId,
-    // amount) — nunca duplicando a lógica de verificação de vínculo,
-    // que já vive dentro do próprio service.
+    
+    
+    
+    
+    
+    
+    
   }
 
   async _handleLiveEnd(doc) {

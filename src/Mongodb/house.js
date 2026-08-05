@@ -77,7 +77,7 @@ const callConfigSchema = new Schema({
   schedule:     { type: callScheduleSchema, default: () => ({}) },
   inactivity:   { type: callInactivitySchema, default: () => ({}) },
   message:      { type: callMessageSchema, default: () => ({}) },
-  duration:     { type: Number, default: null }, // em minutos; null = sem timeout (fechamento manual, comportamento atual)
+  duration:     { type: Number, default: null }, 
 }, { _id: false });
 
 const permissionsSchema = new Schema({

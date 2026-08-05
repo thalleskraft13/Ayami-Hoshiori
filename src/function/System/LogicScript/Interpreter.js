@@ -493,7 +493,7 @@ class Interpreter {
       const nomeTopico = String(nome ?? 'Novo Tópico').slice(0, 100);
       const tipoRaw    = Number(opts?.type ?? 1);
       const isPrivado  = tipoRaw === 2;
-      const discordType = isPrivado ? 12 : 11; // 1 = público (PUBLIC_THREAD), 2 = privado (PRIVATE_THREAD)
+      const discordType = isPrivado ? 12 : 11; 
 
       const body = {
         name: nomeTopico,
@@ -1366,7 +1366,7 @@ class Interpreter {
     return {
       id:        topicId,
       name:      data?.name,
-      type:      Number(data?.type) === 12 ? 2 : 1, // 1 = público, 2 = privado
+      type:      Number(data?.type) === 12 ? 2 : 1, 
       channelId: data?.parent_id,
 
       send: async (c, o) => self._sendToChannel(topicId, c, o),

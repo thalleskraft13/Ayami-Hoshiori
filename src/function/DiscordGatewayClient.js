@@ -534,7 +534,7 @@ async _onScheduledEventUserAdd(data) {
 
     this.guilds.markSessionGuilds((d.guilds ?? []).map(g => g.id));
      await this.MediaManager.init()
-   // await this.registerSlashCommands()
+   
     if (!this._commandsLoaded) {
         this._commandsLoaded = true;
         await this._loadCommands();

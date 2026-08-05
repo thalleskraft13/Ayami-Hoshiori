@@ -21,7 +21,6 @@ async function reply(interaction, blocks, opts = {}) {
   });
 }
 
-// Igual a reply(), mas recebe containers ja prontos (ex: montados via CV2.container do houseSystem)
 async function replyContainers(interaction, containers, opts = {}) {
   return DiscordRequest(`/interactions/${interaction.id}/${interaction.token}/callback`, {
     method: 'POST',

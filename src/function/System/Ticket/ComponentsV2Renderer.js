@@ -40,10 +40,10 @@ function serializeBlock(block, panel) {
       return inner;
     }
 
-    // Botões/Select Menu do painel de abertura — únicas ações permitidas
-    // são "abrir ticket" e "abrir categoria específica" (nunca um flow
-    // arbitrário), usando os mesmos custom_ids que o InteractionManager
-    // já despacha para createFromButton/createFromOptionButton/createFromSelect.
+    
+    
+    
+    
     case 'button_row': {
       const buttons = (block.buttons || []).filter(b =>
         b.action === 'open_ticket' || (b.action === 'open_option' && panel?.selectMenuConfig?.options?.some(o => o.optionId === b.optionId))

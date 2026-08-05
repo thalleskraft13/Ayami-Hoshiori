@@ -140,17 +140,8 @@ class TwitchApiService {
     return streams[0] ?? null;
   }
 
-  /**
-   * "Get Chatters" — diferente do resto desta classe, exige um TOKEN
-   * DE USUÁRIO (moderador ou broadcaster do canal), não o app token de
-   * `client_credentials` usado em `_request`. Usado pela AyamiBot
-   * (Stats/TwitchViewerStatsService.js, via TwitchChatBot.js) com o
-   * próprio token dela — ela precisa ser moderadora do canal (mesmo
-   * requisito já documentado na Fase 6, pros comandos de chat).
-   *
-   * Retorna array de { user_id, user_login, user_name } (paginado
-   * internamente até 1000 chatters, suficiente pra esta finalidade).
-   */
+  
+
   async getChattersWithUserToken(broadcasterId, moderatorId, userAccessToken) {
     const { clientId } = this._credentials();
     let cursor = null;
@@ -183,21 +174,8 @@ class TwitchApiService {
     return chatters;
   }
 
-  /**
-   * "Get Channel Followers" — assim como "Get Chatters", exige TOKEN DE
-   * USUÁRIO (broadcaster ou moderador com escopo
-   * `moderator:read:followers`), não o app token de `client_credentials`
-   * usado em `_request`. Usado pelo polling de Follow (Alertas), só
-   * disponível pra canais conectados via Dashboard/OAuth — ver
-   * `Twitch/Alerts/TwitchFollowPollingService.js`.
-   *
-   * Retorna a lista de seguidores da página mais recente, no formato
-   * { user_id, user_login, user_name, followed_at }. A Twitch retorna
-   * este endpoint ordenado do seguidor mais recente pro mais antigo
-   * quando nenhum `user_id` é informado — é essa ordem que o polling
-   * usa pra parar de paginar assim que cruza o checkpoint já processado,
-   * então não puxa o histórico inteiro de seguidores a cada ciclo.
-   */
+  
+
   async getChannelFollowers(broadcasterId, userAccessToken, { after = null, first = 100 } = {}) {
     const { clientId } = this._credentials();
 
@@ -226,14 +204,8 @@ class TwitchApiService {
     };
   }
 
-  /**
-   * Renova o access_token de um usuário a partir do refresh_token salvo
-   * em `CreatorAccountLink#oauth.refreshToken` — equivalente do lado do
-   * Bot pra `ayami-fixed/services/twitchOAuth.js#refreshToken`
-   * (Dashboard). Reaproveita as MESMAS credenciais de app
-   * (TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET) já usadas em `_requestToken`
-   * acima — é a mesma Application no Twitch Developer Console.
-   */
+  
+
   async refreshUserToken(refreshToken) {
     const { clientId, clientSecret } = this._credentials();
 
@@ -255,7 +227,7 @@ class TwitchApiService {
       throw new Error(`[TwitchApiService] Falha ao renovar token de usuário: HTTP ${res.status} ${JSON.stringify(data)}`);
     }
 
-    return data; // { access_token, refresh_token, expires_in, scope, token_type }
+    return data; 
   }
 }
 

@@ -5,17 +5,6 @@ const CreatorAccountLink = require('../../../../Mongodb/creatorAccountLink.js');
 
 const PLATFORM = 'twitch';
 
-/**
- * Estatísticas por Espectador (Fase 7).
- *
- * ESPELHA EXATAMENTE ayami-fixed/services/twitchViewerStatsService.js
- * do Dashboard — os dois lêem o MESMO documento Mongo
- * (`twitch_viewer_stats`). A ESCRITA, porém, só acontece aqui (Bot,
- * via TwitchChatBot.js) — a Dashboard é somente leitura pra esta
- * estatística, igual ao padrão já usado pelo histórico de lives
- * (`TwitchHistory`, escrito só pelo TwitchMonitorService).
- */
-
 async function recordMessage(guildId, viewer) {
   await TwitchViewerStatDb.findOneAndUpdate(
     { guildId, platform: PLATFORM, viewerTwitchId: viewer.id },
@@ -31,11 +20,6 @@ async function recordMessage(guildId, viewer) {
   );
 }
 
-/**
- * Chamado periodicamente (a cada amostragem de "Get Chatters") pra
- * cada espectador presente no chat de uma live em andamento.
- * `sampleSeconds` é o intervalo desde a última amostragem (ex.: 300).
- */
 async function recordWatchSample(guildId, viewer, streamId, sampleSeconds) {
   const existente = await TwitchViewerStatDb.findOne(
     { guildId, platform: PLATFORM, viewerTwitchId: viewer.id },
@@ -61,7 +45,6 @@ async function recordWatchSample(guildId, viewer, streamId, sampleSeconds) {
   );
 }
 
-/** Resolve o vínculo Discord (se existir) pra uma lista de viewerTwitchIds. */
 async function _resolveDiscordLinks(viewerTwitchIds) {
   if (!viewerTwitchIds.length) return new Map();
 
