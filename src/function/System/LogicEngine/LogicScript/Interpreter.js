@@ -1,11 +1,11 @@
 'use strict';
 
-const DiscordRequest = require('../../DiscordRequest.js');
+const DiscordRequest = require('../../../DiscordRequest.js');
 const msLib          = require('ms');
-const TaskModel       = require('../../../Mongodb/tarefas.js');
-const { safeRequest, SafeHttpError } = require('../../Utils/SafeHttp.js');
-const PremiumManager  = require('../../Utils/PremiumManager.js');
-const { getPlan }     = require('../../Utils/PremiumPlans.js');
+const TaskModel       = require('../../../../Mongodb/tarefas.js');
+const { safeRequest, SafeHttpError } = require('../../../Utils/SafeHttp.js');
+const PremiumManager  = require('../../../Utils/PremiumManager.js');
+const { getPlan }     = require('../../../Utils/PremiumPlans.js');
 
 function extractId(raw) {
   if (raw == null) return raw;
@@ -530,7 +530,7 @@ class Interpreter {
 
   async _bankSetup(fnName) {
     const guildId = this._bankGuildOrThrow(fnName);
-    const BankService = require('../../Banco/BankService.js');
+    const BankService = require('../../../Banco/BankService.js');
     const bank = new BankService(guildId, { client: this.client });
     const banco = await bank.getBanco().catch(() => null);
     if (banco?.configuracoes?.permitirLogicScript === false) {
@@ -542,7 +542,7 @@ class Interpreter {
   async _bankRequireAdmin(bank, fnName) {
     const ctx = this.discordCtx;
     if (!ctx.userId) throw new RuntimeError(`${fnName}() precisa de um usuário no contexto.`);
-    const GetPerm = require('../../Utils/GetPerm.js');
+    const GetPerm = require('../../../Utils/GetPerm.js');
     const perms = await GetPerm({ id: ctx.userId, guildId: ctx.guildId, client: this.client }).catch(() => []);
     const ok = await bank.isAdmin(ctx.userId, perms ?? []).catch(() => false);
     if (!ok) throw new RuntimeError(`${fnName}(): você precisa ser administrador do Banco para executar essa ação.`);
@@ -569,7 +569,7 @@ class Interpreter {
     return {
       existe: async () => {
         const guildId = this._bankGuildOrThrow('bank.existe');
-        const BankService = require('../../Banco/BankService.js');
+        const BankService = require('../../../Banco/BankService.js');
         const bank = new BankService(guildId, { client: this.client });
         const banco = await bank.getBanco().catch(() => null);
         return !!banco;
@@ -671,7 +671,7 @@ class Interpreter {
 
       criar: async (dados) => {
         const guildId = this._bankGuildOrThrow('bank.criar');
-        const BankService = require('../../Banco/BankService.js');
+        const BankService = require('../../../Banco/BankService.js');
         const bank = new BankService(guildId, { client: this.client });
         if (!ctx.userId) throw new RuntimeError('bank.criar() precisa de um usuário no contexto.');
         this._logAction('BANK_CRIAR', `actor=${ctx.userId}`);
@@ -690,7 +690,7 @@ class Interpreter {
       souAdmin: async (userId) => {
         const bank = await this._bankSetup('bank.souAdmin');
         const alvo = extractId(userId) ?? ctx.userId;
-        const GetPerm = require('../../Utils/GetPerm.js');
+        const GetPerm = require('../../../Utils/GetPerm.js');
         const perms = await GetPerm({ id: alvo, guildId: ctx.guildId, client: this.client }).catch(() => []);
         return bank.isAdmin(alvo, perms ?? []).catch(() => false);
       },
@@ -727,7 +727,7 @@ class Interpreter {
         souAdmin: async (userId) => {
           const bank = await this._bankSetup('bank.permissoes.souAdmin');
           const alvo = extractId(userId) ?? ctx.userId;
-          const GetPerm = require('../../Utils/GetPerm.js');
+          const GetPerm = require('../../../Utils/GetPerm.js');
           const perms = await GetPerm({ id: alvo, guildId: ctx.guildId, client: this.client }).catch(() => []);
           return bank.isAdmin(alvo, perms ?? []).catch(() => false);
         },
@@ -816,7 +816,7 @@ class Interpreter {
       loja: {
         categorias: async () => {
           const guildId = this._bankGuildOrThrow('bank.loja.categorias');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(guildId, { client: this.client });
           const lista = await shop.listarCategorias().catch(rethrow('bank.loja.categorias'));
           return lista.map(c => ({ id: String(c._id), nome: c.nome, ordem: c.ordem }));
@@ -824,7 +824,7 @@ class Interpreter {
         criarCategoria: async (nome) => {
           const bank = await this._bankSetup('bank.loja.criarCategoria');
           await this._bankRequireAdmin(bank, 'bank.loja.criarCategoria');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           const categoria = await shop.criarCategoria(ctx.userId, nome).catch(rethrow('bank.loja.criarCategoria'));
           return { id: String(categoria._id), nome: categoria.nome };
@@ -832,7 +832,7 @@ class Interpreter {
         removerCategoria: async (categoriaId) => {
           const bank = await this._bankSetup('bank.loja.removerCategoria');
           await this._bankRequireAdmin(bank, 'bank.loja.removerCategoria');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           await shop.removerCategoria(ctx.userId, categoriaId).catch(rethrow('bank.loja.removerCategoria'));
           return { ok: true };
@@ -840,14 +840,14 @@ class Interpreter {
         moverCategoria: async (categoriaId, direcao) => {
           const bank = await this._bankSetup('bank.loja.moverCategoria');
           await this._bankRequireAdmin(bank, 'bank.loja.moverCategoria');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           await shop.moverCategoria(ctx.userId, categoriaId, direcao).catch(rethrow('bank.loja.moverCategoria'));
           return { ok: true };
         },
         produtos: async (categoriaId) => {
           const guildId = this._bankGuildOrThrow('bank.loja.produtos');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(guildId, { client: this.client });
           const lista = await shop.listarProdutos(categoriaId).catch(rethrow('bank.loja.produtos'));
           return lista.map(p => ({
@@ -857,7 +857,7 @@ class Interpreter {
         },
         produto: async (produtoId) => {
           const guildId = this._bankGuildOrThrow('bank.loja.produto');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(guildId, { client: this.client });
           const p = await shop.getProduto(produtoId).catch(rethrow('bank.loja.produto'));
           if (!p) return null;
@@ -869,7 +869,7 @@ class Interpreter {
         criarProduto: async (categoriaId, dados) => {
           const bank = await this._bankSetup('bank.loja.criarProduto');
           await this._bankRequireAdmin(bank, 'bank.loja.criarProduto');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           const produto = await shop.criarProduto(ctx.userId, categoriaId, dados ?? {}).catch(rethrow('bank.loja.criarProduto'));
           return { id: String(produto._id), nome: produto.nome };
@@ -877,7 +877,7 @@ class Interpreter {
         editarProduto: async (produtoId, patch) => {
           const bank = await this._bankSetup('bank.loja.editarProduto');
           await this._bankRequireAdmin(bank, 'bank.loja.editarProduto');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           await shop.editarProduto(ctx.userId, produtoId, patch ?? {}).catch(rethrow('bank.loja.editarProduto'));
           return { ok: true };
@@ -885,7 +885,7 @@ class Interpreter {
         removerProduto: async (produtoId) => {
           const bank = await this._bankSetup('bank.loja.removerProduto');
           await this._bankRequireAdmin(bank, 'bank.loja.removerProduto');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           await shop.removerProduto(ctx.userId, produtoId).catch(rethrow('bank.loja.removerProduto'));
           return { ok: true };
@@ -893,7 +893,7 @@ class Interpreter {
         moverProduto: async (produtoId, direcao) => {
           const bank = await this._bankSetup('bank.loja.moverProduto');
           await this._bankRequireAdmin(bank, 'bank.loja.moverProduto');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           await shop.moverProduto(ctx.userId, produtoId, direcao).catch(rethrow('bank.loja.moverProduto'));
           return { ok: true };
@@ -901,7 +901,7 @@ class Interpreter {
         comprar: async (produtoId, quantidade) => {
           const bank = await this._bankSetup('bank.loja.comprar');
           if (!ctx.userId) throw new RuntimeError('bank.loja.comprar() precisa de um usuário no contexto.');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(ctx.guildId, { client: this.client });
           const qtd = quantidade === undefined ? 1 : inteiro(quantidade, 'bank.loja.comprar');
           this._logAction('BANK_LOJA_COMPRAR', `user=${ctx.userId} produto=${produtoId} qtd=${qtd}`);
@@ -915,7 +915,7 @@ class Interpreter {
           const guildId = this._bankGuildOrThrow('bank.inventario.listar');
           const alvo = extractId(userId) ?? ctx.userId;
           if (!alvo) throw new RuntimeError('bank.inventario.listar() precisa de um usuário.');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(guildId, { client: this.client });
           const itens = await shop.inventario(alvo).catch(rethrow('bank.inventario.listar'));
           return itens.map(i => ({ item: i.itemNome, quantidade: i.quantidade }));
@@ -925,7 +925,7 @@ class Interpreter {
           const alvo = extractId(userId) ?? ctx.userId;
           if (!alvo) throw new RuntimeError('bank.inventario.quantidade() precisa de um usuário.');
           if (!itemNome) throw new RuntimeError('bank.inventario.quantidade() precisa do nome do item.');
-          const ShopService = require('../../Loja/ShopService.js');
+          const ShopService = require('../../../Loja/ShopService.js');
           const shop = new ShopService(guildId, { client: this.client });
           return shop.quantidadeItem(alvo, String(itemNome)).catch(rethrow('bank.inventario.quantidade'));
         },
@@ -936,7 +936,7 @@ class Interpreter {
           const bank = await this._bankSetup('bank.mercado.vender');
           if (!ctx.userId) throw new RuntimeError('bank.mercado.vender() precisa de um usuário no contexto.');
           if (!itemNome) throw new RuntimeError('bank.mercado.vender() precisa do nome do item.');
-          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const LocalMarketService = require('../../../Mercado/LocalMarketService.js');
           const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
           const qtd   = inteiro(quantidade, 'bank.mercado.vender');
           const preco = inteiro(precoUnitario, 'bank.mercado.vender');
@@ -947,14 +947,14 @@ class Interpreter {
         cancelarVenda: async (listingId) => {
           const bank = await this._bankSetup('bank.mercado.cancelarVenda');
           if (!ctx.userId) throw new RuntimeError('bank.mercado.cancelarVenda() precisa de um usuário no contexto.');
-          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const LocalMarketService = require('../../../Mercado/LocalMarketService.js');
           const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
           await mercado.cancelarVenda(ctx.userId, listingId).catch(rethrow('bank.mercado.cancelarVenda'));
           return { ok: true };
         },
         listarVendas: async (itemNome) => {
           const bank = await this._bankSetup('bank.mercado.listarVendas');
-          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const LocalMarketService = require('../../../Mercado/LocalMarketService.js');
           const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
           const lista = await mercado.listarVendas({ itemNome: itemNome ? String(itemNome) : null }).catch(rethrow('bank.mercado.listarVendas'));
           return lista.map(l => ({
@@ -965,7 +965,7 @@ class Interpreter {
         comprar: async (listingId, quantidade) => {
           const bank = await this._bankSetup('bank.mercado.comprar');
           if (!ctx.userId) throw new RuntimeError('bank.mercado.comprar() precisa de um usuário no contexto.');
-          const LocalMarketService = require('../../Mercado/LocalMarketService.js');
+          const LocalMarketService = require('../../../Mercado/LocalMarketService.js');
           const mercado = new LocalMarketService(ctx.guildId, { client: this.client });
           const qtd = inteiro(quantidade, 'bank.mercado.comprar');
           this._logAction('BANK_MERCADO_COMPRAR', `user=${ctx.userId} listing=${listingId} qtd=${qtd}`);

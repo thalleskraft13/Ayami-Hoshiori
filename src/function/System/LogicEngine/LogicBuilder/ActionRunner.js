@@ -1,7 +1,7 @@
 'use strict';
 
-const DiscordRequest = require('../../DiscordRequest.js');
-const { localeCtx }  = require('../../Utils/ctxLocale.js');
+const DiscordRequest = require('../../../DiscordRequest.js');
+const { localeCtx }  = require('../../../Utils/ctxLocale.js');
 
 class ActionRunner {
 
@@ -447,7 +447,7 @@ class ActionRunner {
     const guildId = ctx.discord.guildId;
     if (!guildId) return;
 
-    const BankService = require('../../Banco/BankService.js');
+    const BankService = require('../../../Banco/BankService.js');
     const bank = new BankService(guildId, { client: this.client });
     const userId = p.userId || ctx.discord.userId;
 
@@ -565,7 +565,7 @@ class ActionRunner {
         break;
 
       case 'set_user_var': {
-        const { UserVarModel } = require('../../../Mongodb/flow.js');
+        const { UserVarModel } = require('../../../../Mongodb/flow.js');
         const guildId = ctx.discord.guildId;
         const targetUserId = ctx.resolveTargetUserId(p.targetUserId);
 
@@ -861,7 +861,7 @@ class ActionRunner {
   }
 
   async _showRanking(p, ctx) {
-    const { UserVarModel } = require('../../../Mongodb/flow.js');
+    const { UserVarModel } = require('../../../../Mongodb/flow.js');
     const guildId   = ctx.discord.guildId;
     const channelId = ctx.discord.channelId;
     const varName   = p.varName  || 'money';

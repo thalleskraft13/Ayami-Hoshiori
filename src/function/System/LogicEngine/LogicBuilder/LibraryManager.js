@@ -1,14 +1,14 @@
 'use strict';
 
 const { randomUUID }   = require('crypto');
-const DiscordRequest   = require('../../DiscordRequest.js');
-const LibraryRewards   = require('../../Estrelas/LibraryRewards.js');
+const DiscordRequest   = require('../../../DiscordRequest.js');
+const LibraryRewards   = require('../../../Estrelas/LibraryRewards.js');
 const {
   LibraryFlowModel,
   LibraryRatingModel,
   CreatorProfileModel,
   LibraryInstallModel
-} = require('../../../Mongodb/flow.js');
+} = require('../../../../Mongodb/flow.js');
 
 class LibraryManager {
 
@@ -31,7 +31,7 @@ class LibraryManager {
   }
 
   async publish({ authorId, name, shortDesc, fullDesc, category, tags, flowIds, guildId, ctx = {} }) {
-    const { FlowModel } = require('../../../Mongodb/flow.js');
+    const { FlowModel } = require('../../../../Mongodb/flow.js');
 
     const flows = await FlowModel.find({
       guildId,
@@ -100,7 +100,7 @@ class LibraryManager {
       throw new Error(this.client.t('logicbuilder.err_version_must_be_higher', { ...ctx, newVersion, currentVersion: entry.version }));
     }
 
-    const { FlowModel } = require('../../../Mongodb/flow.js');
+    const { FlowModel } = require('../../../../Mongodb/flow.js');
     const flows = await FlowModel.find({ guildId, flowId: { $in: flowIds } }).lean();
 
     if (!flows.length) throw new Error(this.client.t('logicbuilder.err_no_flows_to_publish', ctx));

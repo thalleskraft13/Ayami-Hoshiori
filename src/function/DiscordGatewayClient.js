@@ -25,10 +25,11 @@ const UserGlobalDb         = require('../Mongodb/userglobal.js');
 const sendDm               = require('./Utils/sendDm.js');
 const MessageEmbed         = require('./Messages/EmbedBuild.js');
 const GenshinLeaksManager  = require('./System/GenshinLeaksManager.js');
-const LogicEngine = require('./System/LogicBuilder/LogicEngine.js')
-const FlowUI = require('./System/LogicBuilder/Flow.js');
+const LogicEngine = require('./System/LogicEngine/LogicBuilder/LogicEngine.js')
+const LogicNodesEngine = require("./System/LogicEngine/LogicNodes/LogicNodesEngine.js")
+const FlowUI = require('./System/LogicEngine/LogicBuilder/Flow.js');
 const BirthdayManager = require("./System/BirthdayManager.js");
-const LibraryManager = require("./System/LogicBuilder/LibraryManager.js");
+const LibraryManager = require("./System/LogicEngine/LogicBuilder/LibraryManager.js");
 const Missions = require("./Estrelas/Missions.js");
 const MessageLibraryManager = require("./System/MessageLibrary/LibraryManager.js");
 const MissionManager = require('./System/MissionManager.js');
@@ -41,7 +42,7 @@ const GiveawaySystem   = require('./System/Giveaway/GiveawaySystem.js');
 const GiveawayScheduler = require('./System/Giveaway/Utils/GiveawayScheduler.js');
 const {GiveawayMessageTracker} = require("./System/Giveaway/Utils/GiveawayMessageTracker.js")
 const { LanguageManager } = require('./Manager/LanguageManager');
-const { ScriptRunner }    = require('./System/LogicScript/ScriptRunner.js');
+const { ScriptRunner }    = require('./System/LogicEngine/LogicScript/ScriptRunner.js');
 const EndpointManager     = require('./Manager/EndpointManager.js');
 const MediaManager = require('./Manager/MediaManager');
 const AyamiProfileManager = require('./System/AyamiProfile/AyamiProfileManager.js');
@@ -106,6 +107,7 @@ class DiscordGatewayClient extends EventEmitter {
         this.UidManager        = new UidSystem(this);
         this.GenshinLeaksManager = new GenshinLeaksManager(this);
         this.logicEngine = new LogicEngine(this);
+        this.logicNodesEngine = new LogicNodesEngine(this);
         this.logicUI = new FlowUI(this);
         this.libraryManager = new LibraryManager(this);
         this.messageLibraryManager = new MessageLibraryManager(this);
@@ -556,6 +558,7 @@ async _onScheduledEventUserAdd(data) {
         await this.twitchFollowPolling.boot();
         await this.youtubeMonitor.boot();
         await this.logicEngine.start();
+        await this.logicNodesEngine.start();
         await this.libraryManager.start()
         await this.messageLibraryManager.start()
         console.log("\n|————————————————————————|")

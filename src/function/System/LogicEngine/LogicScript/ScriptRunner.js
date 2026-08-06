@@ -4,8 +4,8 @@ const { Lexer, LexerError }            = require('./Lexer.js');
 const { Parser, ParseError }            = require('./Parser.js');
 const { Interpreter, RuntimeError }     = require('./Interpreter.js');
 const { db: lsDb }                      = require('./Database.js');
-const { LogicScriptModel, LogicRunLogModel } = require('../../../Mongodb/logicScript.js');
-const { LogicScriptConfig }             = require('../../../Mongodb/logicScriptConfig.js');
+const { LogicScriptModel, LogicRunLogModel } = require('../../../../Mongodb/logicScript.js');
+const { LogicScriptConfig }             = require('../../../../Mongodb/logicScriptConfig.js');
 
 const SCRIPT_CACHE_TTL  = 30_000;
 const CONFIG_CACHE_TTL  = 60_000;

@@ -1,7 +1,7 @@
 'use strict';
 
-const DiscordRequest = require('../../DiscordRequest.js');
-const { localeCtx }  = require('../../Utils/ctxLocale.js');
+const DiscordRequest = require('../../../DiscordRequest.js');
+const { localeCtx }  = require('../../../Utils/ctxLocale.js');
 
 class ConditionEvaluator {
 
@@ -62,6 +62,7 @@ class ConditionEvaluator {
       case 'command':     return this._command(cond.type, p, ctx);
       case 'reaction':    return this._reaction(cond.type, p, ctx);
       case 'args':        return this._args(cond.type, p, ctx);
+      case 'value':       return this._value(cond.type, p, ctx);
       default:
         console.warn(`[ConditionEvaluator] Categoria desconhecida: ${cond.category}`);
         return true;
@@ -315,7 +316,7 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
   }
 
   async _permission(type, p, ctx) {
-    const getPerm = require('../../Utils/GetPerm.js');
+    const getPerm = require('../../../Utils/GetPerm.js');
 
     const perms = await getPerm({
       id:      ctx.discord.userId,
@@ -441,6 +442,91 @@ case 'minute_eq': return new Date().getMinutes() === Number(p.minute);
       }
 
       default: return true;
+    }
+  }
+
+  async _value(type, p, ctx) {
+    switch (type) {
+      case 'if': {
+        return this._evalExpression(p.expression || '');
+      }
+
+      case 'compare_text': {
+        const a = String(p.valueA || '').toLowerCase();
+        const b = String(p.valueB || '').toLowerCase();
+        return a === b;
+      }
+
+      case 'compare_number': {
+        const a = Number(p.valueA);
+        const b = Number(p.valueB);
+        return this._compareNumbers(a, p.operator, b);
+      }
+
+      case 'contains_text': {
+        const text = String(p.text || '').toLowerCase();
+        const search = String(p.search || '').toLowerCase();
+        return text.includes(search);
+      }
+
+      case 'equals': {
+        return p.valueA == p.valueB;
+      }
+
+      case 'exists': {
+        const name = (p.variable || '').replace(/^\{|\}$/g, '').trim();
+        if (!name) return false;
+
+        const direct = ctx.getVar(name);
+        if (direct !== null && direct !== undefined && direct !== '') return true;
+
+        const interpolated = await ctx.interpolate(`{${name}}`);
+        return interpolated !== '' && interpolated !== `{${name}}`;
+      }
+
+      default:
+        return false;
+    }
+  }
+
+  _evalExpression(expression) {
+    const match = expression.match(/^(.*?)(==|!=|>=|<=|>|<)(.*)$/);
+    if (!match) return Boolean(expression.trim());
+
+    const left = match[1].trim();
+    const operator = match[2];
+    const right = match[3].trim();
+
+    const numLeft = Number(left);
+    const numRight = Number(right);
+
+    if (left !== '' && right !== '' && !Number.isNaN(numLeft) && !Number.isNaN(numRight)) {
+      return this._compareNumbers(numLeft, operator, numRight);
+    }
+
+    const strLeft = left.toLowerCase();
+    const strRight = right.toLowerCase();
+
+    switch (operator) {
+      case '==': return strLeft === strRight;
+      case '!=': return strLeft !== strRight;
+      case '>':  return strLeft > strRight;
+      case '<':  return strLeft < strRight;
+      case '>=': return strLeft >= strRight;
+      case '<=': return strLeft <= strRight;
+      default:   return false;
+    }
+  }
+
+  _compareNumbers(a, operator, b) {
+    switch (operator) {
+      case '>':  return a > b;
+      case '<':  return a < b;
+      case '>=': return a >= b;
+      case '<=': return a <= b;
+      case '==': return a === b;
+      case '!=': return a !== b;
+      default:   return false;
     }
   }
 

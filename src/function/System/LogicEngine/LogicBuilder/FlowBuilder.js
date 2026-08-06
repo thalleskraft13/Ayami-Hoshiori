@@ -1,13 +1,13 @@
 'use strict';
 
-const DiscordRequest = require('../../DiscordRequest.js');
-const { localeCtx }  = require('../../Utils/ctxLocale.js');
-const { FlowModel }  = require('../../../Mongodb/flow.js');
+const DiscordRequest = require('../../../DiscordRequest.js');
+const { localeCtx }  = require('../../../Utils/ctxLocale.js');
+const { FlowModel }  = require('../../../../Mongodb/flow.js');
 const { randomUUID } = require('crypto');
-const getPerm        = require('../../Utils/GetPerm.js');
-const holeHighter    = require('../../Utils/RoleHigher.js');
-const PremiumManager = require('../../Utils/PremiumManager.js');
-const { getPlan }    = require('../../Utils/PremiumPlans.js');
+const getPerm        = require('../../../Utils/GetPerm.js');
+const holeHighter    = require('../../../Utils/RoleHigher.js');
+const PremiumManager = require('../../../Utils/PremiumManager.js');
+const { getPlan }    = require('../../../Utils/PremiumPlans.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
 const AYAMI_FALLBACK = {
@@ -2110,7 +2110,7 @@ class FlowBuilder {
   }
 
   async _showLogs(interaction, user, flowId) {
-    const { FlowRunLogModel } = require('../../logic-builder/schema/flow.schema.js');
+    const { FlowRunLogModel } = require('../../../logic-builder/schema/flow.schema.js');
     const logs = await FlowRunLogModel.find({ flowId }).sort({ runAt: -1 }).limit(10).lean();
     const ctx  = this._tctx(interaction);
 

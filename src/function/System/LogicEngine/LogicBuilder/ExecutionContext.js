@@ -1,7 +1,7 @@
 'use strict';
 
-const { PersistentVarModel } = require('../../../Mongodb/flow.js');
-const DiscordRequest = require('../../DiscordRequest.js');
+const { PersistentVarModel } = require('../../../../Mongodb/flow.js');
+const DiscordRequest = require('../../../DiscordRequest.js');
 
 class ExecutionContext {
 
@@ -82,7 +82,7 @@ class ExecutionContext {
   }
 
   async loadPersistent() {
-    const { PersistentVarModel, UserVarModel } = require('../../../Mongodb/flow.js');
+    const { PersistentVarModel, UserVarModel } = require('../../../../Mongodb/flow.js');
     const defs = this.flow.variables || [];
 
     const flowDefs = defs.filter(v => v.persistent && v.scope === 'flow');
@@ -112,7 +112,7 @@ class ExecutionContext {
   }
 
   async savePersistent() {
-    const { PersistentVarModel, UserVarModel } = require('../../../Mongodb/flow.js');
+    const { PersistentVarModel, UserVarModel } = require('../../../../Mongodb/flow.js');
     const defs = this.flow.variables || [];
 
     for (const def of defs.filter(v => v.persistent && v.scope === 'flow')) {
@@ -223,7 +223,7 @@ randomFromVar(name) {
       return updated;
     }
 
-    const { UserVarModel } = require('../../../Mongodb/flow.js');
+    const { UserVarModel } = require('../../../../Mongodb/flow.js');
     const guildId = this.discord.guildId;
 
     const doc = await UserVarModel.findOne({ guildId, userId: targetUserId, name }).lean();
@@ -341,7 +341,7 @@ randomFromVar(name) {
   });
 
   if (userVarMatches.length) {
-    const { UserVarModel } = require('../../../Mongodb/flow.js');
+    const { UserVarModel } = require('../../../../Mongodb/flow.js');
     const results = await Promise.all(
       userVarMatches.map(({ name, userId }) =>
         UserVarModel.findOne({ guildId: this.discord.guildId, userId, name }).lean()

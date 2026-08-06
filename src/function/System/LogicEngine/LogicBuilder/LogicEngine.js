@@ -2,13 +2,13 @@
 
 const mongoose = require('mongoose');
 
-const { FlowModel, CustomCommandModel, FlowRunLogModel, PersistentVarModel} = require('../../../Mongodb/flow.js');
+const { FlowModel, CustomCommandModel, FlowRunLogModel, PersistentVarModel} = require('../../../../Mongodb/flow.js');
 const TriggerRegistry    = require('./TriggerRegistry.js');
 const ConditionEvaluator = require('./ConditionEvaluator.js');
 const ActionRunner       = require('./ActionRunner.js');
 const ExecutionContext   = require('./ExecutionContext.js');
-const DiscordRequest = require("../../DiscordRequest.js")
-const { localeCtx }  = require('../../Utils/ctxLocale.js');
+const DiscordRequest = require("../../../DiscordRequest.js")
+const { localeCtx }  = require('../../../Utils/ctxLocale.js');
 
 const AUDIT_LOG_CHANNEL = '1511462019545563237';
 const MAX_CONCURRENT_FLOWS = 50;
@@ -399,7 +399,7 @@ async _getCustomCommands(guildId) {
 
         case 'remove_role': {
           const { guildId, userId, roleId } = task.dados;
-          await require('../../DiscordRequest.js')(
+          await require('../../../DiscordRequest.js')(
             `/guilds/${guildId}/members/${userId}/roles/${roleId}`,
             { method: 'DELETE' }
           ).catch(() => {});

@@ -1,8 +1,8 @@
 'use strict';
 
-const DiscordRequest = require('../../DiscordRequest.js');
-const { localeCtx }  = require('../../Utils/ctxLocale.js');
-const { CustomCommandModel, FlowModel } = require('../../../Mongodb/flow.js');
+const DiscordRequest = require('../../../DiscordRequest.js');
+const { localeCtx }  = require('../../../Utils/ctxLocale.js');
+const { CustomCommandModel, FlowModel } = require('../../../../Mongodb/flow.js');
 const { parseDuration, formatDuration } = require('./LogicEngine.js');
 
 const COLOR = {

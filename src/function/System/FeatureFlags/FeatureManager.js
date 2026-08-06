@@ -53,7 +53,7 @@ class FeatureManager {
     }));
   }
 
-  async canUse(featureId, { userId } = {}) {
+  async canUse(featureId, { guildId } = {}) {
     const entry = this._features.get(featureId);
 
     if (!entry) {
@@ -70,8 +70,8 @@ class FeatureManager {
         return { allowed: true, mode: entry.mode, reason: REASON.OK };
 
       case FEATURE_MODES.BETA: {
-        const premium = userId
-          ? await PremiumManager.getUserPlan(userId).catch(() => ({ status: false }))
+        const premium = guildId
+          ? await PremiumManager.getGuildPremium(guildId).catch(() => ({ status: false }))
           : { status: false };
 
         const allowed = !!premium.status && isPlanAtLeast(premium.planId, REQUIRED_PLAN);
@@ -84,8 +84,8 @@ class FeatureManager {
     }
   }
 
-  async assert(featureId, { userId } = {}) {
-    const result = await this.canUse(featureId, { userId });
+  async assert(featureId, { guildId } = {}) {
+    const result = await this.canUse(featureId, { guildId });
 
     if (!result.allowed) {
       throw new FeatureLockedError(featureId, result.reason, { mode: result.mode });
@@ -113,8 +113,8 @@ class FeatureManager {
   }
 
   async evaluate(interaction, featureId) {
-    const userId = interaction.member?.user?.id ?? interaction.user?.id;
-    const result = await this.canUse(featureId, { userId });
+    const guildId = interaction.guild_id;
+    const result = await this.canUse(featureId, { guildId });
 
     if (result.allowed) return { allowed: true, result };
 

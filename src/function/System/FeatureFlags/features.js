@@ -16,6 +16,11 @@ const FEATURES = Object.freeze({
     mode: FEATURE_MODES.BETA,
     description: 'Integração com o YouTube',
   },
+
+  logicNodes: {
+    mode: FEATURE_MODES.BETA,
+    description: 'Motor de fluxos em grafo (Logic Nodes)',
+  },
 });
 
 module.exports = { FEATURES, FEATURE_MODES };

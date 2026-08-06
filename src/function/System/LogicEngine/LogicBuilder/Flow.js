@@ -1,8 +1,8 @@
 'use strict';
 
 const { randomUUID } = require('crypto');
-const DiscordRequest  = require('../../DiscordRequest.js');
-const { localeCtx }   = require('../../Utils/ctxLocale.js');
+const DiscordRequest  = require('../../../DiscordRequest.js');
+const { localeCtx }   = require('../../../Utils/ctxLocale.js');
 const FlowBuilder     = require('./FlowBuilder.js');
 const CommandBuilder  = require('./CommandBuilder.js');
 
@@ -265,7 +265,7 @@ async editMessageById(channelId, messageId, data) {
     const flows  = await engine.getFlows(guildId);
     this._setCache(guildId, 'flows', flows);
 
-    const { CustomCommandModel } = require('../../../Mongodb/flow.js');
+    const { CustomCommandModel } = require('../../../../Mongodb/flow.js');
     const cmdCount = await CustomCommandModel.countDocuments({ guildId });
 
     return this.editOriginal(interaction, this._homePayload(interaction, user, flows, cmdCount));
@@ -390,7 +390,7 @@ async editMessageById(channelId, messageId, data) {
 
   async flowMenu(interaction, user, flowId) {
     const guildId = interaction.guild_id;
-    const { FlowModel } = require('../../../Mongodb/flow.js');
+    const { FlowModel } = require('../../../../Mongodb/flow.js');
     const flow = await FlowModel.findOne({ flowId, guildId }).lean();
     const ctx  = this._tctx(interaction);
 
@@ -516,7 +516,7 @@ async editMessageById(channelId, messageId, data) {
 
   async commandList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
-    const { CustomCommandModel } = require('../../../Mongodb/flow.js');
+    const { CustomCommandModel } = require('../../../../Mongodb/flow.js');
 
     let commands;
     if (this._isCacheValid(guildId, 'commands')) {
